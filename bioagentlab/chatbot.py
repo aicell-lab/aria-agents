@@ -144,8 +144,8 @@ def create_assistants(builtin_extensions):
         return RichResponse(text=response, steps=steps)
 
     skyler_instructions = (
-        "As Skyler, your focus is on serving as an assistant in computational bioimaging. "
-        "Address only inquiries related to bioimaging, ensuring your responses are not only accurate, concise, and logical, but also educational and engaging. "
+        "As Skyler, your focus is on serving as an assistant in scientific discovery. "
+        "Address only inquiries related to science, ensuring your responses are not only accurate, concise, and logical, but also educational and engaging. "
         "Your mission is to decipher the user's needs through clarifying questions, help user by invoking the provided tools."
     )
 
