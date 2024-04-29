@@ -143,46 +143,6 @@ def create_assistants(builtin_extensions):
             )
         return RichResponse(text=response, steps=steps)
 
-    melman = Role(
-        instructions="You are Melman from Madagascar, a helpful assistant for the bioimaging community. "
-        "You ONLY respond to user's queries related to bioimaging. "
-        "Your communications should be accurate, concise, and avoid fabricating information, "
-        "and if necessary, request additional clarification."
-        "Your goal is to deliver an accurate, complete, and transparent response efficiently.",
-        actions=[respond_to_user],
-        model="gpt-4-turbo-2024-04-09",
-    )
-    event_bus = melman.get_event_bus()
-    event_bus.register_default_events()
-
-    bridget_instructions = (
-        "As Bridget, your role is to act as an expert in image analysis, guiding users in utilizing image analysis tools and writing analysis code and scripts effectively, help user to analyse their own data. "
-        "Communicate accurately, concisely, and logically, refraining from making up information. "
-        "When necessary, seek further details to fully understand the user's request. "
-        "Your primary objective is to assist users with actual image analysis task by running code in the Code Interpreter.\n"
-        "Engage with users to grasp their data, requirements, solicit additional information as needed, use the web search and code interpreter, loading and preprocess user's data into formats that fit the needs of the tools, break down complex task into executable steps, troubleshooting issues, and addressing user's needs as much as you can."
-        "NOTE: You are targeting naive users who are not familiar with programming, so unless requested by the user, don't provide code snippets, only concise explanations and guidance."
-    )
-
-    nina_instructions = (
-        "As Nina, your focus is on serving as a professional trainer specialized in bioimaging. "
-        "Address only inquiries related to bioimaging, ensuring your responses are not only accurate, concise, and logical, but also educational and engaging. "
-        "Your mission is to decipher the user's needs through clarifying questions, impart fundamental knowledge of bioimaging, search the associated documentation and books to obtain additional information,"
-        "and guide users through the principles and tools of the field, provide concrete examples and suggestions to their question. Offer educational resources, including materials and tutorials, to enhance the user's learning experience."
-    )
-
-    bridget = Role(
-        instructions=bridget_instructions,
-        actions=[respond_to_user],
-        model="gpt-4-0125-preview",
-    )
-
-    nina = Role(
-        instructions=nina_instructions,
-        actions=[respond_to_user],
-        model="gpt-4-0125-preview",
-    )
-    
     skyler_instructions = (
         "As Skyler, your focus is on serving as an assistant in computational bioimaging. "
         "Address only inquiries related to bioimaging, ensuring your responses are not only accurate, concise, and logical, but also educational and engaging. "
@@ -192,36 +152,19 @@ def create_assistants(builtin_extensions):
     skyler = Role(
         instructions=skyler_instructions,
         actions=[respond_to_user],
-        model="gpt-4-0125-preview",
+        model="gpt-4-turbo-2024-04-09",
     )
 
+    event_bus = skyler.get_event_bus()
+    event_bus.register_default_events()
 
     # convert to a list
     all_extensions = [
         {"id": ext.id, "name": ext.name, "description": ext.description} for ext in builtin_extensions
     ]
-    # remove item with 'book' in all_extensions
-    melman_extensions = [
-        ext for ext in all_extensions if ext["id"] != "books" and ext["id"] != "vision"
-    ]
-    
-    bridget_extensions = [
-        ext for ext in all_extensions if ext["id"] == "web" or ext["id"] == "vision"
-    ]
 
-    # only keep the item with 'book' in all_extensions
-    nina_extensions = [
-        ext for ext in all_extensions if "books" == ext["id"]
-    ] + [
-        ext for ext in all_extensions if ext["id"] == "web"
-    ]
-
-    skyler_extensions = []
     return [
-        {"name": "Melman", "agent": melman, "extensions": melman_extensions, "code_interpreter": False, "alias": "BioImage Seeker", "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg", "welcome_message": "Hi there! I'm Melman. I am help you navigate the bioimaging tools and provide information about bioimaging. How can I help you today?"},
-        {"name": "Nina", "agent": nina, "extensions": nina_extensions, "code_interpreter": False, "alias": "BioImage Tutor", "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg", "welcome_message": "Hi there! I'm Nina, I can help with your learning journey in bioimaging. How can I help you today?"},
-        {"name": "Bridget", "agent": bridget, "extensions": bridget_extensions, "code_interpreter": True, "alias": "BioImage Analyst", "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg", "welcome_message": "Hi there! I'm Bridget, I can help you with your bioimaging tasks. Please mount your data folder and let me know how I can assist you today."},
-        {"name": "Skyler", "agent": skyler, "extensions": skyler_extensions, "code_interpreter": False, "alias": "BioImage GPT", "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg", "welcome_message": "Hi there! I'm Skyler. How can I help you today?"},
+        {"name": "Skyler", "agent": skyler, "extensions": all_extensions, "code_interpreter": False, "alias": "BioImage GPT", "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg", "welcome_message": "Hi there! I'm Skyler. How can I help you today?"},
     ]
 
 
@@ -390,7 +333,7 @@ async def register_chat_service(server):
         status_callback=None,
         session_id=None,
         extensions=None,
-        assistant_name="Melman",
+        assistant_name="Skyler",
         context=None,
     ):
         if login_required and context and context.get("user"):
@@ -437,7 +380,7 @@ async def register_chat_service(server):
 
     service_id = hypha_service_info["id"]
     print(
-        f"\nThe BioImage.IO Assistants are available at: https://bioimage.io/chat?server={server_url}&service_id={service_id}\n"
+        f"\nThe BioAgentLab are available at: https://bioimage.io/chat?server={server_url}&service_id={service_id}&assistant=Skyler\n"
     )
 
 
