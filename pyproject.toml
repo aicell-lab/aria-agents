@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "bioagentlab"
+version = "0.1.98"
+readme = "README.md"
+description = "BioAgentLab."
+dependencies = [
+  "schema-agents>=0.1.49",
+  "imjoy-rpc>=0.5.48.post2",
+  "requests",
+  "pypdf",
+  "pillow",
+  "matplotlib",
+  "hypha>=0.15.50",
+  "tqdm",
+  "aiofiles",
+  "langchain>=0.1.6",
+  "beautifulsoup4",
+  "pandas",
+  "duckduckgo-search>=5.1.0",
+  "rank-bm25",
+  "langchain-openai",
+  "langchain-core>=0.1.31",
+  "langchain-community>=0.0.27",
+  "html2text",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["bioagentlab*"]
+exclude = ["tests*", "scripts*"]
+
+[options.entry_points]
+console_scripts = [
+    "bioagentlab = bioagentlab.__main__:main",
+]
