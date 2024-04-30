@@ -1,16 +1,10 @@
 import os
-import pandas as pd
-import sys
-import re
-from contextlib import redirect_stdout
-from io import StringIO
-import asyncio
+
 from typing import List, Optional, Union, Type, Any, get_type_hints, Tuple, Literal, Dict, Any
 from typing_extensions import Self
 import asyncio
 import sys
-import shutil
-import dotenv
+from bioagentlab.utils import ChatbotExtension
 import pickle as pkl
 from schema_agents.provider.openai_api import retry
 from schema_agents.role import Message
@@ -274,13 +268,13 @@ class PydInvestigationRevised(PydInvestigationDraft):
     _model =  model.Investigation
 
 
-async def main():
-
-    parser = argparse.ArgumentParser(description='Generate an investigation')
-    parser.add_argument('--out_dir', type=str, help='The directory to save the investigation to')
-    parser.add_argument('--hypothesis', type = str, help = 'The hypothesis to test')
-    args = parser.parse_args()
-    os.makedirs(args.out_dir, exist_ok = True)
+@schema_tool
+async def generate_investigation(
+    hypothesis: str=Field(..., description="The hypothesis to test"),
+    output_dir: str=Field("./data", description="output directory")
+):
+    """Generates an investigation to test a hypothesis."""
+    os.makedirs(output_dir, exist_ok = True)
 
     investigation_creator = Role(
             name = "investigation_creator",
@@ -293,22 +287,44 @@ async def main():
     request = f"""Design an investigation to test the following hypothesis provided below. You are being asked to create an investigation draft which contains ALL the components you'll need to test the hypothesis. 
     Note that each assay will ultimately be assigned a single `measurement_type` (from `measurement_types`) and `technology_type` (from `technology_types`) pair. You MUST ensure that every assay's (measurement_type, technology_type) term pair is one of these (picking the most appropriate AND being case-sensitive): [(metabolite profiling,NMR spectroscopy),(targeted metabolite profiling,NMR spectroscopy),(untargeted metabolite profiling,NMR spectroscopy),(isotopomer distribution analysis,NMR spectroscopy),(metabolite profiling,mass spectrometry),(targeted metabolite profiling,mass spectrometry),(untargeted metabolite profiling,mass spectrometry),(isotologue distribution analysis,mass spectrometry),(transcription profiling,DNA microarray),(genotype profiling,DNA microarray),(epigenome profiling,DNA microarray),(exome profiling,DNA microarray),(DNA methylation profiling,DNA microarray),(copy number variation profiling,DNA microarray),(transcription factor binding site identification,DNA microarray),(protein-DNA binding site identification,DNA microarray),(SNP analysis,DNA microarray),(transcription profiling,nucleic acid sequencing),(transcription factor binding site identification,nucleic acid sequencing),(protein-DNA binding site identification,nucleic acid sequencing),(DNA methylation profiling,nucleic acid sequencing),(histone modification profiling,nucleic acid sequencing),(genome sequencing,nucleic acid sequencing),(metagenome sequencing,nucleic acid sequencing),(environmental gene survey,nucleic acid sequencing),(cell sorting,flow cytometry),(cell counting,flow cytometry),(cell migration assay,microscopy imaging),(phenotyping,imaging),(transcription profiling,RT-pcr)]
 
-    # hypothesis:\n`{args.hypothesis}`"""
+    # hypothesis:\n`{hypothesis}`"""
     investigation_draft = await investigation_creator.aask(request, PydInvestigationDraft)
-    pkl.dump(investigation_draft, open(os.path.join(args.out_dir, 'investigation.pkl'), 'wb'))
-    with open(os.path.join(args.out_dir,"investigation_draft.json"), "w") as f:
+    pkl.dump(investigation_draft, open(os.path.join(output_dir, 'investigation.pkl'), 'wb'))
+    with open(os.path.join(output_dir,"investigation_draft.json"), "w") as f:
         print(json.dumps(investigation_draft.dict(), indent = 4), file = f)
-    update_request = f"""You were asked to design an investigation to test the hypothesis `{args.hypothesis}`. Following this message is your initial plan. Take this plan and create a finalized investigation. You MUST fill out the `studies` and `assays`"""
+    update_request = f"""You were asked to design an investigation to test the hypothesis `{hypothesis}`. Following this message is your initial plan. Take this plan and create a finalized investigation. You MUST fill out the `studies` and `assays`"""
     investigation = await investigation_creator.aask([update_request, investigation_draft], PydInvestigationRevised)
-    pkl.dump(investigation, open(os.path.join(args.out_dir, 'investigation_final.pkl'), 'wb'))
-    with open(os.path.join(args.out_dir,"investigation_final.json"), "w") as f:
+    pkl.dump(investigation, open(os.path.join(output_dir, 'investigation_final.pkl'), 'wb'))
+    with open(os.path.join(output_dir,"investigation_final.json"), "w") as f:
         print(json.dumps(investigation.dict(), indent = 4), file = f)
 
 
     model_investigation_instance, uid_isa = initialize_models(investigation)
-    out_json = os.path.join(args.out_dir, "isa_investigation.json")
+    out_json = os.path.join(output_dir, "isa_investigation.json")
     with open(out_json, "w") as f:
         print(json.dumps(model_investigation_instance, cls=ISAJSONEncoder, sort_keys=True, indent=4, separators=(',', ': ')), file = f)
     with open(out_json, 'r') as f:
         report = isajson.validate(f)
     print(report)
+
+    return investigation
+
+
+
+def get_extension():
+    return ChatbotExtension(
+        id="investigation",
+        name="Generate Investigation",
+        description="Generate an investigation to test a hypothesis.",
+        tools=dict(
+            generate=generate_investigation,
+        )
+    )
+
+async def main():
+    parser = argparse.ArgumentParser(description='Generate an investigation')
+    parser.add_argument('--out_dir', type=str, help='The directory to save the investigation to')
+    parser.add_argument('--hypothesis', type = str, help = 'The hypothesis to test')
+    args = parser.parse_args()
+    await generate_investigation(args.hypothesis, args.out_dir)
+    
