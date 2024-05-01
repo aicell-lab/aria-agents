@@ -1,8 +1,16 @@
+import os
+import dotenv
+dotenv.load_dotenv()
 import aiohttp
-from schema_agents import schema_tool
 import time
 from tqdm.auto import tqdm
 import argparse
+from pydantic import BaseModel, Field
+from typing import List
+import asyncio
+from schema_agents import schema_tool, Role
+import dotenv
+import re
 
 class PapersSummary(BaseModel):
     """A summary of the papers found in the PubMed Central database search"""
@@ -21,8 +29,8 @@ async def call_api(url: str) -> bytes:
             raise e
 
 @schema_tool
-async def pmc_search(ncbi_query_url : str = Field(description = "The NCBI API web url to use for this query")) -> str:
-    """Uses the NCBI web API to search the PubMed Central (pmc) database"""
+async def pmc_search(ncbi_query_url : str = Field(description = "The NCBI API web url to use for this query.")) -> str:
+    """Uses the NCBI web API to search the PubMed Central (pmc) database."""
     query_response = await call_api(ncbi_query_url)
     query_response = query_response.decode()
     return query_response
@@ -93,9 +101,10 @@ class SummaryWebsite(BaseModel):
 async def main():
     parser = argparse.ArgumentParser(description='Run the study suggester pipeline')
     parser.add_argument('--user_request', type=str, help='The user request to create a study around')
-    parser.add_argument('--concurrency_limit', type=int, help='The number of concurrent requests to make to the NCBI API')
+    parser.add_argument('--concurrency_limit', type=int,  default = 3, help='The number of concurrent requests to make to the NCBI API')
+    parser.add_argument('--paper_limit', type=int, default = 5, help='The maximum number of paper to fetch from PubMed Central')
+    parser.add_argument('--output_html', type = str, default = 'output.html', help = 'The path to save the output html')
     args = parser.parse_args()
-
 
     ncbi_querier = Role(name = "NCBI Querier", 
                         instructions = "You are the PubMed querier. You query the PubMed Central database for papers relevant to the user's input. You also scrape the abstracts and other relevant information from the papers.",
@@ -104,7 +113,7 @@ async def main():
                         model = 'gpt-4-turbo-preview',)
     structured_user_input = await ncbi_querier.aask(args.user_request, StructuredUserInput)
     structured_query = await ncbi_querier.aask([
-        "Take this user's stated interest and use it to search PubMed Central for relevant papers. These papers will be used to figure out the state of the art of relevant to the user's interests. Ultimately this will be used to design new hypotheses and studies", 
+        f"Take this user's stated interest and use it to search PubMed Central for relevant papers. These papers will be used to figure out the state of the art of relevant to the user's interests. Ultimately this will be used to design new hypotheses and studies. Limit the search to return at most {args.paper_limit} paper IDs.", 
         structured_user_input],
         StructuredQuery)
     search_results = await pmc_search(ncbi_query_url = structured_query.query_url)
@@ -140,6 +149,8 @@ async def main():
                             register_default_events = True,
                             model = 'gpt-4-turbo-preview',)
     summary_website = await website_writer.aask([f"Create a single-page website summarizing the information in the suggested studies appropriately including the diagrams", study_with_diagram], SummaryWebsite)
+    with open(args.output_html, 'w') as f:
+        f.write(summary_website.html_code)
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
