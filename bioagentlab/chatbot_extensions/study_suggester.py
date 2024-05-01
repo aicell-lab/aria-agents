@@ -11,6 +11,7 @@ import asyncio
 from schema_agents import schema_tool, Role
 import dotenv
 import re
+import json
 
 class PapersSummary(BaseModel):
     """A summary of the papers found in the PubMed Central database search"""
@@ -62,7 +63,6 @@ class ContextualizedPaperSummary(BaseModel):
     
 async def process_paper(pb, pmc_id, user_request, semaphore):
     async with semaphore:
-        # Assuming Role and aask are properly defined and awaitable
         r = Role(name=f"Paper Agent PMC ID {pmc_id}",
                  instructions=f"You are an agent assigned to study the paper (PMC ID {pmc_id}) provided to you in the context of the user's request (`{user_request}`)",
                  constraints=None,
@@ -95,8 +95,7 @@ class StudyWithDiagram(BaseModel):
 
 class SummaryWebsite(BaseModel):
     """A summary single-page webpage written in html that neatly presents the suggested study for user review"""
-    html_code: str = Field(description = "The html code for a single page website summarizing the information in the suggested studies appropriately including the diagrams")
-
+    html_code: str = Field(description = "The html code for a single page website summarizing the information in the suggested studies appropriately including the diagrams. Make sure to include the original user request as well.")
 
 async def main():
     parser = argparse.ArgumentParser(description='Run the study suggester pipeline')
@@ -104,6 +103,7 @@ async def main():
     parser.add_argument('--concurrency_limit', type=int,  default = 3, help='The number of concurrent requests to make to the NCBI API')
     parser.add_argument('--paper_limit', type=int, default = 5, help='The maximum number of paper to fetch from PubMed Central')
     parser.add_argument('--output_html', type = str, default = 'output.html', help = 'The path to save the output html')
+    parser.add_argument('--suggested_study', type = str, default = 'suggested_study.json', help = 'The path to save the suggested study')
     args = parser.parse_args()
 
     ncbi_querier = Role(name = "NCBI Querier", 
@@ -135,7 +135,8 @@ async def main():
                         constraints = None,
                         register_default_events = True,
                         model = 'gpt-4-turbo-preview',)
-    suggested_study = await study_suggester.aask([f"Based on the cutting-edge information from the literature review, suggest a study to test a new hypothesis relevant to the user's request:\n`{args.user_request}`", literature_review], SuggestedStudy)
+    suggested_study = await study_suggester.aask([f"Based on the cutting-edge information from the literature review, suggest a study to test a new hypothesis relevant to the user's request:\n`{args.user_request}`", literature_review], 
+                                                 SuggestedStudy)
     diagrammer = Role(name = "Diagrammer",
                         instructions = "You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
                         constraints = None,
@@ -148,9 +149,13 @@ async def main():
                             constraints = None,
                             register_default_events = True,
                             model = 'gpt-4-turbo-preview',)
-    summary_website = await website_writer.aask([f"Create a single-page website summarizing the information in the suggested studies appropriately including the diagrams", study_with_diagram], SummaryWebsite)
+    summary_website = await website_writer.aask([f"Create a single-page website summarizing the information in the suggested study appropriately including the diagrams", study_with_diagram],
+                                                SummaryWebsite)
     with open(args.output_html, 'w') as f:
         f.write(summary_website.html_code)
+    with open(args.suggested_study, 'w') as f:
+        json.dump(suggested_study.dict(), f, indent = 4)
+
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
