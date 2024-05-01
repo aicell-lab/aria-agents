@@ -1,37 +1,20 @@
+import dotenv
+dotenv.load_dotenv()
 import argparse
 import os
 import pandas as pd
-import sys
 from contextlib import redirect_stdout
 from io import StringIO
 import asyncio
-from typing import List, Optional, Union, Type, Any, get_type_hints, Tuple, Literal, Dict
+from typing import List
 import asyncio
-import sys
 import shutil
 import dotenv
-# Add the path to the library directory
-# Now you can import the libraries
-from schema_agents.role import Message
 from schema_agents import schema_tool, Role
 from pydantic import BaseModel, Field
-import json
-from langchain.schema.document import Document
-
-from scripts.test_extensions.tools.agents import ThoughtsSchema
-from scripts.test_extensions.serialize import dump_metadata_json
-from scripts.test_extensions.visualize_reasoning import visualize_reasoning_chain
-from scripts.test_extensions.tools.tool_explorer import create_tool_db, list_schema_tools
-
-from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-
-import pickle as pkl
-
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
 from contextlib import redirect_stdout
 from io import StringIO
-from tqdm.auto import tqdm
 
 
 def flatten_model_description(json_data):
@@ -80,11 +63,10 @@ def flatten_dict(d, num_hashes, flattened_schema, ignore_keys=[]):
 
 async def main():
     parser = argparse.ArgumentParser(description='Run hypothesis testing on experimental data')
-    parser.add_argument('--env_file', type=str, help='The path to the .env file containing the API key')
     parser.add_argument('--investigation_file', type=str, help='The path to the ISA investigation file')
     parser.add_argument('--study_file', type=str, help='The path to the ISA study file')
     parser.add_argument('--metabolite_file', type=str, help='The path to the metabolite intensity file')
-    parser.add_argument('--output_dir', type=str, help='The directory to save the output files')
+    parser.add_argument('--output_dir', type=str, help='The directory to save the output files', default = 'analysis')
     parser.add_argument('--hypothesis', type=str, help='The hypothesis to test')
     args = parser.parse_args()
 
@@ -92,10 +74,8 @@ async def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     try:
-        for fname in [args.investigation_file, args.study_file, args.metabolite_file, args.paper_results]:
+        for fname in [args.investigation_file, args.study_file, args.metabolite_file]:
             shutil.copy(fname, args.output_dir)
-
-        dotenv.load_dotenv(args.env_file)
 
         i_text = open(args.investigation_file).read()
 
@@ -139,7 +119,7 @@ async def main():
                             model="gpt-4-turbo-preview"
                         )
 
-        hypothesis_with_investigation = HypothesisWithInvestigation(hypothesis=hypothesis, investigation_summary=investigation_summary, s_text=s_text)
+        hypothesis_with_investigation = HypothesisWithInvestigation(hypothesis=args.hypothesis, investigation_summary=investigation_summary, s_text=s_text)
         sample_summary = await sample_summarizer.aask(hypothesis_with_investigation, SampleSummary)
 
         class TestPackage(BaseModel):
@@ -153,7 +133,7 @@ async def main():
         metabolite_names = list(df['metabolite_identification'].values)
         metabolite_ids = list(df['database_identifier'].values)
 
-        test_package = TestPackage(hypothesis_with_investigation=HypothesisWithInvestigation(hypothesis=hypothesis, investigation_summary=investigation_summary, s_text="Full s_text not included here, refer to sample summaries"),
+        test_package = TestPackage(hypothesis_with_investigation=HypothesisWithInvestigation(hypothesis=args.hypothesis, investigation_summary=investigation_summary, s_text="Full s_text not included here, refer to sample summaries"),
                                 sample_summary=sample_summary,
                                 metabolite_ids=metabolite_ids,
                                 metabolite_names=metabolite_names,
@@ -161,9 +141,8 @@ async def main():
         
         flattened_schema = flatten_model_description(test_package.model_json_schema())
         flattened_test_package = flatten_dict(test_package.model_dump(), 1, flattened_schema, ignore_keys=["s_text", "df_head"])
-        analysis_dir = os.path.join(args.output_dir, "analysis")
-        os.makedirs(analysis_dir, exist_ok=True)
-        with open(os.path.join(analysis_dir, f"test_package_description.md"), "w") as f:
+        os.makedirs(args.output_dir, exist_ok=True)
+        with open(os.path.join(args.output_dir, f"test_package_description.md"), "w") as f:
             f.write(flattened_test_package)
 
         df_locals = {}
@@ -195,13 +174,12 @@ async def main():
 
         analysis, analysis_metadata = await analyzer.acall(test_package, tools = [dataframe_analysis], return_metadata = True, output_schema = AnalysisResults)
 
-        paper_conclusion = df_hypotheses.loc[d]['Conclusion']
 
-        with open(os.path.join(analysis_dir, f"analysis_results.txt"), "w") as f:
-            f.write(f"# Hypothesis\n{hypothesis}\n\n# Conclusion\n{analysis.analysis_results}\n\n# Paper Conclusion\n{paper_conclusion}\n\n# Steps Taken\n{analysis.steps_taken}\n\n")
-        with open(os.path.join(analysis_dir, f"python_script.py"), "w") as f:
+        with open(os.path.join(args.output_dir, f"analysis_results.txt"), "w") as f:
+            f.write(f"# Hypothesis\n{args.hypothesis}\n\n# Conclusion\n{analysis.analysis_results}\n\n# Steps Taken\n{analysis.steps_taken}\n\n")
+        with open(os.path.join(args.output_dir, f"python_script.py"), "w") as f:
             f.write("\n".join(analysis.python_commands))
-        with open(os.path.join(analysis_dir, f"acall_steps.txt"), "w") as f:
+        with open(os.path.join(args.output_dir, f"acall_steps.txt"), "w") as f:
             print(analysis_metadata, file=f)
     
     except Exception as e:
