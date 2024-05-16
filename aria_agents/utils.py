@@ -8,7 +8,7 @@ from typing import Callable, Optional
 import typing
 from inspect import signature
 from typing import Any, Callable, Dict, Optional
-from bioagentlab.jsonschema_pydantic import json_schema_to_pydantic_model
+from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 from schema_agents import schema_tool
 
 def download_file(url, filename):

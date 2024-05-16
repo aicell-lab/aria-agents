@@ -11,18 +11,18 @@ from pydantic import BaseModel, Field
 from schema_agents import Role, Message
 from typing import Any, Dict, List, Optional
 import pkg_resources
-from bioagentlab.chatbot_extensions import (
+from aria_agents.chatbot_extensions import (
     convert_to_dict,
     get_builtin_extensions,
     extension_to_tools,
     create_tool_name,
 )
-from bioagentlab.utils import ChatbotExtension, LegacyChatbotExtension, legacy_extension_to_tool
-from bioagentlab.quota import QuotaManager
+from aria_agents.utils import ChatbotExtension, LegacyChatbotExtension, legacy_extension_to_tool
+from aria_agents.quota import QuotaManager
 import logging
 
 
-logger = logging.getLogger("bioagentlab")
+logger = logging.getLogger("aria_agents")
 # set logger level
 logger.setLevel(logging.INFO)
 
@@ -142,20 +142,24 @@ def create_assistants(builtin_extensions):
                 )
             )
         return RichResponse(text=response, steps=steps)
-
-    skyler_instructions = (
-        "As Skyler, your focus is on serving as an assistant in scientific discovery. "
-        "Address only inquiries related to science, ensuring your responses are not only accurate, concise, and logical, but also educational and engaging. "
-        "Your mission is to decipher the user's needs through clarifying questions, help user by invoking the provided tools."
+    
+    aria_instructions = (
+        "As Aria, your role is to serve as an assistant in autonomous scientific discovery. "
+        "Your primary focus is on addressing inquiries related to various scientific tasks, ensuring your responses are accurate, concise, logical, educational, and engaging. "
+        "Your mission is to decipher the user's needs through clarifying questions and assist them by invoking the provided tools available in the Aria Agents repository. "
+        "These tools are designed to aid in various scientific tasks and may include functionalities such as data retrieval, analysis, visualization, and more. "
+        "You'll be leveraging your knowledge and the tools available to facilitate scientific exploration and discovery. "
+        "Your interactions should foster a collaborative and productive environment for scientific inquiry within the Aria Agents community."
     )
 
-    skyler = Role(
-        instructions=skyler_instructions,
+
+    aria = Role(
+        instructions=aria_instructions,
         actions=[respond_to_user],
-        model="gpt-4-turbo-2024-04-09",
+        model="gpt-4o",
     )
 
-    event_bus = skyler.get_event_bus()
+    event_bus = aria.get_event_bus()
     event_bus.register_default_events()
 
     # convert to a list
@@ -164,7 +168,7 @@ def create_assistants(builtin_extensions):
     ]
 
     return [
-        {"name": "Skyler", "agent": skyler, "extensions": all_extensions, "code_interpreter": False, "alias": "BioImage GPT", "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg", "welcome_message": "Hi there! I'm Skyler. How can I help you today?"},
+        {"name": "Aria", "agent": aria, "extensions": all_extensions, "code_interpreter": False, "alias": "Aria", "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg", "welcome_message": "Hi there! I'm Aria. How can I help you today?"},
     ]
 
 
@@ -245,7 +249,7 @@ async def register_chat_service(server):
                 context.get("user")
             ), "You don't have permission to report the chat history."
         # get the chatbot version
-        version = pkg_resources.get_distribution("bioagentlab").version
+        version = pkg_resources.get_distribution("aria_agents").version
         chat_his_dict = {
             "type": user_report["type"],
             "feedback": user_report["feedback"],
@@ -312,7 +316,7 @@ async def register_chat_service(server):
             user_message.chat_history.append(
                 {"role": "assistant", "content": response.text}
             )
-            version = pkg_resources.get_distribution("bioagentlab").version
+            version = pkg_resources.get_distribution("aria_agents").version
             chat_his_dict = {
                 "conversations": user_message.chat_history,
                 "timestamp": str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
@@ -359,11 +363,11 @@ async def register_chat_service(server):
         return "pong"
 
     assistant_keys = ["name", "extensions", "alias", "icon", "welcome_message", "code_interpreter"]
-    version = pkg_resources.get_distribution("bioagentlab").version
+    version = pkg_resources.get_distribution("aria_agents").version
     hypha_service_info = await server.register_service(
         {
-            "name": "BioAgentLab",
-            "id": "bioagentlab",
+            "name": "Aria Agents",
+            "id": "aria_agents",
             "config": {"visibility": "public", "require_context": True},
             "version": version,
             "ping": ping,
@@ -380,7 +384,7 @@ async def register_chat_service(server):
 
     service_id = hypha_service_info["id"]
     print(
-        f"\nThe BioAgentLab are available at: https://bioimage.io/chat?server={server_url}&service_id={service_id}&assistant=Skyler\n"
+        f"\nThe Aria Assistant is available at: https://bioimage.io/chat?server={server_url}&service_id={service_id}&assistant=Aria\n"
     )
 
 
