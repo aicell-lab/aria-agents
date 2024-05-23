@@ -14,6 +14,7 @@ from isatools import isajson
 import argparse
 from typing import Union, List, Dict
 import copy
+from aux_classes import SuggestedStudy
 
 def extract_uids(instance: BaseModel, uid_set: Dict[str, BaseModel] = {}) -> Dict[str, BaseModel]:
         """ Recursively extracts unique uids from Pydantic model instances. """
@@ -249,28 +250,42 @@ class PydInvestigationRevised(PydInvestigationDraft):
 
 async def main():
     parser = argparse.ArgumentParser(description='Generate an investigation')
+    parser.add_argument('--suggested_study_json', type = str, required = True, help = 'A json file containing a serialized study suggestion')
     parser.add_argument('--out_dir', type=str, help='The directory to save the investigation to', default = 'investigation')
-    parser.add_argument('--hypothesis', type = str, help = 'The hypothesis to test')
+    # parser.add_argument('--hypothesis', type = str, help = 'The hypothesis to test', required = True)
     args = parser.parse_args()
     os.makedirs(args.out_dir, exist_ok = True)
 
     investigation_creator = Role(
             name = "investigation_creator",
-            instructions ="You are a scientist that is designing an investigation. You are extremely detail-oriented and read directions carefully. Read the requirements for each field and follow them exactly when generating output.",
+            instructions ="You are a scientist that specializes in compiling protocols for laboratory experimenters to perform. You are extremely detail-oriented and read directions carefully. Read the requirements for each field and follow them exactly when generating output.",
             constraints=None,
             register_default_events=True,
             model="gpt-4-turbo-preview"
         )
 
-    request = f"""Design an investigation to test the following hypothesis provided below. You are being asked to create an investigation draft which contains ALL the components you'll need to test the hypothesis. 
+    request = f"""Take the suggested study and turn in into a fully-specific investigation. You are being asked to create an investigation draft which contains ALL the components you'll need to test the hypothesis.
     Note that each assay will ultimately be assigned a single `measurement_type` (from `measurement_types`) and `technology_type` (from `technology_types`) pair. You MUST ensure that every assay's (measurement_type, technology_type) term pair is one of these (picking the most appropriate AND being case-sensitive): [(metabolite profiling,NMR spectroscopy),(targeted metabolite profiling,NMR spectroscopy),(untargeted metabolite profiling,NMR spectroscopy),(isotopomer distribution analysis,NMR spectroscopy),(metabolite profiling,mass spectrometry),(targeted metabolite profiling,mass spectrometry),(untargeted metabolite profiling,mass spectrometry),(isotologue distribution analysis,mass spectrometry),(transcription profiling,DNA microarray),(genotype profiling,DNA microarray),(epigenome profiling,DNA microarray),(exome profiling,DNA microarray),(DNA methylation profiling,DNA microarray),(copy number variation profiling,DNA microarray),(transcription factor binding site identification,DNA microarray),(protein-DNA binding site identification,DNA microarray),(SNP analysis,DNA microarray),(transcription profiling,nucleic acid sequencing),(transcription factor binding site identification,nucleic acid sequencing),(protein-DNA binding site identification,nucleic acid sequencing),(DNA methylation profiling,nucleic acid sequencing),(histone modification profiling,nucleic acid sequencing),(genome sequencing,nucleic acid sequencing),(metagenome sequencing,nucleic acid sequencing),(environmental gene survey,nucleic acid sequencing),(cell sorting,flow cytometry),(cell counting,flow cytometry),(cell migration assay,microscopy imaging),(phenotyping,imaging),(transcription profiling,RT-pcr)]
+    """
 
-    # hypothesis:\n`{args.hypothesis}`"""
-    investigation_draft = await investigation_creator.aask(request, PydInvestigationDraft)
+    suggested_study = SuggestedStudy(**json.loads(open(args.suggested_study_json).read()))
+    investigation_draft = await investigation_creator.aask([request, suggested_study], PydInvestigationDraft)
+    
+    # request = f"""Design an investigation to test the following hypothesis provided below. You are being asked to create an investigation draft which contains ALL the components you'll need to test the hypothesis. 
+    # Note that each assay will ultimately be assigned a single `measurement_type` (from `measurement_types`) and `technology_type` (from `technology_types`) pair. You MUST ensure that every assay's (measurement_type, technology_type) term pair is one of these (picking the most appropriate AND being case-sensitive): [(metabolite profiling,NMR spectroscopy),(targeted metabolite profiling,NMR spectroscopy),(untargeted metabolite profiling,NMR spectroscopy),(isotopomer distribution analysis,NMR spectroscopy),(metabolite profiling,mass spectrometry),(targeted metabolite profiling,mass spectrometry),(untargeted metabolite profiling,mass spectrometry),(isotologue distribution analysis,mass spectrometry),(transcription profiling,DNA microarray),(genotype profiling,DNA microarray),(epigenome profiling,DNA microarray),(exome profiling,DNA microarray),(DNA methylation profiling,DNA microarray),(copy number variation profiling,DNA microarray),(transcription factor binding site identification,DNA microarray),(protein-DNA binding site identification,DNA microarray),(SNP analysis,DNA microarray),(transcription profiling,nucleic acid sequencing),(transcription factor binding site identification,nucleic acid sequencing),(protein-DNA binding site identification,nucleic acid sequencing),(DNA methylation profiling,nucleic acid sequencing),(histone modification profiling,nucleic acid sequencing),(genome sequencing,nucleic acid sequencing),(metagenome sequencing,nucleic acid sequencing),(environmental gene survey,nucleic acid sequencing),(cell sorting,flow cytometry),(cell counting,flow cytometry),(cell migration assay,microscopy imaging),(phenotyping,imaging),(transcription profiling,RT-pcr)]
+
+    # # hypothesis:\n`{args.hypothesis}`"""
+    # investigation_draft = await investigation_creator.aask(request, PydInvestigationDraft)
+    
+    
     pkl.dump(investigation_draft, open(os.path.join(args.out_dir, 'investigation.pkl'), 'wb'))
     with open(os.path.join(args.out_dir,"investigation_draft.json"), "w") as f:
         print(json.dumps(investigation_draft.dict(), indent = 4), file = f)
-    update_request = f"""You were asked to design an investigation to test the hypothesis `{args.hypothesis}`. Following this message is your initial plan. Take this plan and create a finalized investigation. You MUST fill out the `studies` and `assays`"""
+    # update_request = f"""You were asked to design an investigation to test the hypothesis `{args.hypothesis}`. Following this message is your initial plan. Take this plan and create a finalized investigation. You MUST fill out the `studies` and `assays`"""
+    update_request = f"""You were asked to design an investigation that specifies the components needed to carry out the suggested study below. Following this message is your initial plan. Take this plan and create a finalized investigation. You MUST fill out the `studies` and `assays`
+    
+    Suggested Study: {suggested_study.dict()}
+    """
     investigation = await investigation_creator.aask([update_request, investigation_draft], PydInvestigationRevised)
     pkl.dump(investigation, open(os.path.join(args.out_dir, 'investigation_final.pkl'), 'wb'))
     with open(os.path.join(args.out_dir,"investigation_final.json"), "w") as f:

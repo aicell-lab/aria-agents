@@ -2,8 +2,8 @@ import asyncio
 import re
 import pkgutil
 from pydantic import BaseModel
-from aria_agents.utils import ChatbotExtension
-from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
+from bioagentlab.utils import ChatbotExtension
+from bioagentlab.jsonschema_pydantic import json_schema_to_pydantic_model
 from schema_agents import schema_tool
 
 def get_builtin_extensions():
