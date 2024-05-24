@@ -5,7 +5,7 @@ from typing import List, Optional, Union, Type, Any, get_type_hints, Tuple, Lite
 from typing_extensions import Self
 import asyncio
 import pickle as pkl
-from schema_agents import Role
+from schema_agents import schema_tool, Role
 import json
 from pydantic import BaseModel, Field, model_validator
 from isatools import model
@@ -248,27 +248,35 @@ class PydInvestigationRevised(PydInvestigationDraft):
     _model =  model.Investigation
 
 
-async def main():
-    parser = argparse.ArgumentParser(description='Generate an investigation')
-    parser.add_argument('--suggested_study_json', type = str, required = True, help = 'A json file containing a serialized study suggestion')
-    parser.add_argument('--out_dir', type=str, help='The directory to save the investigation to', default = 'investigation')
-    # parser.add_argument('--hypothesis', type = str, help = 'The hypothesis to test', required = True)
-    args = parser.parse_args()
-    os.makedirs(args.out_dir, exist_ok = True)
 
+project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
+os.makedirs(project_folders, exist_ok = True)
+
+LLM_MODEL = 'gpt-4o'
+
+@schema_tool
+async def run_experiment_compiler(
+    project_name: str = Field(description = "The name of the project, used to create a folder to store the output files"),
+    suggested_study_json: str = Field(description = "A json file containing a serialized study suggestion"),
+    constraints: str = Field("", description = "Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc."),
+):
+    """Generate an investigation from a suggested study"""
+    out_dir = os.path.join(project_folders, project_name, 'investigation')
+    os.makedirs(out_dir, exist_ok = True)
+    
     investigation_creator = Role(
-            name = "investigation_creator",
-            instructions ="You are a scientist that specializes in compiling protocols for laboratory experimenters to perform. You are extremely detail-oriented and read directions carefully. Read the requirements for each field and follow them exactly when generating output.",
-            constraints=None,
-            register_default_events=True,
-            model="gpt-4-turbo-preview"
-        )
+        name = "investigation_creator",
+        instructions ="You are a scientist that specializes in compiling protocols for laboratory experimenters to perform. You are extremely detail-oriented and read directions carefully. Read the requirements for each field and follow them exactly when generating output.",
+        constraints=constraints,
+        register_default_events=True,
+        model=LLM_MODEL,
+    )
 
-    request = f"""Take the suggested study and turn in into a fully-specific investigation. You are being asked to create an investigation draft which contains ALL the components you'll need to test the hypothesis.
+    request = f"""Take the suggested study and turn in into a fully-specific investigation (while considering the constraints). You are being asked to create an investigation draft which contains ALL the components you'll need to test the hypothesis.
     Note that each assay will ultimately be assigned a single `measurement_type` (from `measurement_types`) and `technology_type` (from `technology_types`) pair. You MUST ensure that every assay's (measurement_type, technology_type) term pair is one of these (picking the most appropriate AND being case-sensitive): [(metabolite profiling,NMR spectroscopy),(targeted metabolite profiling,NMR spectroscopy),(untargeted metabolite profiling,NMR spectroscopy),(isotopomer distribution analysis,NMR spectroscopy),(metabolite profiling,mass spectrometry),(targeted metabolite profiling,mass spectrometry),(untargeted metabolite profiling,mass spectrometry),(isotologue distribution analysis,mass spectrometry),(transcription profiling,DNA microarray),(genotype profiling,DNA microarray),(epigenome profiling,DNA microarray),(exome profiling,DNA microarray),(DNA methylation profiling,DNA microarray),(copy number variation profiling,DNA microarray),(transcription factor binding site identification,DNA microarray),(protein-DNA binding site identification,DNA microarray),(SNP analysis,DNA microarray),(transcription profiling,nucleic acid sequencing),(transcription factor binding site identification,nucleic acid sequencing),(protein-DNA binding site identification,nucleic acid sequencing),(DNA methylation profiling,nucleic acid sequencing),(histone modification profiling,nucleic acid sequencing),(genome sequencing,nucleic acid sequencing),(metagenome sequencing,nucleic acid sequencing),(environmental gene survey,nucleic acid sequencing),(cell sorting,flow cytometry),(cell counting,flow cytometry),(cell migration assay,microscopy imaging),(phenotyping,imaging),(transcription profiling,RT-pcr)]
     """
 
-    suggested_study = SuggestedStudy(**json.loads(open(args.suggested_study_json).read()))
+    suggested_study = SuggestedStudy(**json.loads(open(suggested_study_json).read()))
     investigation_draft = await investigation_creator.aask([request, suggested_study], PydInvestigationDraft)
     
     # request = f"""Design an investigation to test the following hypothesis provided below. You are being asked to create an investigation draft which contains ALL the components you'll need to test the hypothesis. 
@@ -278,27 +286,41 @@ async def main():
     # investigation_draft = await investigation_creator.aask(request, PydInvestigationDraft)
     
     
-    pkl.dump(investigation_draft, open(os.path.join(args.out_dir, 'investigation.pkl'), 'wb'))
-    with open(os.path.join(args.out_dir,"investigation_draft.json"), "w") as f:
+    pkl.dump(investigation_draft, open(os.path.join(out_dir, 'investigation.pkl'), 'wb'))
+    with open(os.path.join(out_dir,"investigation_draft.json"), "w") as f:
         print(json.dumps(investigation_draft.dict(), indent = 4), file = f)
     # update_request = f"""You were asked to design an investigation to test the hypothesis `{args.hypothesis}`. Following this message is your initial plan. Take this plan and create a finalized investigation. You MUST fill out the `studies` and `assays`"""
     update_request = f"""You were asked to design an investigation that specifies the components needed to carry out the suggested study below. Following this message is your initial plan. Take this plan and create a finalized investigation. You MUST fill out the `studies` and `assays`
     
-    Suggested Study: {suggested_study.dict()}
+    Suggested Study: {suggested_study.model_dump()}
     """
     investigation = await investigation_creator.aask([update_request, investigation_draft], PydInvestigationRevised)
-    pkl.dump(investigation, open(os.path.join(args.out_dir, 'investigation_final.pkl'), 'wb'))
-    with open(os.path.join(args.out_dir,"investigation_final.json"), "w") as f:
+    pkl.dump(investigation, open(os.path.join(out_dir, 'investigation_final.pkl'), 'wb'))
+    with open(os.path.join(out_dir,"investigation_final.json"), "w") as f:
         print(json.dumps(investigation.dict(), indent = 4), file = f)
 
-
+    # ISA-Tab section
     model_investigation_instance, uid_isa = initialize_models(investigation)
-    out_json = os.path.join(args.out_dir, "isa_investigation.json")
+    out_json = os.path.join(out_dir, "isa_investigation.json")
     with open(out_json, "w") as f:
         print(json.dumps(model_investigation_instance, cls=isajson.ISAJSONEncoder, sort_keys=True, indent=4, separators=(',', ': ')), file = f)
     with open(out_json, 'r') as f:
         report = isajson.validate(f)
-    print(report)
+
+    return {
+        "isa_investigation_json": out_json,
+        "investigation": investigation.dict()
+    }
+
+async def main():
+    parser = argparse.ArgumentParser(description='Generate an investigation')
+    parser.add_argument('--suggested_study_json', type = str, required = True, help = 'A json file containing a serialized study suggestion')
+    parser.add_argument('--out_dir', type=str, help='The directory to save the investigation to', default = 'investigation')
+    # parser.add_argument('--hypothesis', type = str, help = 'The hypothesis to test', required = True)
+    args = parser.parse_args()
+    os.makedirs(args.out_dir, exist_ok = True)
+
+
 
 
 if __name__ == "__main__":

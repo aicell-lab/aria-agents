@@ -61,30 +61,27 @@ class SummaryWebsite(BaseModel):
     """A summary single-page webpage written in html that neatly presents the suggested study for user review"""
     html_code: str = Field(description = "The html code for a single page website summarizing the information in the suggested studies appropriately including the diagrams. Make sure to include the original user request as well.")
 
-async def main():
-    parser = argparse.ArgumentParser(description='Run the study suggester pipeline')
-    parser.add_argument('--user_request', type=str, help='The user request to create a study around', required = True)
-    parser.add_argument('--concurrency_limit', type=int,  default = 3, help='The number of concurrent requests to make to the NCBI API')
-    parser.add_argument('--paper_limit', type=int, default = 5, help='The maximum number of paper to fetch from PubMed Central')
-    parser.add_argument('--output_html', type = str, default = 'output.html', help = 'The path to save the output html')
-    parser.add_argument('--suggested_study_json', type = str, default = 'suggested_study.json', help = 'The path to save the suggested study')
-    try:
-        args = parser.parse_args()
-    except SystemExit as e:
-        # Handle the SystemExit exception gracefully
-        raise e
-        if e.code == 2:  # argparse uses exit code 2 for argument parsing errors
-            parser.print_help()
-        else:
-            raise 
-    # args = parser.parse_args()
+    
 
+CONCURENCY_LIMIT = 3
+PAPER_LIMIT = 5
+LLM_MODEL = 'gpt-4o'
+project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
+os.makedirs(project_folders, exist_ok = True)
+
+@schema_tool
+async def run_study_suggester(
+    user_request: str = Field(description = "The user's request to create a study around, framed in terms of a scientific question"),
+    project_name: str = Field(description = "The name of the project, used to create a folder to store the output files"),
+):
+    """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, a diagram of the study, and a summary website."""
+    os.makedirs(os.path.join(project_folders, project_name), exist_ok = True)
     ncbi_querier = Role(name = "NCBI Querier", 
                         instructions = "You are the PubMed querier. You query the PubMed Central database for papers relevant to the user's input. You also scrape the abstracts and other relevant information from the papers.",
                         constraints = None,
                         register_default_events = True,
-                        model = 'gpt-4-turbo-preview',)
-    structured_user_input = await ncbi_querier.aask(args.user_request, StructuredUserInput)
+                        model = LLM_MODEL,)
+    structured_user_input = await ncbi_querier.aask(user_request, StructuredUserInput)
     structured_query = await ncbi_querier.aask([
         f"Take this user's stated interest and use it to search PubMed Central for relevant papers. These papers will be used to figure out the state of the art of relevant to the user's interests. Ultimately this will be used to design new hypotheses and studies. Limit the search to return at most {args.paper_limit} paper IDs.", 
         structured_user_input],
@@ -98,8 +95,8 @@ async def main():
         asyncio.sleep(0.3)
     paper_bodies = [x if len(x) > 0 else None for x in [re.findall(r'<body>.*</body>', p, flags = re.DOTALL) for p in paper_contents]]
     paper_summaries = []
-    semaphore = asyncio.Semaphore(args.concurrency_limit)
-    tasks = [process_paper(pb, pmc_ids[i], args.user_request, semaphore)
+    semaphore = asyncio.Semaphore(CONCURENCY_LIMIT)
+    tasks = [process_paper(pb, pmc_ids[i], user_request, semaphore)
                 for i, pb in enumerate(paper_bodies) if pb is not None]
 
     paper_summaries = await asyncio.gather(*tasks)
@@ -123,16 +120,33 @@ async def main():
                             constraints = None,
                             register_default_events = True,
                             model = 'gpt-4-turbo-preview',)
+
     summary_website = await website_writer.aask([f"Create a single-page website summarizing the information in the suggested study appropriately including the diagrams", study_with_diagram],
                                                 SummaryWebsite)
-    for d in [os.path.dirname(args.output_html), os.path.dirname(args.suggested_study_json)]:
+
+    output_html = os.path.join(project_folders, project_name, 'output.html')
+    suggested_study_json = os.path.join(project_folders, project_name, 'suggested_study.json')
+    for d in [os.path.dirname(output_html)]:
         if not os.path.exists(d):
             os.makedirs(d)
-    with open(args.output_html, 'w') as f:
+    with open(output_html, 'w') as f:
         f.write(summary_website.html_code)
-    with open(args.suggested_study_json, 'w') as f:
+    with open(suggested_study_json, 'w') as f:
         json.dump(suggested_study.dict(), f, indent = 4)
+    return {
+        "suggested_study_json": suggested_study_json,
+        "suggested_study": suggested_study.dict()
+    }
 
+async def main():
+    parser = argparse.ArgumentParser(description='Run the study suggester pipeline')
+    parser.add_argument('--user_request', type=str, help='The user request to create a study around', required = True)
+    parser.add_argument('--concurrency_limit', type=int,  default = 3, help='The number of concurrent requests to make to the NCBI API')
+    parser.add_argument('--paper_limit', type=int, default = 5, help='The maximum number of paper to fetch from PubMed Central')
+    parser.add_argument('--output_html', type = str, default = 'output.html', help = 'The path to save the output html')
+    parser.add_argument('--suggested_study_json', type = str, default = 'suggested_study.json', help = 'The path to save the suggested study')
+    args = parser.parse_args()
+    await run_study_suggester(user_request = args.user_request, project_name = 'test')
 
 if __name__ == "__main__":
     try:
