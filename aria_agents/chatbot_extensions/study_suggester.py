@@ -106,7 +106,7 @@ async def run_study_suggester(
                         constraints = None,
                         register_default_events = True,
                         model = 'gpt-4o',)
-    suggested_study = await study_suggester.aask([f"Based on the cutting-edge information from the literature review, suggest a study to test a new hypothesis relevant to the user's request:\n`{args.user_request}`", literature_review], 
+    suggested_study = await study_suggester.aask([f"Based on the cutting-edge information from the literature review, suggest a study to test a new hypothesis relevant to the user's request:\n`{user_request}`", literature_review], 
                                                  SuggestedStudy)
     diagrammer = Role(name = "Diagrammer",
                         instructions = "You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
