@@ -83,7 +83,7 @@ async def run_study_suggester(
                         model = LLM_MODEL,)
     structured_user_input = await ncbi_querier.aask(user_request, StructuredUserInput)
     structured_query = await ncbi_querier.aask([
-        f"Take this user's stated interest and use it to search PubMed Central for relevant papers. These papers will be used to figure out the state of the art of relevant to the user's interests. Ultimately this will be used to design new hypotheses and studies. Limit the search to return at most {args.paper_limit} paper IDs.", 
+        f"Take this user's stated interest and use it to search PubMed Central for relevant papers. These papers will be used to figure out the state of the art of relevant to the user's interests. Ultimately this will be used to design new hypotheses and studies. Limit the search to return at most {PAPER_LIMIT} paper IDs.", 
         structured_user_input],
         StructuredQuery)
     search_results = await pmc_search(ncbi_query_url = structured_query.query_url)
