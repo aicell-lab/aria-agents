@@ -92,7 +92,7 @@ async def run_study_suggester(
     for pmc_id in tqdm(pmc_ids):
         paper_contents.append(await pmc_efetch(pmc_ids = [pmc_id]))
         # time.sleep(0.3)
-        asyncio.sleep(0.3)
+        await asyncio.sleep(0.3)
     paper_bodies = [x if len(x) > 0 else None for x in [re.findall(r'<body>.*</body>', p, flags = re.DOTALL) for p in paper_contents]]
     paper_summaries = []
     semaphore = asyncio.Semaphore(CONCURENCY_LIMIT)
