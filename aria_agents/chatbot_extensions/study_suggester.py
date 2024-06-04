@@ -75,7 +75,9 @@ async def run_study_suggester(
     project_name: str = Field(description = "The name of the project, used to create a folder to store the output files"),
 ):
     """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, a diagram of the study, and a summary website."""
-    os.makedirs(os.path.join(project_folders, project_name), exist_ok = True)
+
+    project_folder = os.path.join(project_folders, project_name)
+    os.makedirs(project_folder, exist_ok = True)
     ncbi_querier = Role(name = "NCBI Querier", 
                         instructions = "You are the PubMed querier. You query the PubMed Central database for papers relevant to the user's input. You also scrape the abstracts and other relevant information from the papers.",
                         constraints = None,
@@ -124,8 +126,8 @@ async def run_study_suggester(
     summary_website = await website_writer.aask([f"Create a single-page website summarizing the information in the suggested study appropriately including the diagrams", study_with_diagram],
                                                 SummaryWebsite)
 
-    output_html = os.path.join(project_folders, project_name, 'output.html')
-    suggested_study_json = os.path.join(project_folders, project_name, 'suggested_study.json')
+    output_html = os.path.join(project_folder, 'suggested_study.html')
+    suggested_study_json = os.path.join(project_folder, 'suggested_study.json')
     for d in [os.path.dirname(output_html)]:
         if not os.path.exists(d):
             os.makedirs(d)
@@ -140,19 +142,14 @@ async def run_study_suggester(
 
 async def main():
     parser = argparse.ArgumentParser(description='Run the study suggester pipeline')
+    parser.add_argument('--project_name', type = str, default = 'test', help = 'The name of the project, used to create a folder to store the output files')
     parser.add_argument('--user_request', type=str, help='The user request to create a study around', required = True)
-    parser.add_argument('--concurrency_limit', type=int,  default = 3, help='The number of concurrent requests to make to the NCBI API')
-    parser.add_argument('--paper_limit', type=int, default = 5, help='The maximum number of paper to fetch from PubMed Central')
-    parser.add_argument('--output_html', type = str, default = 'output.html', help = 'The path to save the output html')
-    parser.add_argument('--suggested_study_json', type = str, default = 'suggested_study.json', help = 'The path to save the suggested study')
     args = parser.parse_args()
-    await run_study_suggester(user_request = args.user_request, project_name = 'test')
+    # await run_study_suggester(user_request = args.user_request, project_name = 'test')
+    await run_study_suggester(**vars(args))
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as e:
         print(e)
-    # loop = asyncio.get_event_loop()
-    # loop.create_task(main())
-    # loop.run_forever()
