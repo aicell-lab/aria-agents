@@ -115,13 +115,13 @@ async def run_experiment_compiler(
     protocol_writer = Role(name="Protocol Writer",
                     instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
     You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
-                    constraints=None,
+                    constraints=constraints,
                     register_default_events=True,
                     model=LLM_MODEL)
 
     protocol_manager = Role(name="Protocol manager",
                         instructions="You are an expert laboratory scientist. You read protocols and manage them to ensure that they are clear and detailed enough for a new student to follow them exactly without any questions or doubts.",
-                        constraints=None,
+                        constraints=constraints,
                         register_default_events=True,
                         model=LLM_MODEL)
 
