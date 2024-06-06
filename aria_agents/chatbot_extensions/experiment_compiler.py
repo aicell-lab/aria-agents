@@ -15,66 +15,6 @@ import copy
 from aria_agents.chatbot_extensions.aux_classes import SuggestedStudy
 from tqdm.auto import tqdm
 
-def extract_uids(instance: BaseModel, uid_set: Dict[str, BaseModel] = {}) -> Dict[str, BaseModel]:
-        """ Recursively extracts unique uids from Pydantic model instances. """
-        if hasattr(instance, 'uid'):
-            uid_set[instance.uid] = instance
-
-        # Iterate over all attributes of the instance
-        for attr_value in instance.__dict__.values():
-            if isinstance(attr_value, BaseModel):
-                # Recurse into another BaseModel instance
-                uid_set.update(extract_uids(attr_value, uid_set))
-            elif isinstance(attr_value, list):
-                # Recurse into each item if it is a list containing BaseModel instances
-                for item in attr_value:
-                    if isinstance(item, BaseModel):
-                        uid_set.update(extract_uids(item, uid_set))
-        return uid_set
-
-def initialize_models(investigation : BaseModel, assay_prefix = "a", study_prefix = "s"):
-    uid_ignore_fields = ['uid', 'data_files', 'process_sequences', 'executes_protocols', 'technology_types', 'sources', 'samples', 'data_files', 'assays', 'protocol_types', "measurement_types"]
-    uid_basemodels = extract_uids(copy.deepcopy(investigation))
-    uid_isa = {}
-    model_types  = list(set([x._model.__name__ for x in uid_basemodels.values()]))
-    model_order = ['Comment', 'OntologySource', 'OntologyAnnotation', 'Characteristic', 'ProtocolParameter', 'Protocol', 'Material', 'Source', 'StudyFactor', 'FactorValue', 'Sample', 'ParameterValue', 'DataFile', 'Process', 'Assay', 'Study', 'Investigation']
-    order_index = {key : index for index, key in enumerate(model_order)}
-    for model_type in sorted(model_types, key = lambda x : order_index[x]):
-        pyd_instances = [x for x in uid_basemodels.values() if x._model.__name__ == model_type]
-        for pyd_instance in pyd_instances:
-            model_args = {field_name : field_value for field_name, field_value in pyd_instance if field_name not in uid_ignore_fields and not (field_name.endswith('_uids') or field_name.endswith('_uid'))}
-            if 'title_' in model_args:
-                model_args_new = {k : v for k,v in model_args.items() if k != 'title_'}
-                model_args_new['title'] = model_args['title_']
-                model_args = model_args_new
-            # if model_type == 'Assay':
-                # sys.exit()
-            for k,v in model_args.items():
-                if isinstance(v, BaseModel):
-                    model_args[k] = uid_isa[v.uid]
-                elif isinstance(v, list):
-                    for i_x, x in enumerate(v):
-                        if isinstance(x, BaseModel):
-                            v[i_x] = uid_isa[x.uid]
-            # model_args['identifier'] = pyd_instance.uid
-            m = pyd_instance._model(**model_args)
-            uid_pointer_fields = [field_name for field_name, field_value in pyd_instance if field_name.endswith('_uids') or field_name.endswith('_uid')]
-            for upf in uid_pointer_fields:
-                if type(getattr(pyd_instance, upf)) == list:
-                    setattr(m, upf.replace('_uids', ''), [uid_isa[x] for x in getattr(pyd_instance, upf)]) 
-                else:
-                    setattr(m, upf.replace('_uid', ''), uid_isa[getattr(pyd_instance, upf)])
-            uid_isa[pyd_instance.uid] = m
-        # if model_type == 'Assay':
-        #     return m, pyd_instance, model_args, uid_isa, uid_basemodels
-        if model_type == 'Investigation':
-            m_i = m
-    for i_study, study in enumerate(m_i.studies):
-        study.filename = f"{study_prefix}_{i_study}.tsv"
-        for i_assay, assay in enumerate(study.assays):
-            assay.filename = f"{assay_prefix}_{i_assay}.tsv"
-    return m_i, uid_isa
-
 
 class ExperimentalProtocol(BaseModel):
     """A detailed list of steps outlining an experimental procedure that to be carried out in the lab. The steps MUST be detailed enough for a new student to follow them exactly without any questions or doubts.
@@ -99,7 +39,16 @@ async def revise_protocol(protocol : ExperimentalProtocol, feedback : ProtocolFe
 project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
 os.makedirs(project_folders, exist_ok = True)
 
+
+PAPER_LIMIT = 20
 LLM_MODEL = 'gpt-4o'
+EMBEDDING_MODEL = "text-embedding-3-small"
+SIMILARITY_TOP_K = 5
+CITATION_CHUNK_SIZE = 1024
+project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
+os.makedirs(project_folders, exist_ok = True)
+
+
 
 @schema_tool
 async def run_experiment_compiler(

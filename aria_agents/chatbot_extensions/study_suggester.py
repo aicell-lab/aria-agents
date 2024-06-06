@@ -11,52 +11,15 @@ from schema_agents import schema_tool, Role
 import dotenv
 import re
 import json
-from aria_agents.chatbot_extensions.aux_classes import SuggestedStudy
-from aria_agents.chatbot_extensions.aux_tools import *
+from aria_agents.chatbot_extensions.aux import (
+    SuggestedStudy,
+    PMCQuery,
+    create_pubmed_corpus,
+    create_query_function
+)
 
 import os
-from llama_index.llms.openai import OpenAI
-from llama_index.core.query_engine import CitationQueryEngine
-from llama_index.core import VectorStoreIndex
-from llama_index.readers.papers import PubmedReader
 
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.llms.openai import OpenAI
-from llama_index.core import Settings
-
-class PapersSummary(BaseModel):
-    """A summary of the papers found in the PubMed Central database search"""
-    state_of_field : str = Field(description="A summary of the current state of the field")
-    open_questions : str = Field(description="A summary of the open questions in the field")
-
-class StructuredUserInput(BaseModel):
-    """The user's input parsed scraped for relevant terms to search on pubmed"""
-    user_request : str = Field(description = "The original user request")
-    search_keywords : str = Field(description = "The keywords that will be used to search PubMed Central for recent relevant papers")
-
-class StructuredQuery(BaseModel):
-    """A query formatted to search the NCBI PubMed Central Database (open-access subset ONLY) inspired by the user's input query"""
-    query: str = Field(description = "The NCBI PubMed query string, it MUST fit the NCBI PubMed database search syntax.")
-    query_url: str = Field(description = """The query converted into a NCBI E-utils url. It must be only the url and it must folow the E-utils syntax. It should specify xml return mode, search the pmc database and the search MUST include `"+AND+open+access[filter]` to limit the search to open access articles.""")
-
-class ContextualizedPaperSummary(BaseModel):
-    """A short summary of a paper in the context of the user's request. ONLY include information that is relevant to the original user request."""
-    state_of_field : str = Field(description="Brief summary of any information in the paper relating to the state of the field relevant to the user's request")
-    open_questions : str = Field(description="Brief summary of any information in the paper relating to open questions in the field relevant to the user's request")
-    
-async def process_paper(pb, pmc_id, user_request, semaphore):
-    async with semaphore:
-        r = Role(name=f"Paper Agent PMC ID {pmc_id}",
-                 instructions=f"You are an agent assigned to study the paper (PMC ID {pmc_id}) provided to you in the context of the user's request (`{user_request}`)",
-                 constraints=None,
-                 register_default_events=True,
-                 model='gpt-4o')
-        return await r.aask([f"The user wants to design a cutting-edge scientific study based on the original request:\n`{user_request}`\nRead the following paper's contents and scrape it for information relevant to designing a study for the user",
-                             f"Paper content:\n`{pb}`"], ContextualizedPaperSummary)
-    
-class LiteratureReview(BaseModel):
-    """A collection of summaries from papers found to be relevant to the user's request"""
-    paper_summaries : List[ContextualizedPaperSummary] = Field(description = """The summaries from the individual papers""")
 
 class StudyDiagram(BaseModel):
     """A diagram written in mermaid.js showing what the expected data from a study will look like"""
@@ -72,19 +35,12 @@ class SummaryWebsite(BaseModel):
     html_code: str = Field(description = "The html code for a single page website summarizing the information in the suggested studies appropriately including the diagrams. Make sure to include the original user request as well. References should appear as links (e.g. a url `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11129507/` can appear as a link with the name `PMC11129507` referencing the PMCID)")
 
 
-class PMCQuery(BaseModel):
-    """A plain-text query to search the NCBI PubMed Central Database. It should follow standard NCBI search syntax for example 'cancer AND (mouse or monkey)'. 
-To search in a specific journal (for example Bio-Protocol) use the term "Bio-protocol"[journal]". To search only open-access articles use the term "open access"[filter]"  """
-    query : str = Field(description = "The query to search the NCBI PubMed Central Database")
 
-
-
-CONCURENCY_LIMIT = 3
-PAPER_LIMIT = 5
+PAPER_LIMIT = 20
 LLM_MODEL = 'gpt-4o'
 EMBEDDING_MODEL = "text-embedding-3-small"
 SIMILARITY_TOP_K = 5
-CITATION_CHUNK_SIZE = 512
+CITATION_CHUNK_SIZE = 1024
 project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
 os.makedirs(project_folders, exist_ok = True)
 
@@ -103,30 +59,20 @@ async def run_study_suggester(
                         constraints = constraints,
                         register_default_events = True,
                         model = LLM_MODEL,)
-
-    pmc_query = await ncbi_querier.aask([f"Take the following user request and use it construct a query to search PubMed Central for relevant papers. Limit your search to ONLY open access papers", user_request], PMCQuery)
     
-    loader = PubmedReader()
-    documents = loader.load_data(search_query = pmc_query.query)
-    Settings.llm = OpenAI(model = LLM_MODEL)
-    Settings.embed_model = OpenAIEmbedding(model = EMBEDDING_MODEL)
-    index = VectorStoreIndex.from_documents(documents)
-    query_engine = CitationQueryEngine.from_args(
-        index,
-        similarity_top_k = SIMILARITY_TOP_K,
-        citation_chunk_size = CITATION_CHUNK_SIZE,
-    )
-    response = query_engine.query(f"""Given these papers, what are the possible open questions to investigate based on the users request? The user's request was:\n```{user_request}```""")
     study_suggester = Role(name = "Study Suggester", 
                         instructions = "You are the study suggester. You suggest a study to test a new hypothesis based on the cutting-edge information from the literature review.",
                         constraints = constraints,
                         register_default_events = True,
                         model = LLM_MODEL,)
-    response_str = f"""The user's original request was:\n```{user_request}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\nAnd the citations refer to the following papers:"""
-    for i_node, node in enumerate(response.source_nodes):
-        response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
 
-    suggested_study = await study_suggester.aask([f"Based on the results from the literature review, suggest a study to test a new hypothesis relevant to the user's request", response_str], SuggestedStudy)
+    pmc_query = await ncbi_querier.aask([f"Take the following user request and use it construct a query to search PubMed Central for relevant papers. Limit your search to ONLY open access papers", user_request], PMCQuery)
+    query_engine = await create_pubmed_corpus(pmc_query)
+    query_function = create_query_function(query_engine)
+    suggested_study = await study_suggester.acall([f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
+                                                  "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries"],
+                                                  tools = [query_function],
+                                                  output_schema = SuggestedStudy)
 
 
     diagrammer = Role(name = "Diagrammer",
