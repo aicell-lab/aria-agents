@@ -39,3 +39,4 @@ exclude = ["tests*", "scripts*"]
 console_scripts = [
     "aria_agents = aria_agents.__main__:main",
 ]
+build-backend = "setuptools.build_meta"
