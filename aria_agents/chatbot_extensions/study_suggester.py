@@ -11,8 +11,8 @@ from schema_agents import schema_tool, Role
 import dotenv
 import re
 import json
-from aux_classes import SuggestedStudy
-from aux_tools import *
+from aria_agents.chatbot_extensions.aux_classes import SuggestedStudy
+from aria_agents.chatbot_extensions.aux_tools import *
 
 class PapersSummary(BaseModel):
     """A summary of the papers found in the PubMed Central database search"""

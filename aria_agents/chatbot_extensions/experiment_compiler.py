@@ -14,7 +14,7 @@ from isatools import isajson
 import argparse
 from typing import Union, List, Dict
 import copy
-from aux_classes import SuggestedStudy
+from aria_agents.chatbot_extensions.aux_classes import SuggestedStudy
 
 def extract_uids(instance: BaseModel, uid_set: Dict[str, BaseModel] = {}) -> Dict[str, BaseModel]:
         """ Recursively extracts unique uids from Pydantic model instances. """
