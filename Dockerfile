@@ -1,4 +1,4 @@
 FROM continuumio/miniconda3:latest
-RUN pip install bioagentlab
+RUN pip install aria-agents
 
 EXPOSE 9000

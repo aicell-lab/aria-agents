@@ -2,12 +2,12 @@
 requires = ["setuptools", "wheel"]
 
 [project]
-name = "bioagentlab"
-version = "0.1.98"
+name = "aria-agents"
+version = "0.1.0"
 readme = "README.md"
-description = "BioAgentLab."
+description = "Empowering autonomous scientific discovery."
 dependencies = [
-  "schema-agents>=0.1.49",
+  "schema-agents>=0.1.50",
   "imjoy-rpc>=0.5.48.post2",
   "requests",
   "pypdf",
@@ -19,22 +19,24 @@ dependencies = [
   "langchain>=0.1.6",
   "beautifulsoup4",
   "pandas",
-  "duckduckgo-search>=5.1.0",
+  # "duckduckgo-search>=5.1.0",
   "rank-bm25",
   "langchain-openai",
   "langchain-core>=0.1.31",
   "langchain-community>=0.0.27",
   "html2text",
+  "isatools",
 ]
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["bioagentlab*"]
+include = ["aria_agents*"]
 exclude = ["tests*", "scripts*"]
 
 [options.entry_points]
 console_scripts = [
-    "bioagentlab = bioagentlab.__main__:main",
+    "aria_agents = aria_agents.__main__:main",
 ]
+build-backend = "setuptools.build_meta"

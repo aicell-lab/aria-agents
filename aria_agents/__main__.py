@@ -18,12 +18,13 @@ def start_server(args):
         f"--host={args.host}",
         f"--port={args.port}",
         f"--public-base-url={args.public_base_url}",
-        "--startup-functions=bioagentlab.chatbot:register_chat_service"
+        f"--static-mounts=/chat:{current_dir}/static",
+        "--startup-functions=aria_agents.chatbot:register_chat_service"
     ]
     subprocess.run(command)
 
 def connect_server(args):
-    from bioagentlab.chatbot import connect_server
+    from aria_agents.chatbot import connect_server
     if args.login_required:
         os.environ["BIOIMAGEIO_LOGIN_REQUIRED"] = "true"
     else:
