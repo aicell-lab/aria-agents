@@ -15,7 +15,8 @@ from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
     PMCQuery,
     create_pubmed_corpus,
-    create_query_function
+    create_query_function,
+    SummaryWebsite
 )
 
 import os
@@ -29,10 +30,6 @@ class StudyWithDiagram(BaseModel):
     """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge information from the literature review"""
     suggested_study : SuggestedStudy = Field(description = "The suggested study to test a new hypothesis")
     study_diagram : StudyDiagram = Field(description = "The diagram illustrating the workflow for the suggested study")
-
-class SummaryWebsite(BaseModel):
-    """A summary single-page webpage written in html that neatly presents the suggested study for user review"""
-    html_code: str = Field(description = "The html code for a single page website summarizing the information in the suggested studies appropriately including the diagrams. Make sure to include the original user request as well. References should appear as links (e.g. a url `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11129507/` can appear as a link with the name `PMC11129507` referencing the PMCID)")
 
 
 
@@ -109,7 +106,7 @@ async def main():
     parser = argparse.ArgumentParser(description='Run the study suggester pipeline')
     parser.add_argument('--project_name', type = str, default = 'test', help = 'The name of the project, used to create a folder to store the output files')
     parser.add_argument('--user_request', type=str, help='The user request to create a study around', required = True)
-    parser.add_argument('--constraints', type=str, help='The user request to create a study around', default="")
+    parser.add_argument('--constraints', type=str, help='Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.', default="")
     args = parser.parse_args()
     # await run_study_suggester(user_request = args.user_request, project_name = 'test')
     await run_study_suggester(**vars(args))

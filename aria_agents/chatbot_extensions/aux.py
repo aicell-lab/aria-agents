@@ -12,6 +12,10 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from llama_index.core import Settings
 
+class SummaryWebsite(BaseModel):
+    """A summary single-page webpage written in html that neatly presents the suggested study or experimental protocol for user review"""
+    html_code: str = Field(description = "The html code for a single page website summarizing the information in the suggested study or experimental protocol appropriately including any diagrams. Make sure to include the original user request as well if available. References should appear as links (e.g. a url `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11129507/` can appear as a link with the name `PMC11129507` referencing the PMCID)")
+
 class SuggestedStudy(BaseModel):
     """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge"""
     user_request : str = Field(description = "The original user request")
@@ -72,7 +76,7 @@ async def create_pubmed_corpus(pmc_query : PMCQuery = Field(..., description = "
 
 def create_query_function(query_engine: CitationQueryEngine) -> Callable:
     @schema_tool
-    async def query_corpus(question: str = Field(..., description="The question the LLM agent will answer based on the papers in the corpus")) -> str:
+    async def query_corpus(question: str = Field(..., description="The question the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.")) -> str:
         """Given a corpus of papers created from a PubMedCentral search, queries the corpus with the given question and returns the response from the LLM agent"""
         response = query_engine.query(question)
         response_str = f"""The following question was asked for the literature review:\n```{question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\n\nThe citations refer to the following papers:"""
@@ -81,6 +85,7 @@ def create_query_function(query_engine: CitationQueryEngine) -> Callable:
         print(response_str)
         return response_str
     return query_corpus
+
 
 
 @schema_tool
