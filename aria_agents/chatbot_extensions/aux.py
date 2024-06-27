@@ -76,10 +76,10 @@ async def create_pubmed_corpus(pmc_query : PMCQuery = Field(..., description = "
 
 def create_query_function(query_engine: CitationQueryEngine) -> Callable:
     @schema_tool
-    async def query_corpus(question: str = Field(..., description="The question the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.")) -> str:
-        """Given a corpus of papers created from a PubMedCentral search, queries the corpus with the given question and returns the response from the LLM agent"""
+    async def query_corpus(question: str = Field(..., description="The query statement the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.")) -> str:
+        """Given a corpus of papers created from a PubMedCentral search, queries the corpus and returns the response from the LLM agent"""
         response = query_engine.query(question)
-        response_str = f"""The following question was asked for the literature review:\n```{question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\n\nThe citations refer to the following papers:"""
+        response_str = f"""The following query was run for the literature review:\n```{question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\n\nThe citations refer to the following papers:"""
         for i_node, node in enumerate(response.source_nodes):
             response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
         print(response_str)

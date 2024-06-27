@@ -46,20 +46,46 @@ async def get_protocol_feedback(protocol : ExperimentalProtocol, protocol_manage
     res = await protocol_manager.aask(["Is the following protocol specified in enough detail for a new student to follow it exactly without any questions or doubts? If not, say why.", protocol], output_schema=ProtocolFeedback)
     return res
 
-async def revise_protocol(protocol : ExperimentalProtocol, feedback : ProtocolFeedback, protocol_writer : Role) -> ExperimentalProtocol:
+# async def revise_protocol(protocol : ExperimentalProtocol, feedback : ProtocolFeedback, protocol_writer : Role) -> ExperimentalProtocol:
+#     # pmc_query = await protocol_writer.aask([f"Read the following protocol you've been working on and the feedback. Use the feedback to construct a query to search PubMed Central for relevant protocols that you will use to build your own. Limit your search to ONLY open access papers. The current protocol will be given first, then the feedback.", protocol, feedback], PMCQuery)
+#     # query_engine = await create_pubmed_corpus(pmc_query)
+#     # query_function = create_query_function(query_engine)
+# #     res = await protocol_writer.acall(["""Take the following feedback and use it to revise the protocol to be more detailed. First the protocol will be provided, then the feedback. You are given a corpus of existing protocols to study, query it as many times as possible for inspiration. 
+# # All protocol steps should be citable. If you do not receive responses from your queries, keep trying re-worded or different queries with more broad wording and terms. Try at least 5 queries every time.""", protocol, feedback],
+# #                                           output_schema=ExperimentalProtocol,
+# #                                           tools = [query_function])
+#     res = await protocol_writer.acall(["""Take the following feedback and use it to revise the protocol to be more detailed. First the protocol will be provided, then the feedback.
+#     All protocol steps should be citable. You can search PubMed and ask questions of relevant papers. If you do not receive responses from your queries, keep trying re-worded or different queries with more broad wording and terms.
+#     Your query should not be of the form of a question, but rather in the form of the expected answer for example "cells were cultured for 20 minutes" because this will find closely matching sentences to your desired information.""",
+#     protocol, 
+#     feedback],
+#                                               output_schema=ExperimentalProtocol,
+#                                               tools = [pmc_cited_search])
+#     return res
+
+
+# Possible - maintain revision query history accross revisions
+async def revise_protocol_fixed_corpus(protocol : ExperimentalProtocol, feedback : ProtocolFeedback, protocol_writer : Role, query_function : Callable) -> ExperimentalProtocol:
     # pmc_query = await protocol_writer.aask([f"Read the following protocol you've been working on and the feedback. Use the feedback to construct a query to search PubMed Central for relevant protocols that you will use to build your own. Limit your search to ONLY open access papers. The current protocol will be given first, then the feedback.", protocol, feedback], PMCQuery)
     # query_engine = await create_pubmed_corpus(pmc_query)
     # query_function = create_query_function(query_engine)
-#     res = await protocol_writer.acall(["""Take the following feedback and use it to revise the protocol to be more detailed. First the protocol will be provided, then the feedback. You are given a corpus of existing protocols to study, query it as many times as possible for inspiration. 
-# All protocol steps should be citable. If you do not receive responses from your queries, keep trying re-worded or different queries with more broad wording and terms. Try at least 5 queries every time.""", protocol, feedback],
-#                                           output_schema=ExperimentalProtocol,
-#                                           tools = [query_function])
-    res = await protocol_writer.acall(["""Take the following feedback and use it to revise the protocol to be more detailed. First the protocol will be provided, then the feedback.
-    All protocol steps should be citable. You can search PubMed and ask questions of relevant papers. If you do not receive responses from your queries, keep trying re-worded or different queries with more broad wording and terms""",
-    protocol, 
-    feedback],
-                                              output_schema=ExperimentalProtocol,
-                                              tools = [pmc_cited_search])
+    res = await protocol_writer.acall(["""Take the following feedback and use it to revise the protocol to be more detailed. First the protocol will be provided, then the feedback. You are given a corpus of existing protocols to study, query it as many times as possible for inspiration. 
+All protocol steps should be citable. If you do not receive responses from your queries, keep trying re-worded or different queries with more broad wording and terms. Try at least 5 queries every time.
+
+Your query MUST not be of the form of a question, but rather in the form of the expected protocol chunk you are looking for because this will find closely matching sentences to your desired information.
+
+# EXAMPLE QUERIES: 
+- `CHO cells were cultured for 20 minutes`
+- `supernatent was aspirated and cells were washed with PBS`
+- `cells were lysed with RIPA buffer`
+- `sample was centrifuged at 1000g for 5 minutes`
+- `All tissue samples were pulverized using a ball mill (MM400, Retsch) with precooled beakers and stainless-steel balls for 30 s at the highest frequency (30 Hz)`
+- `pulverized and frozen samples were extracted using the indicated solvents and subsequent steps of the respective protocol`
+- `After a final centrifugation step the solvent extract of the protocols 100IPA, IPA/ACN and MeOH/ACN were transferred into a new 1.5 ml tube (Eppendorf) and snap-frozen until kit preparation.` 
+- `The remaining protocols were dried using an Eppendorf Concentrator Plus set to no heat, stored at −80°C and reconstituted in 60 µL isopropanol (30 µL of 100% isopropanol, followed by 30 µL of 30% isopropanol in water) before the measurement.`
+""",
+protocol, feedback], output_schema=ExperimentalProtocol, tools = [query_function])
+    
     return res
 
 
@@ -100,9 +126,6 @@ async def run_experiment_compiler(
                         register_default_events=True,
                         model=LLM_MODEL)
 
-    # request = f"""Take the suggested study and turn in into a fully-specific investigation (while considering the constraints). You are being asked to create an investigation draft which contains ALL the components you'll need to test the hypothesis.
-    # Note that each assay will ultimately be assigned a single `measurement_type` (from `measurement_types`) and `technology_type` (from `technology_types`) pair. You MUST ensure that every assay's (measurement_type, technology_type) term pair is one of these (picking the most appropriate AND being case-sensitive): [(metabolite profiling,NMR spectroscopy),(targeted metabolite profiling,NMR spectroscopy),(untargeted metabolite profiling,NMR spectroscopy),(isotopomer distribution analysis,NMR spectroscopy),(metabolite profiling,mass spectrometry),(targeted metabolite profiling,mass spectrometry),(untargeted metabolite profiling,mass spectrometry),(isotologue distribution analysis,mass spectrometry),(transcription profiling,DNA microarray),(genotype profiling,DNA microarray),(epigenome profiling,DNA microarray),(exome profiling,DNA microarray),(DNA methylation profiling,DNA microarray),(copy number variation profiling,DNA microarray),(transcription factor binding site identification,DNA microarray),(protein-DNA binding site identification,DNA microarray),(SNP analysis,DNA microarray),(transcription profiling,nucleic acid sequencing),(transcription factor binding site identification,nucleic acid sequencing),(protein-DNA binding site identification,nucleic acid sequencing),(DNA methylation profiling,nucleic acid sequencing),(histone modification profiling,nucleic acid sequencing),(genome sequencing,nucleic acid sequencing),(metagenome sequencing,nucleic acid sequencing),(environmental gene survey,nucleic acid sequencing),(cell sorting,flow cytometry),(cell counting,flow cytometry),(cell migration assay,microscopy imaging),(phenotyping,imaging),(transcription profiling,RT-pcr)]
-    # """
     suggested_study_json = os.path.join(project_folder, "suggested_study.json")
     suggested_study = SuggestedStudy(**json.loads(open(suggested_study_json).read()))
 
@@ -118,10 +141,11 @@ async def run_experiment_compiler(
     revisions = 0
     pbar = tqdm(total=max_revisions)
     while not protocol_feedback.complete and revisions < max_revisions:
-        protocol = await revise_protocol(protocol, protocol_feedback, protocol_writer)
+        # protocol = await revise_protocol(protocol, protocol_feedback, protocol_writer) # non-fixed corpus version
+        protocol = await revise_protocol_fixed_corpus(protocol, protocol_feedback, protocol_writer, query_function) # Fixed-corpus version
         protocol_feedback = await get_protocol_feedback(protocol, protocol_manager)
         revisions += 1
-    pbar.update(1)
+        pbar.update(1)
     pbar.close()
     website_writer = Role(name = "Website Writer",
                             instructions = "You are the website writer. You create a single-page website summarizing the information in the experimental protocol appropriately including any diagrams.",
