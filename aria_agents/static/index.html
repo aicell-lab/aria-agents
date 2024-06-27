@@ -149,7 +149,8 @@ function App() {
             const currentMessageId = "message-" + (newChatHistory.length + 1);
 
             try {
-                const response = await svc.chat(currentQuestion, newChatHistory, userProfile, statusCallback, sessionId, [], assistantName);
+                const extensions = [{id: "aria"}]
+                const response = await svc.chat(currentQuestion, newChatHistory, userProfile, statusCallback, sessionId, extensions, assistantName);
                 const message = generateMessage(response.text, response.steps);
                 setChatHistory([
                     ...newChatHistory,

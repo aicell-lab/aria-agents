@@ -10,7 +10,7 @@ def get_extension():
         description="Utility tools for suggesting studies, compiling experiments, and analyzing data.",
         tools=dict(
             study_suggester=run_study_suggester,
-            experiment_compiler=run_experiment_compiler,
+            # experiment_compiler=run_experiment_compiler,
             # data_analyst=run_analyzers,
         )
     )
