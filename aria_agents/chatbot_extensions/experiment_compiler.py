@@ -19,10 +19,8 @@ from aria_agents.chatbot_extensions.aux import (
     create_pubmed_corpus,
     create_query_function,
     SummaryWebsite,
-    pmc_cited_search
 )
 from tqdm.auto import tqdm
-
 
 class ProtocolSection(BaseModel):
     """A section of an experimental protocol encompassing a specific set of steps falling under a coherent theme. The steps should be taken from existing protocols"""
@@ -35,44 +33,19 @@ class ExperimentalProtocol(BaseModel):
 Do not include any data analysis portion of the study, only the procedure through the point of data collection. That means no statistical tests or data processing should be included unless they are necessary for downstream data collection steps."""
     # steps : List[str] = Field(..., description="A list of steps that must be followed in order to carry out the experiment. This string MUST be in markdown format and should contain no irregular characters.")
     sections : List[ProtocolSection] = Field(..., description="A list of sections that must be followed in order to carry out the experiment.")
+    queries : List[str] = Field(..., description="A list of queries that were used to search for the protocol steps in the paper corpus. Do not repeat queries across protocol revisions.")
 
 class ProtocolFeedback(BaseModel):
     """The expert scientist's feedback on a protocol"""
     complete : bool = Field(..., description="Whether the protocol is specified in enough detail for a new student to follow it exactly without any questions or doubts")
     feedback : str = Field(..., description="The expert scientist's feedback on the protocol")
 
-
 async def get_protocol_feedback(protocol : ExperimentalProtocol, protocol_manager : Role) -> ProtocolFeedback:
     res = await protocol_manager.aask(["Is the following protocol specified in enough detail for a new student to follow it exactly without any questions or doubts? If not, say why.", protocol], output_schema=ProtocolFeedback)
     return res
 
-# async def revise_protocol(protocol : ExperimentalProtocol, feedback : ProtocolFeedback, protocol_writer : Role) -> ExperimentalProtocol:
-#     # pmc_query = await protocol_writer.aask([f"Read the following protocol you've been working on and the feedback. Use the feedback to construct a query to search PubMed Central for relevant protocols that you will use to build your own. Limit your search to ONLY open access papers. The current protocol will be given first, then the feedback.", protocol, feedback], PMCQuery)
-#     # query_engine = await create_pubmed_corpus(pmc_query)
-#     # query_function = create_query_function(query_engine)
-# #     res = await protocol_writer.acall(["""Take the following feedback and use it to revise the protocol to be more detailed. First the protocol will be provided, then the feedback. You are given a corpus of existing protocols to study, query it as many times as possible for inspiration. 
-# # All protocol steps should be citable. If you do not receive responses from your queries, keep trying re-worded or different queries with more broad wording and terms. Try at least 5 queries every time.""", protocol, feedback],
-# #                                           output_schema=ExperimentalProtocol,
-# #                                           tools = [query_function])
-#     res = await protocol_writer.acall(["""Take the following feedback and use it to revise the protocol to be more detailed. First the protocol will be provided, then the feedback.
-#     All protocol steps should be citable. You can search PubMed and ask questions of relevant papers. If you do not receive responses from your queries, keep trying re-worded or different queries with more broad wording and terms.
-#     Your query should not be of the form of a question, but rather in the form of the expected answer for example "cells were cultured for 20 minutes" because this will find closely matching sentences to your desired information.""",
-#     protocol, 
-#     feedback],
-#                                               output_schema=ExperimentalProtocol,
-#                                               tools = [pmc_cited_search])
-#     return res
 
-
-# Possible - maintain revision query history accross revisions
-async def revise_protocol_fixed_corpus(protocol : ExperimentalProtocol, feedback : ProtocolFeedback, protocol_writer : Role, query_function : Callable) -> ExperimentalProtocol:
-    # pmc_query = await protocol_writer.aask([f"Read the following protocol you've been working on and the feedback. Use the feedback to construct a query to search PubMed Central for relevant protocols that you will use to build your own. Limit your search to ONLY open access papers. The current protocol will be given first, then the feedback.", protocol, feedback], PMCQuery)
-    # query_engine = await create_pubmed_corpus(pmc_query)
-    # query_function = create_query_function(query_engine)
-    res = await protocol_writer.acall(["""Take the following feedback and use it to revise the protocol to be more detailed. First the protocol will be provided, then the feedback. You are given a corpus of existing protocols to study, query it as many times as possible for inspiration. 
-All protocol steps should be citable. If you do not receive responses from your queries, keep trying re-worded or different queries with more broad wording and terms. Try at least 5 queries every time.
-
-Your query MUST not be of the form of a question, but rather in the form of the expected protocol chunk you are looking for because this will find closely matching sentences to your desired information.
+QUERY_TOOL_TIP = """Queries MUST not be of the form of a question, but rather in the form of the expected protocol chunk you are looking for because this will find closely matching sentences to your desired information.
 
 # EXAMPLE QUERIES: 
 - `CHO cells were cultured for 20 minutes`
@@ -82,11 +55,36 @@ Your query MUST not be of the form of a question, but rather in the form of the 
 - `All tissue samples were pulverized using a ball mill (MM400, Retsch) with precooled beakers and stainless-steel balls for 30 s at the highest frequency (30 Hz)`
 - `pulverized and frozen samples were extracted using the indicated solvents and subsequent steps of the respective protocol`
 - `After a final centrifugation step the solvent extract of the protocols 100IPA, IPA/ACN and MeOH/ACN were transferred into a new 1.5 ml tube (Eppendorf) and snap-frozen until kit preparation.` 
-- `The remaining protocols were dried using an Eppendorf Concentrator Plus set to no heat, stored at −80°C and reconstituted in 60 µL isopropanol (30 µL of 100% isopropanol, followed by 30 µL of 30% isopropanol in water) before the measurement.`
-""",
-protocol, feedback], output_schema=ExperimentalProtocol, tools = [query_function])
-    
-    return res
+- `The remaining protocols were dried using an Eppendorf Concentrator Plus set to no heat, stored at −80°C and reconstituted in 60 µL isopropanol (30 µL of 100% isopropanol, followed by 30 µL of 30% isopropanol in water) before the measurement.`"""
+
+
+class CorpusQueries(BaseModel):
+    """A list of queries to search against a given corpus of protocols"""
+    queries : List[str] = Field(..., description=f"A list of queries to search against a given corpus of protocols. {QUERY_TOOL_TIP}")
+
+class CorpusQueriesResponses(BaseModel):
+    """A list of responses to queries made against a corpus of protocols"""
+    responses : Dict[str, str] = Field(..., description="A dictionary of responses to queries made against a corpus of protocols")
+
+
+async def write_protocol(protocol : Union[ExperimentalProtocol, SuggestedStudy], feedback : ProtocolFeedback, query_function : Callable, role : Role) -> ExperimentalProtocol:
+    if isinstance(protocol, SuggestedStudy):
+        prompt = f"""Take the following suggested study and use it to produce a detailed protocol telling a student exactly what steps they should follow in the lab to collect data. Do not include any data analysis or conclusion-drawing steps, only data collection."""
+        messages = [prompt, protocol]
+        protocol_updated = await role.aask(messages, output_schema=ExperimentalProtocol)
+    else:
+        prompt = f"""You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
+        messages = [prompt, protocol, feedback]
+        query_messages = [x for x in messages] + ["Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols"]
+        queries = await role.aask(query_messages, output_schema=CorpusQueries)
+        queries_responses = CorpusQueriesResponses(responses = {
+            query : await query_function(query) for query in queries.queries
+        })
+        protocol_messages = [x for x in messages] + [f"You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
+                                                     queries_responses,
+                                                     f"Use these protocol corpus query responses to update and revise your protocol according to the feedback. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io"]
+        protocol_updated = await role.aask(protocol_messages, output_schema=ExperimentalProtocol)
+    return protocol_updated
 
 
 project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
@@ -96,7 +94,7 @@ os.makedirs(project_folders, exist_ok = True)
 PAPER_LIMIT = 20
 LLM_MODEL = 'gpt-4o'
 EMBEDDING_MODEL = "text-embedding-3-small"
-SIMILARITY_TOP_K = 5
+SIMILARITY_TOP_K = 8
 CITATION_CHUNK_SIZE = 1024
 project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
 os.makedirs(project_folders, exist_ok = True)
@@ -107,7 +105,7 @@ os.makedirs(project_folders, exist_ok = True)
 async def run_experiment_compiler(
     project_name: str = Field(description = "The name of the project, used to create a folder to store the output files and to read input files from the study suggester run"),
     constraints: str = Field("", description = "Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc."),
-    max_revisions: int = Field(10, description = "The maximum number of protocol revision rounds to allow")
+    max_revisions: int = Field(2, description = "The maximum number of protocol revision rounds to allow")
 ):
     """Generate an investigation from a suggested study"""
     project_folder = os.path.join(project_folders, project_name)
@@ -133,20 +131,25 @@ async def run_experiment_compiler(
     query_engine = await create_pubmed_corpus(pmc_query)
     query_function = create_query_function(query_engine)
     
-    protocol = await protocol_writer.acall(["Take the following suggested study and use it to produce a detailed protocol telling a student exactly what steps they should follow in the lab to collect data. Do not include any data analysis or conclusion-drawing steps, only data collection. Protocol steps must be inspired by existing protocols from PubMed literature. If your queries to the corpus are not returning answers, keep trying different queries.", suggested_study],
-                                          output_schema=ExperimentalProtocol,
-                                          tools = [query_function])
+
+    protocol = await write_protocol(protocol = suggested_study,
+                                    feedback = None,
+                                    query_function = query_function,
+                                    role = protocol_writer)
 
     protocol_feedback = await get_protocol_feedback(protocol, protocol_manager)
     revisions = 0
     pbar = tqdm(total=max_revisions)
     while not protocol_feedback.complete and revisions < max_revisions:
-        # protocol = await revise_protocol(protocol, protocol_feedback, protocol_writer) # non-fixed corpus version
-        protocol = await revise_protocol_fixed_corpus(protocol, protocol_feedback, protocol_writer, query_function) # Fixed-corpus version
+        protocol = await write_protocol(protocol = protocol,
+                                        feedback = protocol_feedback,
+                                        query_function = query_function,
+                                        role = protocol_writer)
         protocol_feedback = await get_protocol_feedback(protocol, protocol_manager)
         revisions += 1
         pbar.update(1)
     pbar.close()
+
     website_writer = Role(name = "Website Writer",
                             instructions = "You are the website writer. You create a single-page website summarizing the information in the experimental protocol appropriately including any diagrams.",
                             constraints = None,
@@ -170,7 +173,7 @@ async def run_experiment_compiler(
 async def main():
     parser = argparse.ArgumentParser(description='Generate an investigation')
     parser.add_argument('--project_name', type = str, help = 'The name of the project', required = True)
-    parser.add_argument('--max_revisions', type = int, help = 'The maximum number of protocol agent revisions to allow', default = 10)
+    parser.add_argument('--max_revisions', type = int, help = 'The maximum number of protocol agent revisions to allow', default = 3)
     parser.add_argument('--constraints', type=str, help='Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.', default="")
     args = parser.parse_args()
     await run_experiment_compiler(**vars(args))
