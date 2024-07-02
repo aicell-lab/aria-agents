@@ -5,10 +5,11 @@ import os
 from urllib.parse import parse_qs
 
 class HyphaDataStore:
-    def __init__(self):
+    def __init__(self, event_bus=None):
         self.storage = {}
         self._svc = None
         self._server = None
+        self._event_bus = event_bus
 
     async def setup(self, server, service_id="data-store", visibility="public"):
         self._server = server
@@ -41,6 +42,7 @@ class HyphaDataStore:
                     data = fil.read()
             mime_type, _ = mimetypes.guess_type(name)
             self.storage[obj_id] = {
+                'id': obj_id,
                 'type': obj_type,
                 'name': name,
                 'value': data,
@@ -49,12 +51,15 @@ class HyphaDataStore:
             }
         else:
             self.storage[obj_id] = {
+                'id': obj_id,
                 'type': obj_type,
                 'name': name,
                 'value': value,
                 'mime_type': 'application/json',
                 'comment': comment
             }
+        if self._event_bus:
+            self._event_bus.emit("store_put", self.storage[obj_id])
         return obj_id
 
     def get(self, id: str):
