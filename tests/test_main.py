@@ -3,7 +3,7 @@ import os
 if "OPENAI_API_KEY" not in os.environ:
     import dotenv
     dotenv.load_dotenv()
-from aria_agents.chatbot_extensions.study_suggester import run_study_suggester
+from aria_agents.chatbot_extensions.aria_extension import run_study_suggester
 from aria_agents.chatbot_extensions.experiment_compiler import run_experiment_compiler
 
 @pytest.mark.asyncio

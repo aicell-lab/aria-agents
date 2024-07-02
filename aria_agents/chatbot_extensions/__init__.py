@@ -5,13 +5,14 @@ from pydantic import BaseModel
 from aria_agents.utils import ChatbotExtension
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 from schema_agents import schema_tool
+from aria_agents.hypha_store import HyphaDataStore
 
-def get_builtin_extensions():
+def get_builtin_extensions(ds: HyphaDataStore):
     extensions = []
     for module in pkgutil.walk_packages(__path__, __name__ + '.'):
         if module.name.endswith('_extension'):
             ext_module = module.module_finder.find_module(module.name).load_module(module.name)
-            exts = ext_module.get_extension() or []
+            exts = ext_module.get_extension(ds) or []
             if isinstance(exts, ChatbotExtension):
                 exts = [exts]
             for ext in exts:
@@ -65,7 +66,13 @@ async def extension_to_tools(extension: ChatbotExtension):
     return tools
 
 async def main():
-    extensions = get_builtin_extensions()
+    from imjoy_rpc.hypha import connect_to_server
+    
+    server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
+    ds = HyphaDataStore()
+    await ds.setup(server)
+
+    extensions = get_builtin_extensions(ds)
     tools = []
     for svc in extensions:
         tool = await extension_to_tools(svc)

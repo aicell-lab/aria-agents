@@ -20,6 +20,7 @@ from aria_agents.chatbot_extensions import (
 )
 from aria_agents.utils import ChatbotExtension, LegacyChatbotExtension, legacy_extension_to_tool
 from aria_agents.quota import QuotaManager
+from aria_agents.hypha_store import HyphaDataStore
 import logging
 
 
@@ -198,7 +199,10 @@ async def connect_server(server_url):
 async def register_chat_service(server):
     """Hypha startup function."""
     debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
-    builtin_extensions = get_builtin_extensions()
+
+    ds = HyphaDataStore()
+    await ds.setup(server)
+    builtin_extensions = get_builtin_extensions(ds)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
     default_quota = float(os.environ.get("BIOIMAGEIO_DEFAULT_QUOTA", "inf"))
@@ -338,6 +342,7 @@ async def register_chat_service(server):
         chat_history,
         user_profile=None,
         status_callback=None,
+        # artifact_callback=None,  # TODO:
         session_id=None,
         extensions=None,
         assistant_name="Skyler",
