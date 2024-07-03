@@ -33,15 +33,23 @@ class ExperimentalProtocol(BaseModel):
 Do not include any data analysis portion of the study, only the procedure through the point of data collection. That means no statistical tests or data processing should be included unless they are necessary for downstream data collection steps."""
     # steps : List[str] = Field(..., description="A list of steps that must be followed in order to carry out the experiment. This string MUST be in markdown format and should contain no irregular characters.")
     sections : List[ProtocolSection] = Field(..., description="A list of sections that must be followed in order to carry out the experiment.")
-    queries : List[str] = Field(..., description="A list of queries that were used to search for the protocol steps in the paper corpus. Do not repeat queries across protocol revisions.")
+    queries : List[str] = Field(..., description="A list of queries that were previously used to search for the protocol steps in the paper corpus. Do not repeat queries across protocol revisions.")
 
 class ProtocolFeedback(BaseModel):
     """The expert scientist's feedback on a protocol"""
     complete : bool = Field(..., description="Whether the protocol is specified in enough detail for a new student to follow it exactly without any questions or doubts")
     feedback : str = Field(..., description="The expert scientist's feedback on the protocol")
+    previous_feedback : List[str] = Field(..., description="The previous feedback given to the protocol writer that has already been addressed.")
 
-async def get_protocol_feedback(protocol : ExperimentalProtocol, protocol_manager : Role) -> ProtocolFeedback:
-    res = await protocol_manager.aask(["Is the following protocol specified in enough detail for a new student to follow it exactly without any questions or doubts? If not, say why.", protocol], output_schema=ProtocolFeedback)
+async def get_protocol_feedback(protocol : ExperimentalProtocol, protocol_manager : Role, existing_feedback : ProtocolFeedback = None) -> ProtocolFeedback:
+    if existing_feedback is None:
+        pf = ProtocolFeedback(complete = False, feedback = "", previous_feedback = [])
+    else:
+        pf = existing_feedback
+    res = await protocol_manager.aask(["""Is the following protocol specified in enough detail for a new student to follow it exactly without any questions or doubts? If not, say why.
+                                       First you will be given the previous feedback you wrote for this protocol then you will be given the current version of the protocol.
+                                       If the previous feedback is non-empty, do not give redundant feedback, give new feedback that will help the protocol writer improve the protocol further and make sure to save the previous feedback into the `previous_feedback` field""", 
+                                       pf, protocol], output_schema=ProtocolFeedback)
     return res
 
 
@@ -75,14 +83,14 @@ async def write_protocol(protocol : Union[ExperimentalProtocol, SuggestedStudy],
     else:
         prompt = f"""You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
         messages = [prompt, protocol, feedback]
-        query_messages = [x for x in messages] + ["Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols"]
+        query_messages = [x for x in messages] + ["Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."]
         queries = await role.aask(query_messages, output_schema=CorpusQueries)
         queries_responses = CorpusQueriesResponses(responses = {
             query : await query_function(query) for query in queries.queries
         })
         protocol_messages = [x for x in messages] + [f"You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
                                                      queries_responses,
-                                                     f"Use these protocol corpus query responses to update and revise your protocol according to the feedback. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io"]
+                                                     f"Use these protocol corpus query responses to update and revise your protocol according to the feedback. Save the queries you used into the running list of previous queries. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io"]
         protocol_updated = await role.aask(protocol_messages, output_schema=ExperimentalProtocol)
     return protocol_updated
 
@@ -145,7 +153,7 @@ async def run_experiment_compiler(
                                         feedback = protocol_feedback,
                                         query_function = query_function,
                                         role = protocol_writer)
-        protocol_feedback = await get_protocol_feedback(protocol, protocol_manager)
+        protocol_feedback = await get_protocol_feedback(protocol, protocol_manager, protocol_feedback)
         revisions += 1
         pbar.update(1)
     pbar.close()
