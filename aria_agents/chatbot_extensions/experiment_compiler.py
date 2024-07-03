@@ -1,28 +1,35 @@
 import dotenv
+
 dotenv.load_dotenv()
-import os
-from typing import List, Optional, Union, Type, Any, get_type_hints, Tuple, Literal, Dict, Any
-from typing_extensions import Self
-import asyncio
-import pickle as pkl
-from schema_agents import schema_tool, Role
-import json
-from pydantic import BaseModel, Field, model_validator
-from typing import List, Optional, Union
 import argparse
-from typing import Union, List, Dict
-import copy
-from typing import Callable
-from aria_agents.chatbot_extensions.aux import (
-    SuggestedStudy,
-    PMCQuery,
-    create_pubmed_corpus,
-    create_query_function,
-    SummaryWebsite,
-)
+import asyncio
+import json
+import os
+from typing import Callable, Dict, List, Union
+
+from pydantic import BaseModel, Field
+from schema_agents import Role, schema_tool
 from tqdm.auto import tqdm
 
+from aria_agents.chatbot_extensions.aux import (
+    PMCQuery,
+    SuggestedStudy,
+    SummaryWebsite,
+    create_pubmed_corpus,
+    create_query_function,
+)
+from aria_agents.hypha_store import HyphaDataStore
+
+
+PAPER_LIMIT = 20
 MAX_REVISIONS = 3
+LLM_MODEL = "gpt-4o"
+EMBEDDING_MODEL = "text-embedding-3-small"
+SIMILARITY_TOP_K = 8
+CITATION_CHUNK_SIZE = 1024
+project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
+os.makedirs(project_folders, exist_ok=True)
+
 
 class ProtocolSection(BaseModel):
     """A section of an experimental protocol encompassing a specific set of steps falling under a coherent theme. The steps should be taken from existing protocols"""
@@ -97,98 +104,116 @@ async def write_protocol(protocol : Union[ExperimentalProtocol, SuggestedStudy],
     return protocol_updated
 
 
-project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
-os.makedirs(project_folders, exist_ok = True)
+def create_experiment_compiler_function(ds: HyphaDataStore = None):
+    @schema_tool
+    async def run_experiment_compiler(
+        project_name: str = Field(description = "The name of the project, used to create a folder to store the output files and to read input files from the study suggester run"),
+        constraints: str = Field("", description = "Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc."),
+        max_revisions: int = Field(MAX_REVISIONS, description = "The maximum number of protocol revision rounds to allow")
+    ):
+        """Generate an investigation from a suggested study"""
+        project_folder = os.path.abspath(os.path.join(project_folders, project_name))
+        os.makedirs(project_folder, exist_ok = True)
 
-
-PAPER_LIMIT = 20
-LLM_MODEL = 'gpt-4o'
-EMBEDDING_MODEL = "text-embedding-3-small"
-SIMILARITY_TOP_K = 8
-CITATION_CHUNK_SIZE = 1024
-project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
-os.makedirs(project_folders, exist_ok = True)
-
-
-
-@schema_tool
-async def run_experiment_compiler(
-    project_name: str = Field(description = "The name of the project, used to create a folder to store the output files and to read input files from the study suggester run"),
-    constraints: str = Field("", description = "Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc."),
-    max_revisions: int = Field(MAX_REVISIONS, description = "The maximum number of protocol revision rounds to allow")
-):
-    """Generate an investigation from a suggested study"""
-    project_folder = os.path.join(project_folders, project_name)
-    os.makedirs(project_folder, exist_ok = True)
-    
-    protocol_writer = Role(name="Protocol Writer",
-                    instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
-    You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
-                    constraints=constraints,
-                    register_default_events=True,
-                    model=LLM_MODEL)
-
-    protocol_manager = Role(name="Protocol manager",
-                        instructions="You are an expert laboratory scientist. You read protocols and manage them to ensure that they are clear and detailed enough for a new student to follow them exactly without any questions or doubts.",
+        protocol_writer = Role(name="Protocol Writer",
+                        instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
+        You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
                         constraints=constraints,
                         register_default_events=True,
                         model=LLM_MODEL)
 
-    suggested_study_json = os.path.join(project_folder, "suggested_study.json")
-    suggested_study = SuggestedStudy(**json.loads(open(suggested_study_json).read()))
+        protocol_manager = Role(name="Protocol manager",
+                            instructions="You are an expert laboratory scientist. You read protocols and manage them to ensure that they are clear and detailed enough for a new student to follow them exactly without any questions or doubts.",
+                            constraints=constraints,
+                            register_default_events=True,
+                            model=LLM_MODEL)
 
-    pmc_query = await protocol_writer.aask([f"Read the following suggested study and use it construct a query to search PubMed Central for relevant protocols that you will use to construct steps. Limit your search to ONLY open access papers", suggested_study], PMCQuery)
-    query_engine = await create_pubmed_corpus(pmc_query)
-    query_function = create_query_function(query_engine)
-    
+        if ds is None:
+            suggested_study_file = os.path.join(project_folder, "suggested_study.json")
+            suggested_study = SuggestedStudy(**json.loads(open(suggested_study_file).read()))
+        else:
+            # TODO: Find a better way to get the suggested study from the datastore
+            for obj in ds.storage.values():
+                if obj["name"] == f"{project_name}:suggested_study.json":
+                    suggested_study = SuggestedStudy(**obj["value"])
+                    break
 
-    protocol = await write_protocol(protocol = suggested_study,
-                                    feedback = None,
-                                    query_function = query_function,
-                                    role = protocol_writer)
+        pmc_query = await protocol_writer.aask([f"Read the following suggested study and use it construct a query to search PubMed Central for relevant protocols that you will use to construct steps. Limit your search to ONLY open access papers", suggested_study], PMCQuery)
+        query_engine = await create_pubmed_corpus(pmc_query)
+        query_function = create_query_function(query_engine)
 
-    protocol_feedback = await get_protocol_feedback(protocol, protocol_manager)
-    revisions = 0
-    pbar = tqdm(total=max_revisions)
-    while not protocol_feedback.complete and revisions < max_revisions:
-        protocol = await write_protocol(protocol = protocol,
-                                        feedback = protocol_feedback,
+        protocol = await write_protocol(protocol = suggested_study,
+                                        feedback = None,
                                         query_function = query_function,
                                         role = protocol_writer)
-        protocol_feedback = await get_protocol_feedback(protocol, protocol_manager, protocol_feedback)
-        revisions += 1
-        pbar.update(1)
-    pbar.close()
 
-    website_writer = Role(name = "Website Writer",
-                            instructions = "You are the website writer. You create a single-page website summarizing the information in the experimental protocol appropriately including any diagrams.",
-                            constraints = None,
-                            register_default_events = True,
-                            model = LLM_MODEL,)
+        protocol_feedback = await get_protocol_feedback(protocol, protocol_manager)
+        revisions = 0
+        pbar = tqdm(total=max_revisions)
+        while not protocol_feedback.complete and revisions < max_revisions:
+            protocol = await write_protocol(protocol = protocol,
+                                            feedback = protocol_feedback,
+                                            query_function = query_function,
+                                            role = protocol_writer)
+            protocol_feedback = await get_protocol_feedback(protocol, protocol_manager, protocol_feedback)
+            revisions += 1
+            pbar.update(1)
+        pbar.close()
 
-    summary_website = await website_writer.aask([f"Create a single-page website summarizing experimental protocol appropriately including any diagrams and references", protocol],
-                                                SummaryWebsite)
+        website_writer = Role(name = "Website Writer",
+                                instructions = "You are the website writer. You create a single-page website summarizing the information in the experimental protocol appropriately including any diagrams.",
+                                constraints = None,
+                                register_default_events = True,
+                                model = LLM_MODEL,)
 
+        summary_website = await website_writer.aask([f"Create a single-page website summarizing experimental protocol appropriately including any diagrams and references", protocol],
+                                                    SummaryWebsite)
 
-    protocol_json = os.path.join(project_folder, "protocol.json")
-    output_html = os.path.join(project_folder, 'protocol.html')
-    with open(output_html, 'w') as f:
-        f.write(summary_website.html_code)
-    with open(protocol_json, 'w') as f:
-        json.dump(protocol.dict(), f, indent = 4)
-    return {
-        "protocol": protocol.dict(),
-    }
+        if ds is None:
+            # Save the suggested study to a JSON file
+            protocol_file = os.path.join(project_folder, "protocol.json")
+            with open(protocol_file, "w") as f:
+                json.dump(protocol.dict(), f, indent=4)
+            protocol_url = "file://" + protocol_file
+
+            # Save the summary website to a HTML file
+            summary_website_file = os.path.join(project_folder, "protocol_summary_website.html")
+            with open(summary_website_file, "w") as f:
+                f.write(summary_website.html_code)
+            summary_website_url = "file://" + summary_website_file
+        else:
+            # Save the suggested study to the HyphaDataStore
+            protocol_id = ds.put(
+                obj_type="file",
+                value=protocol.dict(),
+                name=f"{project_name}:protocol.json",
+            )
+            protocol_url = ds.get_url(protocol_id)
+
+            # Save the summary website to the HyphaDataStore
+            summary_website_id = ds.put(
+                obj_type="file",
+                value=summary_website.html_code,
+                name=f"{project_name}:protocol_summary_website.html",
+            )
+            summary_website_url = ds.get_url(summary_website_id)
+
+        return {
+            "summary_website_url": summary_website_url,
+            "protocol_url": protocol_url,
+            "protocol": protocol.dict(),
+        }
+    return run_experiment_compiler
 
 async def main():
     parser = argparse.ArgumentParser(description='Generate an investigation')
-    parser.add_argument('--project_name', type = str, help = 'The name of the project', required = True)
+    parser.add_argument('--project_name', type = str, help = 'The name of the project', default = 'test')
     parser.add_argument('--max_revisions', type = int, help = 'The maximum number of protocol agent revisions to allow', default = MAX_REVISIONS)
     parser.add_argument('--constraints', type=str, help='Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.', default="")
     args = parser.parse_args()
+
+    run_experiment_compiler = create_experiment_compiler_function()
     await run_experiment_compiler(**vars(args))
-
-
 
 
 if __name__ == "__main__":
