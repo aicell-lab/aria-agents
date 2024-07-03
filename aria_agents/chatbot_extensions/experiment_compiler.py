@@ -22,6 +22,8 @@ from aria_agents.chatbot_extensions.aux import (
 )
 from tqdm.auto import tqdm
 
+MAX_REVISIONS = 3
+
 class ProtocolSection(BaseModel):
     """A section of an experimental protocol encompassing a specific set of steps falling under a coherent theme. The steps should be taken from existing protocols"""
     section_name : str = Field(..., description="The name of the section")
@@ -113,7 +115,7 @@ os.makedirs(project_folders, exist_ok = True)
 async def run_experiment_compiler(
     project_name: str = Field(description = "The name of the project, used to create a folder to store the output files and to read input files from the study suggester run"),
     constraints: str = Field("", description = "Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc."),
-    max_revisions: int = Field(2, description = "The maximum number of protocol revision rounds to allow")
+    max_revisions: int = Field(MAX_REVISIONS, description = "The maximum number of protocol revision rounds to allow")
 ):
     """Generate an investigation from a suggested study"""
     project_folder = os.path.join(project_folders, project_name)
@@ -181,7 +183,7 @@ async def run_experiment_compiler(
 async def main():
     parser = argparse.ArgumentParser(description='Generate an investigation')
     parser.add_argument('--project_name', type = str, help = 'The name of the project', required = True)
-    parser.add_argument('--max_revisions', type = int, help = 'The maximum number of protocol agent revisions to allow', default = 3)
+    parser.add_argument('--max_revisions', type = int, help = 'The maximum number of protocol agent revisions to allow', default = MAX_REVISIONS)
     parser.add_argument('--constraints', type=str, help='Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.', default="")
     args = parser.parse_args()
     await run_experiment_compiler(**vars(args))
