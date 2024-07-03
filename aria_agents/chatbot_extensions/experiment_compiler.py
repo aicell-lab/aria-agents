@@ -177,7 +177,7 @@ def create_experiment_compiler_function(ds: HyphaDataStore = None):
             protocol_url = "file://" + protocol_file
 
             # Save the summary website to a HTML file
-            summary_website_file = os.path.join(project_folder, "protocol_summary_website.html")
+            summary_website_file = os.path.join(project_folder, "protocol.html")
             with open(summary_website_file, "w") as f:
                 f.write(summary_website.html_code)
             summary_website_url = "file://" + summary_website_file
@@ -194,7 +194,7 @@ def create_experiment_compiler_function(ds: HyphaDataStore = None):
             summary_website_id = ds.put(
                 obj_type="file",
                 value=summary_website.html_code,
-                name=f"{project_name}:protocol_summary_website.html",
+                name=f"{project_name}:protocol.html",
             )
             summary_website_url = ds.get_url(summary_website_id)
 

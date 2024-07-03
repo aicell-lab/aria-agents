@@ -22,7 +22,8 @@ if __name__ == "__main__":
 
     async def main():
         extension = get_extension()
-        print(await extension.tools["study_suggester"](user_request="I'm interested in designing a study about the metabolomics of U2OS cells", project_name="test-project"))
+        print(await extension.tools["study_suggester"](user_request="I'm interested in designing a study about the metabolomics of U2OS cells", project_name="test", constraints=""))
+        print(await extension.tools["experiment_compiler"](project_name="test", max_revisions=3, constraints=""))
 
     # Run the async function
     asyncio.run(main())
