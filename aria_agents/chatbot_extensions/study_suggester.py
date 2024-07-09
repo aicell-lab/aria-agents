@@ -49,9 +49,9 @@ def create_study_suggester_function(ds: HyphaDataStore = None):
         constraints: str = Field("", description = "Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc."),
     ):
         """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
-
-        project_folder = os.path.abspath(os.path.join(project_folders, project_name))
-        os.makedirs(project_folder, exist_ok = True)
+        if ds is None:
+            project_folder = os.path.abspath(os.path.join(project_folders, project_name))
+            os.makedirs(project_folder, exist_ok = True)
 
         ncbi_querier = Role(name = "NCBI Querier", 
                             instructions = "You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
@@ -104,7 +104,7 @@ def create_study_suggester_function(ds: HyphaDataStore = None):
         else:
             # Save the suggested study to the HyphaDataStore
             suggested_study_id = ds.put(
-                obj_type="file",
+                obj_type="json",
                 value=suggested_study.dict(),
                 name=f"{project_name}:suggested_study.json",
             )
@@ -133,7 +133,13 @@ async def main():
     parser.add_argument('--constraints', type=str, help='Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.', default="")
     args = parser.parse_args()
 
-    run_study_suggester = create_study_suggester_function()
+    # from imjoy_rpc.hypha import connect_to_server
+    # server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
+    # ds = HyphaDataStore()
+    # await ds.setup(server)
+    ds = None
+
+    run_study_suggester = create_study_suggester_function(ds)
     await run_study_suggester(**vars(args))
 
 if __name__ == "__main__":

@@ -112,8 +112,9 @@ def create_experiment_compiler_function(ds: HyphaDataStore = None):
         max_revisions: int = Field(MAX_REVISIONS, description = "The maximum number of protocol revision rounds to allow")
     ):
         """Generate an investigation from a suggested study"""
-        project_folder = os.path.abspath(os.path.join(project_folders, project_name))
-        os.makedirs(project_folder, exist_ok = True)
+        if ds is None:
+            project_folder = os.path.abspath(os.path.join(project_folders, project_name))
+            os.makedirs(project_folder, exist_ok = True)
 
         protocol_writer = Role(name="Protocol Writer",
                         instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
@@ -184,7 +185,7 @@ def create_experiment_compiler_function(ds: HyphaDataStore = None):
         else:
             # Save the suggested study to the HyphaDataStore
             protocol_id = ds.put(
-                obj_type="file",
+                obj_type="json",
                 value=protocol.dict(),
                 name=f"{project_name}:protocol.json",
             )
