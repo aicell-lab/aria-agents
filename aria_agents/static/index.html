@@ -55,6 +55,32 @@
         .details-box summary {
             cursor: pointer;
         }
+
+        /* Fixed width for the sidebar */
+        .sidebar {
+            width: 256px;
+        }
+
+        /* Percentage width for the artefacts panel */
+        .artefacts-panel {
+            width: 25%;
+        }
+
+        /* Main panel adjustments */
+        .main-panel {
+            /* transition: margin 0.5s ease, width 0.5s ease; */
+            width: 100%; /* Ensures it takes up all available space within the max-width */
+        }
+
+        .main-panel-full {
+            margin-right: 0;
+            max-width: calc(100% - 256px); /* Ensure it fits between the sidebar and artefacts panel */
+        }
+
+        .main-panel-artefacts {
+            margin-right: 25%;
+            max-width: calc(100% - 256px - 25%); /* Ensure it fits between the sidebar and artefacts panel */
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -117,6 +143,9 @@ function App() {
         occupation: "",
         background: ""
     });
+    const [isArtefactsPanelOpen, setIsArtefactsPanelOpen] = useState(false);
+    const [artefacts, setArtefacts] = useState([]);
+    const [currentArtefactIndex, setCurrentArtefactIndex] = useState(0);
     const [assistantName, setAssistantName] = useState("Aria");
     const [streamingContent, setStreamingContent] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -150,7 +179,7 @@ function App() {
 
             try {
                 const extensions = [{id: "aria"}]
-                const response = await svc.chat(currentQuestion, newChatHistory, userProfile, statusCallback, sessionId, extensions, assistantName);
+                const response = await svc.chat(currentQuestion, newChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions, assistantName);
                 const message = generateMessage(response.text, response.steps);
                 setChatHistory([
                     ...newChatHistory,
@@ -263,6 +292,10 @@ function App() {
         }
     };
 
+    const artefactCallback = (artefact, url) => {
+        setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
+    };
+
     const generateSessionID = () => {
         return "session-" + Math.random().toString(36).substr(2, 9);
     };
@@ -271,11 +304,28 @@ function App() {
         setShowProfileDialog(false);
     };
 
+    const handleArtefactsToggle = () => {
+        setIsArtefactsPanelOpen(!isArtefactsPanelOpen);
+    };
+
+    const handlePrevArtefact = () => {
+        if (currentArtefactIndex > 0) {
+            setCurrentArtefactIndex(currentArtefactIndex - 1);
+        }
+    };
+
+    const handleNextArtefact = () => {
+        if (currentArtefactIndex < artefacts.length - 1) {
+            setCurrentArtefactIndex(currentArtefactIndex + 1);
+        }
+    };
+
+    // The main panel is adjusted based on the artefacts-panel state
     return (
-        <div className="min-h-screen flex flex-col">
-            <div className="flex-1 flex">
+        <div className="min-h-screen flex flex-col ">
+            <div className="flex-1 flex ">
                 <Sidebar onLogin={handleLogin} onEditProfile={() => setShowProfileDialog(true)} />
-                <div className="flex flex-col flex-1 items-center justify-center bg-gray-50 p-4">
+                <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'} flex flex-col items-center justify-center p-4`}>
                     <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-3xl">
                         <h1 className="text-3xl font-bold mb-4 text-center">🚀 Great science starts here</h1>
                         {chatHistory.length === 0 && (
@@ -383,7 +433,6 @@ function App() {
                     }}
                 />
             )}
-            
             {isLoading && (
                 <div className="fixed inset-0 flex items-center justify-center">
                     <div className="spinner"></div>
@@ -394,13 +443,30 @@ function App() {
                     <div className="spinner"></div>
                 </div>
             )}
+            {isArtefactsPanelOpen && (
+                <ArtefactsPanel
+                    onClose={handleArtefactsToggle}
+                    artefacts={artefacts}
+                    currentArtefactIndex={currentArtefactIndex}
+                    onPrev={handlePrevArtefact}
+                    onNext={handleNextArtefact}
+                />
+            )}
+            {!isArtefactsPanelOpen && (
+                <button
+                    onClick={handleArtefactsToggle}
+                    className="fixed top-0 right-0 mt-4 mr-4 bg-blue-600 text-white py-2 px-4 rounded"
+                >
+                    Artefacts
+                </button>
+            )}
         </div>
     );
 }
 
 function Sidebar({ onLogin, onEditProfile }) {
     return (
-        <div className="bg-white w-64 min-h-screen p-4 shadow-md">
+        <div className="sidebar bg-white min-h-screen p-4 shadow-md">
             <div className="text-xl font-bold mb-4">Aria Agents</div>
             <div className="mb-4">
                 <button className="w-full text-left py-2 px-4 rounded hover:bg-gray-200">🏠 Home</button>
@@ -470,6 +536,55 @@ function ProfileDialog({ userProfile, onClose, onSave }) {
                     <button onClick={handleSave} className="bg-blue-600 text-white py-2 px-4 rounded transition duration-300 ease-in-out transform hover:scale-105">Save</button>
                 </div>
             </div>
+        </div>
+    );
+}
+
+function ArtefactsPanel({ onClose, artefacts, currentArtefactIndex, onPrev, onNext }) {
+    const artefact = artefacts[currentArtefactIndex];
+
+    return (
+        <div className="artefacts-panel bg-white shadow-md p-4 fixed top-0 right-0 min-h-screen flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Artefacts</h2>
+                <button onClick={onClose} className="text-gray-600 hover:text-gray-900">X</button>
+            </div>
+            <div className="flex-1 overflow-y-auto mb-4">
+                {artefact && (
+                    <iframe
+                        srcDoc={artefact.artefact}
+                        title={`Artefact ${currentArtefactIndex + 1}`}
+                        className="w-full h-full border border-gray-300"
+                        style={{ height: 'calc(100vh - 200px)' }} // Adjust height to account for buttons
+                    />
+                )}
+            </div>
+            <div className="flex justify-between mb-4">
+                <button
+                    onClick={onPrev}
+                    className={`text-gray-600 hover:text-gray-900 ${currentArtefactIndex === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={currentArtefactIndex === 0}
+                >
+                    Prev
+                </button>
+                <button
+                    onClick={onNext}
+                    className={`text-gray-600 hover:text-gray-900 ${currentArtefactIndex === artefacts.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={currentArtefactIndex === artefacts.length - 1}
+                >
+                    Next
+                </button>
+            </div>
+            {artefact && (
+                <a
+                    href={artefact.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-blue-600 text-white py-2 px-4 rounded text-center"
+                >
+                    Download current artefact
+                </a>
+            )}
         </div>
     );
 }

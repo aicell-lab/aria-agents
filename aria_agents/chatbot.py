@@ -296,9 +296,12 @@ async def register_chat_service(server):
         event_bus = assistant.get_event_bus()
         event_bus.on("stream", stream_callback)
 
+        # Listen to the `store_put` event
         async def store_put_callback(store_obj):
-            url = ds.get_url(store_obj['id'])
-            await artefact_callback(url)
+            if store_obj["type"] == "file" and store_obj["name"].endswith(".html"):
+                summary_website = store_obj["value"]
+                url = ds.get_url(store_obj['id'])
+                await artefact_callback(summary_website, url)
 
         store_event_bus.on("store_put", store_put_callback)
     
@@ -352,6 +355,7 @@ async def register_chat_service(server):
         chat_history,
         user_profile=None,
         status_callback=None,
+        artefact_callback=None,
         session_id=None,
         extensions=None,
         assistant_name="Skyler",
@@ -389,7 +393,8 @@ async def register_chat_service(server):
             chatbot_extensions=extensions,
             context=context,
         )
-        return await talk_to_assistant(assistant_name, session_id, m, status_callback, context.get("user"), cross_assistant)
+
+        return await talk_to_assistant(assistant_name, session_id, m, status_callback, artefact_callback, context.get("user"), cross_assistant)
 
     async def ping(context=None):
         if login_required and context and context.get("user"):
