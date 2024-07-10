@@ -1,8 +1,9 @@
 import json
-import uuid
 import mimetypes
 import os
+import uuid
 from urllib.parse import parse_qs
+
 
 class HyphaDataStore:
     def __init__(self, event_bus=None):

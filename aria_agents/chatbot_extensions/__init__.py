@@ -1,18 +1,24 @@
 import asyncio
-import re
 import pkgutil
-from pydantic import BaseModel
-from aria_agents.utils import ChatbotExtension
-from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
-from schema_agents import schema_tool
-from aria_agents.hypha_store import HyphaDataStore
+import re
 
-def get_builtin_extensions(ds: HyphaDataStore):
+from pydantic import BaseModel
+from schema_agents import schema_tool
+from schema_agents.utils.common import EventBus
+
+from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
+from aria_agents.utils import ChatbotExtension
+
+
+def get_builtin_extensions(data_store: HyphaDataStore, chat_event_bus: EventBus):
     extensions = []
-    for module in pkgutil.walk_packages(__path__, __name__ + '.'):
-        if module.name.endswith('_extension'):
-            ext_module = module.module_finder.find_module(module.name).load_module(module.name)
-            exts = ext_module.get_extension(ds) or []
+    for module in pkgutil.walk_packages(__path__, __name__ + "."):
+        if module.name.endswith("_extension"):
+            ext_module = module.module_finder.find_module(module.name).load_module(
+                module.name
+            )
+            exts = ext_module.get_extension(data_store, chat_event_bus) or []
             if isinstance(exts, ChatbotExtension):
                 exts = [exts]
             for ext in exts:
@@ -22,8 +28,9 @@ def get_builtin_extensions(ds: HyphaDataStore):
                 if ext.id in [e.id for e in extensions]:
                     raise ValueError(f"Extension name {ext.id} already exists.")
                 extensions.append(ext)
-            
+
     return extensions
+
 
 def convert_to_dict(obj):
     if isinstance(obj, BaseModel):
@@ -34,11 +41,13 @@ def convert_to_dict(obj):
         return [convert_to_dict(v) for v in obj]
     return obj
 
+
 def create_tool_name(ext_id, tool_id=""):
     text = f"{ext_id}_{tool_id}"
     text = text.replace("-", " ").replace("_", " ").replace(".", " ")
-    words = re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+', text)
-    return ''.join(word if word.istitle() else word.capitalize() for word in words)
+    words = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+", text)
+    return "".join(word if word.istitle() else word.capitalize() for word in words)
+
 
 def tool_factory(ext_id, tool_id, ext_tool, schema):
     input_model = json_schema_to_pydantic_model(schema)
@@ -46,13 +55,16 @@ def tool_factory(ext_id, tool_id, ext_tool, schema):
     ext_tool.__doc__ = input_model.__doc__
     return schema_tool(ext_tool, input_model=input_model)
 
+
 async def extension_to_tools(extension: ChatbotExtension):
 
     if extension.get_schema:
         schemas = await extension.get_schema()
         tools = []
         for k in schemas:
-            assert k in extension.tools, f"Tool `{k}` not found in extension `{extension.id}`."
+            assert (
+                k in extension.tools
+            ), f"Tool `{k}` not found in extension `{extension.id}`."
             ext_tool = extension.tools[k]
             tool = tool_factory(extension.id, k, ext_tool, schemas[k])
             tools.append(tool)
@@ -62,22 +74,24 @@ async def extension_to_tools(extension: ChatbotExtension):
             ext_tool = extension.tools[k]
             ext_tool.__name__ = create_tool_name(extension.id, k)
             tools.append(ext_tool)
-    
+
     return tools
+
 
 async def main():
     from imjoy_rpc.hypha import connect_to_server
-    
-    server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
-    ds = HyphaDataStore()
-    await ds.setup(server)
 
-    extensions = get_builtin_extensions(ds)
+    server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
+    data_store = HyphaDataStore()
+    await data_store.setup(server)
+
+    extensions = get_builtin_extensions(data_store)
     tools = []
     for svc in extensions:
         tool = await extension_to_tools(svc)
         tools.append(tool)
     print(tools)
+
 
 if __name__ == "__main__":
     import json
@@ -104,17 +118,15 @@ if __name__ == "__main__":
                         "name": {
                             "type": "string",
                             "description": "Variable name of the object",
-                        }
-                    }
-                }
+                        },
+                    },
+                },
             },
             "outputs": {
                 "type": "array",
                 "description": "Objects produced by the script as outputs or for further use",
-                "items": {
-                    "type": "string"
-                }
-            }
+                "items": {"type": "string"},
+            },
         },
         "required": ["script", "outputs"],
         "allow_additional_properties": False,

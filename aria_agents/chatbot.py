@@ -1,33 +1,39 @@
 import asyncio
-import os
-import json
-import re
 import datetime
+import json
+import logging
+import os
+import re
 import secrets
-import aiofiles
-from functools import partial
-from imjoy_rpc.hypha import login, connect_to_server
-
-from pydantic import BaseModel, Field
-from schema_agents import Role, Message
 from typing import Any, Dict, List, Optional
+
+import aiofiles
 import pkg_resources
+from imjoy_rpc.hypha import connect_to_server, login
+from pydantic import BaseModel, Field
+from schema_agents import Message, Role
+from schema_agents.utils.common import EventBus
+
 from aria_agents.chatbot_extensions import (
     convert_to_dict,
-    get_builtin_extensions,
-    extension_to_tools,
     create_tool_name,
+    extension_to_tools,
+    get_builtin_extensions,
 )
-from aria_agents.utils import ChatbotExtension, LegacyChatbotExtension, legacy_extension_to_tool
-from aria_agents.quota import QuotaManager
 from aria_agents.hypha_store import HyphaDataStore
-from schema_agents.utils.common import EventBus
-import logging
-
+from aria_agents.quota import QuotaManager
+from aria_agents.utils import (
+    ChatbotExtension,
+    LegacyChatbotExtension,
+    legacy_extension_to_tool,
+)
 
 logger = logging.getLogger("bioimageio-chatbot")
 # set logger level
 logger.setLevel(logging.INFO)
+
+
+LLM_MODEL = "gpt-4o"
 
 
 class UserProfile(BaseModel):
@@ -72,7 +78,7 @@ class RichResponse(BaseModel):
     remaining_quota: Optional[float] = Field(None, description="Remaining quota")
 
 
-def create_assistants(builtin_extensions):
+def create_assistants(builtin_extensions, event_bus: EventBus):
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
 
     async def respond_to_user(
@@ -89,7 +95,7 @@ def create_assistants(builtin_extensions):
         extensions_by_id = {ext.id: ext for ext in builtin_extensions}
         extensions_by_name = {ext.name: ext for ext in builtin_extensions}
         extensions_by_tool_name = {}
-        
+
         tools = []
         tool_prompts = {}
         for ext in question_with_history.chatbot_extensions:
@@ -101,22 +107,31 @@ def create_assistants(builtin_extensions):
                 if "tools" not in ext and "execute" in ext and "get_schema" in ext:
                     # legacy chatbot extension
                     extension = LegacyChatbotExtension.model_validate(ext)
-                    logger.warning(f"Legacy chatbot extension is deprecated. Please use the new ChatbotExtension interface for {extension.name} with multi-tool support.")
+                    logger.warning(
+                        f"Legacy chatbot extension is deprecated. Please use the new ChatbotExtension interface for {extension.name} with multi-tool support."
+                    )
                 else:
                     extension = ChatbotExtension.model_validate(ext)
 
             max_length = 4000
             if isinstance(extension, LegacyChatbotExtension):
                 ts = [await legacy_extension_to_tool(extension)]
-                assert len(extension.description) <= max_length, f"Extension description is too long: {extension.description}"
-                tool_prompts[create_tool_name(extension.name)] = extension.description.replace("\n", ";")[:max_length]
+                assert (
+                    len(extension.description) <= max_length
+                ), f"Extension description is too long: {extension.description}"
+                tool_prompts[create_tool_name(extension.name)] = (
+                    extension.description.replace("\n", ";")[:max_length]
+                )
             else:
                 ts = await extension_to_tools(extension)
-                assert len(extension.description) <= max_length, f"Extension tool prompt is too long: {extension.description}"
-                tool_prompts[create_tool_name(extension.id) + "*"] = extension.description.replace("\n", ";")[:max_length]
+                assert (
+                    len(extension.description) <= max_length
+                ), f"Extension tool prompt is too long: {extension.description}"
+                tool_prompts[create_tool_name(extension.id) + "*"] = (
+                    extension.description.replace("\n", ";")[:max_length]
+                )
             extensions_by_tool_name.update({t.__name__: extension for t in ts})
             tools += ts
-            
 
         class ThoughtsSchema(BaseModel):
             """Details about the thoughts"""
@@ -128,7 +143,12 @@ def create_assistants(builtin_extensions):
             # reasoning: str = Field(..., description="brief explanation about the reasoning")
             # criticism: str = Field(..., description="constructive self-criticism")
 
-        tool_usage_prompt = "Tool usage guidelines (* represent the prefix of a tool group):\n" + "\n".join([f" - {ext}:{tool_prompt}" for ext, tool_prompt in tool_prompts.items()])
+        tool_usage_prompt = (
+            "Tool usage guidelines (* represent the prefix of a tool group):\n"
+            + "\n".join(
+                [f" - {ext}:{tool_prompt}" for ext, tool_prompt in tool_prompts.items()]
+            )
+        )
         response, metadata = await role.acall(
             inputs,
             tools,
@@ -145,7 +165,7 @@ def create_assistants(builtin_extensions):
                 )
             )
         return RichResponse(text=response, steps=steps)
-    
+
     aria_instructions = (
         "As Aria, your role is to serve as an assistant in autonomous scientific discovery. "
         "Your primary focus is on addressing inquiries related to various scientific tasks, ensuring your responses are accurate, concise, logical, educational, and engaging. "
@@ -155,23 +175,30 @@ def create_assistants(builtin_extensions):
         "Your interactions should foster a collaborative and productive environment for scientific inquiry within the Aria Agents community."
     )
 
-
     aria = Role(
         instructions=aria_instructions,
         actions=[respond_to_user],
-        model="gpt-4o",
+        event_bus=event_bus,
+        register_default_events=True,
+        model=LLM_MODEL,
     )
-
-    event_bus = aria.get_event_bus()
-    event_bus.register_default_events()
 
     # convert to a list
     all_extensions = [
-        {"id": ext.id, "name": ext.name, "description": ext.description} for ext in builtin_extensions
+        {"id": ext.id, "name": ext.name, "description": ext.description}
+        for ext in builtin_extensions
     ]
 
     return [
-        {"name": "Aria", "agent": aria, "extensions": all_extensions, "code_interpreter": False, "alias": "Aria", "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg", "welcome_message": "Hi there! I'm Aria. How can I help you today?"},
+        {
+            "name": "Aria",
+            "agent": aria,
+            "extensions": all_extensions,
+            "code_interpreter": False,
+            "alias": "Aria",
+            "icon": "https://bioimage.io/static/img/bioimage-io-icon.svg",
+            "welcome_message": "Hi there! I'm Aria. How can I help you today?",
+        },
     ]
 
 
@@ -200,16 +227,22 @@ async def connect_server(server_url):
 async def register_chat_service(server):
     """Hypha startup function."""
     debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
-    store_event_bus = EventBus(name="store_event_bus")
-    ds = HyphaDataStore(store_event_bus)
-    await ds.setup(server)
-    builtin_extensions = get_builtin_extensions(ds)
+    chat_event_bus = EventBus(name="AriaAgents")
+    store_event_bus = EventBus(name="DataStore")
+    data_store = HyphaDataStore(store_event_bus)
+    await data_store.setup(server)
+    builtin_extensions = get_builtin_extensions(data_store, chat_event_bus)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
     default_quota = float(os.environ.get("BIOIMAGEIO_DEFAULT_QUOTA", "inf"))
     reset_period = os.environ.get("BIOIMAGEIO_DEFAULT_RESET_PERIOD", "hourly")
-    quota_database_path = os.environ.get("BIOIMAGEIO_QUOTA_DATABASE_PATH", ':memory:')
-    quota_manager = QuotaManager(db_file=quota_database_path, vip_list=[], default_quota=default_quota, default_reset_period=reset_period)
+    quota_database_path = os.environ.get("BIOIMAGEIO_QUOTA_DATABASE_PATH", ":memory:")
+    quota_manager = QuotaManager(
+        db_file=quota_database_path,
+        vip_list=[],
+        default_quota=default_quota,
+        default_reset_period=reset_period,
+    )
     assert (
         chat_logs_path is not None
     ), "Please set the BIOIMAGEIO_CHAT_LOGS_PATH environment variable to the path of the chat logs folder."
@@ -219,7 +252,7 @@ async def register_chat_service(server):
         )
         os.makedirs(chat_logs_path, exist_ok=True)
 
-    assistants = create_assistants(builtin_extensions)
+    assistants = create_assistants(builtin_extensions, chat_event_bus)
 
     def load_authorized_emails():
         if login_required:
@@ -242,7 +275,7 @@ async def register_chat_service(server):
     authorized_emails = load_authorized_emails()
 
     def check_permission(user):
-        if user['is_anonymous']:
+        if user["is_anonymous"]:
             return False
         if authorized_emails is None or user["email"] in authorized_emails:
             return True
@@ -273,12 +306,20 @@ async def register_chat_service(server):
         print(f"User report saved to {filename}")
 
     async def talk_to_assistant(
-        assistant_name, session_id, user_message: QuestionWithHistory, status_callback, artefact_callback, user, cross_assistant=False
+        assistant_name,
+        session_id,
+        user_message: QuestionWithHistory,
+        status_callback,
+        artefact_callback,
+        user,
+        cross_assistant=False,
     ):
         user = user or {}
         if quota_manager.check_quota(user.get("email")) <= 0:
-            raise PermissionError("You have exceeded the quota limit. Please wait for the quota to reset.")
-        
+            raise PermissionError(
+                "You have exceeded the quota limit. Please wait for the quota to reset."
+            )
+
         assistant_names = [a["name"] for a in assistants]
         assert (
             assistant_name in assistant_names
@@ -293,18 +334,17 @@ async def register_chat_service(server):
                 if message.session.id == session_id:
                     await status_callback(message.model_dump())
 
-        event_bus = assistant.get_event_bus()
-        event_bus.on("stream", stream_callback)
+        chat_event_bus.on("stream", stream_callback)
 
         # Listen to the `store_put` event
         async def store_put_callback(store_obj):
             if store_obj["type"] == "file" and store_obj["name"].endswith(".html"):
                 summary_website = store_obj["value"]
-                url = ds.get_url(store_obj['id'])
+                url = data_store.get_url(store_obj["id"])
                 await artefact_callback(summary_website, url)
 
         store_event_bus.on("store_put", store_put_callback)
-    
+
         try:
             response = await assistant.handle(
                 Message(
@@ -312,12 +352,12 @@ async def register_chat_service(server):
                 )
             )
         except Exception as e:
-            event_bus.off("stream", stream_callback)
+            chat_event_bus.off("stream", stream_callback)
             store_event_bus.off("store_put", store_put_callback)
             raise e
-        
+
         quota_manager.use_quota(user.get("email"), 1.0)
-        event_bus.off("stream", stream_callback)
+        chat_event_bus.off("stream", stream_callback)
         store_event_bus.off("store_put", store_put_callback)
         # get the content of the last response
         response = response[-1].data  # type: RichResponse
@@ -334,7 +374,11 @@ async def register_chat_service(server):
                 {"role": "user", "content": user_message.question}
             )
             user_message.chat_history.append(
-                {"role": "assistant", "content": response.text, "steps": [step.dict() for step in response.steps]}
+                {
+                    "role": "assistant",
+                    "content": response.text,
+                    "steps": [step.dict() for step in response.steps],
+                }
             )
             version = pkg_resources.get_distribution("aria_agents").version
             chat_his_dict = {
@@ -368,20 +412,22 @@ async def register_chat_service(server):
             ), "You don't have permission to use the chatbot, please sign up and wait for approval"
 
         text = text.strip()
-        
+
         assistant_names = [a["name"].lower() for a in assistants]
 
         # Check if the text starts with @ followed by a name
-        match = re.match(r'@(\w+)', text, flags=re.IGNORECASE)
+        match = re.match(r"@(\w+)", text, flags=re.IGNORECASE)
         if match:
             # If it does, extract the name and set it as the assistant_name
             assistant_name = match.group(1).lower()
             # Check if the assistant_name is in the list of assistant_names
             if assistant_name not in assistant_names:
-                raise ValueError(f"Assistant '{assistant_name}' not found. Available assistants are {assistant_names}")
+                raise ValueError(
+                    f"Assistant '{assistant_name}' not found. Available assistants are {assistant_names}"
+                )
             # Remove the @name part from the text
-            text = re.sub(r'@(\w+)', '', text, 1).strip()
-            assistant_name = assistants[assistant_names.index(assistant_name)]['name']
+            text = re.sub(r"@(\w+)", "", text, 1).strip()
+            assistant_name = assistants[assistant_names.index(assistant_name)]["name"]
             cross_assistant = True
         else:
             cross_assistant = False
@@ -394,7 +440,15 @@ async def register_chat_service(server):
             context=context,
         )
 
-        return await talk_to_assistant(assistant_name, session_id, m, status_callback, artefact_callback, context.get("user"), cross_assistant)
+        return await talk_to_assistant(
+            assistant_name,
+            session_id,
+            m,
+            status_callback,
+            artefact_callback,
+            context.get("user"),
+            cross_assistant,
+        )
 
     async def ping(context=None):
         if login_required and context and context.get("user"):
@@ -403,7 +457,14 @@ async def register_chat_service(server):
             ), "You don't have permission to use the chatbot, please sign up and wait for approval"
         return "pong"
 
-    assistant_keys = ["name", "extensions", "alias", "icon", "welcome_message", "code_interpreter"]
+    assistant_keys = [
+        "name",
+        "extensions",
+        "alias",
+        "icon",
+        "welcome_message",
+        "code_interpreter",
+    ]
     version = pkg_resources.get_distribution("aria_agents").version
     hypha_service_info = await server.register_service(
         {
@@ -415,8 +476,7 @@ async def register_chat_service(server):
             "chat": chat,
             "report": report,
             "assistants": {
-                a["name"]: {k: a[k] for k in assistant_keys}
-                for a in assistants
+                a["name"]: {k: a[k] for k in assistant_keys} for a in assistants
             },
         }
     )
@@ -427,7 +487,9 @@ async def register_chat_service(server):
 
     service_id = hypha_service_info["id"]
     print("=============================\n")
-    if server_url.startswith("http://localhost") or server_url.startswith("http://127.0.0.1"):
+    if server_url.startswith("http://localhost") or server_url.startswith(
+        "http://127.0.0.1"
+    ):
         print(f"To test the Aria Assistant locally, visit: {server_url}/chat")
     print(
         f"\nThe chat client are available publicly at: https://bioimage.io/chat?server={server_url}&service_id={service_id}\n"
