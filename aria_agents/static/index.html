@@ -22,6 +22,11 @@
     <meta name="msapplication-TileColor" content="#da532c">
     <meta name="theme-color" content="#ffffff">
     <style>
+        :root {
+            --width-sidebar: 12em;
+            --width-artefacts-panel: 30%;
+        }
+
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -40,6 +45,20 @@
             to {
                 transform: rotate(360deg);
             }
+        }
+
+        .spinner-container {
+            position: fixed;
+            margin-left: var(--width-sidebar);
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000; /* Ensure it's above other elements */
+        }
+
+        .margin-right-artefacts {
+            margin-right: var(--width-artefacts-panel);
         }
 
         .spinner {
@@ -65,13 +84,8 @@
             cursor: pointer;
         }
 
-        :root {
-            --width-sidebar: 256px;
-            --width-artefacts-panel: 35%;
-        }
-
         .sidebar {
-            width: var(--width-left);
+            width: var(--width-sidebar);
         }
 
         .artefacts-panel {
@@ -80,17 +94,18 @@
 
         .main-panel {
             transition: margin 0.5s ease, width 0.5s ease;
+            margin-left: var(--width-sidebar);
             width: 100%;
         }
 
         .main-panel-full {
             margin-right: 0;
-            max-width: calc(100% - var(--width-left));
+            max-width: calc(100% - var(--width-sidebar));
         }
 
         .main-panel-artefacts {
             margin-right: var(--width-artefacts-panel);
-            max-width: calc(100% - var(--width-left) - var(--width-artefacts-panel));
+            max-width: calc(100% - var(--width-sidebar) - var(--width-artefacts-panel));
         }
     </style>
 </head>
@@ -478,12 +493,12 @@
                         />
                     )}
                     {isLoading && (
-                        <div className="fixed inset-0 flex items-center justify-center">
+                        <div className={`spinner-container ${isArtefactsPanelOpen ? 'margin-right-artefacts' : ''}`}>
                             <div className="spinner"></div>
                         </div>
                     )}
                     {isSending && (
-                        <div className="fixed inset-0 flex items-center justify-center">
+                        <div className={`spinner-container ${isArtefactsPanelOpen ? 'margin-right-artefacts' : ''}`}>
                             <div className="spinner"></div>
                         </div>
                     )}
@@ -508,9 +523,11 @@
             );
         }
 
+        
+
         function Sidebar({ onLogin, onEditProfile }) {
             return (
-                <div className="sidebar bg-white min-h-screen p-4 shadow-md">
+                <div className="sidebar bg-white shadow-md p-4 fixed top-0 left-0 min-h-screen">
                     <div className="text-xl font-bold mb-4">Aria Agents</div>
                     <div className="mb-4">
                         <button className="w-full text-left py-2 px-4 rounded hover:bg-gray-200">🏠 Home</button>
