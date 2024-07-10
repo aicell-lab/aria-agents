@@ -117,6 +117,10 @@ class HyphaDataStore:
             del self.storage[obj_id]
             return True
         raise IndexError("Not found: " + obj_id)
+    
+    def get_event_bus(self):
+        """Get event bus."""
+        return self._event_bus
 
 async def test_data_store(server_url="https://ai.imjoy.io"):
     from imjoy_rpc.hypha import connect_to_server, login

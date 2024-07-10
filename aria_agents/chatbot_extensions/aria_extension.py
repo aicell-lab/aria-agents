@@ -1,5 +1,3 @@
-from schema_agents.utils.common import EventBus
-
 from aria_agents.chatbot_extensions.experiment_compiler import (
     create_experiment_compiler_function,
 )
@@ -12,14 +10,14 @@ from aria_agents.utils import ChatbotExtension
 # from aria_agents.chatbot_extensions.analyzers import create_analyzers_function
 
 
-def get_extension(data_store: HyphaDataStore = None, chat_event_bus: EventBus = None):
+def get_extension(data_store: HyphaDataStore = None):
     return ChatbotExtension(
         id="aria",
         name="Aria",
         description="Utility tools for suggesting studies, compiling experiments, and analyzing data.",
         tools=dict(
-            study_suggester=create_study_suggester_function(data_store, chat_event_bus),
-            experiment_compiler=create_experiment_compiler_function(data_store, chat_event_bus),
+            study_suggester=create_study_suggester_function(data_store),
+            experiment_compiler=create_experiment_compiler_function(data_store),
             # data_analyst=create_analyzers_function(data_store),
         ),
     )

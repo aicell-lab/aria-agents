@@ -2,7 +2,6 @@ import os
 
 import dotenv
 from schema_agents import schema_tool
-from schema_agents.utils.common import EventBus
 
 from aria_agents.hypha_store import HyphaDataStore
 
@@ -49,9 +48,7 @@ class StudyWithDiagram(BaseModel):
     )
 
 
-def create_study_suggester_function(
-    data_store: HyphaDataStore = None, chat_event_bus: EventBus = None
-):
+def create_study_suggester_function(data_store: HyphaDataStore = None):
     @schema_tool
     async def run_study_suggester(
         user_request: str = Field(
@@ -71,12 +68,15 @@ def create_study_suggester_function(
                 os.path.join(project_folders, project_name)
             )
             os.makedirs(project_folder, exist_ok=True)
+            event_bus = None
+        else:
+            event_bus = data_store.get_event_bus()
 
         ncbi_querier = Role(
             name="NCBI Querier",
             instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
             constraints=constraints,
-            event_bus=chat_event_bus,
+            event_bus=event_bus,
             register_default_events=True,
             model=LLM_MODEL,
         )
@@ -85,7 +85,7 @@ def create_study_suggester_function(
             name="Study Suggester",
             instructions="You are the study suggester. You suggest a study to test a new hypothesis based on the cutting-edge information from the literature review.",
             constraints=constraints,
-            event_bus=chat_event_bus,
+            event_bus=event_bus,
             register_default_events=True,
             model=LLM_MODEL,
         )
@@ -112,7 +112,7 @@ def create_study_suggester_function(
             name="Diagrammer",
             instructions="You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
             constraints=None,
-            event_bus=chat_event_bus,
+            event_bus=event_bus,
             register_default_events=True,
             model=LLM_MODEL,
         )
@@ -130,7 +130,7 @@ def create_study_suggester_function(
             name="Website Writer",
             instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
             constraints=None,
-            event_bus=chat_event_bus,
+            event_bus=event_bus,
             register_default_events=True,
             model=LLM_MODEL,
         )

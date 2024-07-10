@@ -227,11 +227,10 @@ async def connect_server(server_url):
 async def register_chat_service(server):
     """Hypha startup function."""
     debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
-    chat_event_bus = EventBus(name="AriaAgents")
-    store_event_bus = EventBus(name="DataStore")
-    data_store = HyphaDataStore(store_event_bus)
+    event_bus = EventBus(name="AriaAgents")
+    data_store = HyphaDataStore(event_bus)
     await data_store.setup(server)
-    builtin_extensions = get_builtin_extensions(data_store, chat_event_bus)
+    builtin_extensions = get_builtin_extensions(data_store)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
     default_quota = float(os.environ.get("BIOIMAGEIO_DEFAULT_QUOTA", "inf"))
@@ -252,7 +251,7 @@ async def register_chat_service(server):
         )
         os.makedirs(chat_logs_path, exist_ok=True)
 
-    assistants = create_assistants(builtin_extensions, chat_event_bus)
+    assistants = create_assistants(builtin_extensions, event_bus)
 
     def load_authorized_emails():
         if login_required:
@@ -334,7 +333,7 @@ async def register_chat_service(server):
                 if message.session.id == session_id:
                     await status_callback(message.model_dump())
 
-        chat_event_bus.on("stream", stream_callback)
+        event_bus.on("stream", stream_callback)
 
         # Listen to the `store_put` event
         async def store_put_callback(store_obj):
@@ -343,7 +342,7 @@ async def register_chat_service(server):
                 url = data_store.get_url(store_obj["id"])
                 await artefact_callback(summary_website, url)
 
-        store_event_bus.on("store_put", store_put_callback)
+        event_bus.on("store_put", store_put_callback)
 
         try:
             response = await assistant.handle(
@@ -352,13 +351,13 @@ async def register_chat_service(server):
                 )
             )
         except Exception as e:
-            chat_event_bus.off("stream", stream_callback)
-            store_event_bus.off("store_put", store_put_callback)
+            event_bus.off("stream", stream_callback)
+            event_bus.off("store_put", store_put_callback)
             raise e
 
         quota_manager.use_quota(user.get("email"), 1.0)
-        chat_event_bus.off("stream", stream_callback)
-        store_event_bus.off("store_put", store_put_callback)
+        event_bus.off("stream", stream_callback)
+        event_bus.off("store_put", store_put_callback)
         # get the content of the last response
         response = response[-1].data  # type: RichResponse
         assert isinstance(response, RichResponse)

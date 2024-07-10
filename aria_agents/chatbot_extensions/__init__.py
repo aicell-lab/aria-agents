@@ -4,21 +4,20 @@ import re
 
 from pydantic import BaseModel
 from schema_agents import schema_tool
-from schema_agents.utils.common import EventBus
 
 from aria_agents.hypha_store import HyphaDataStore
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 from aria_agents.utils import ChatbotExtension
 
 
-def get_builtin_extensions(data_store: HyphaDataStore, chat_event_bus: EventBus):
+def get_builtin_extensions(data_store: HyphaDataStore):
     extensions = []
     for module in pkgutil.walk_packages(__path__, __name__ + "."):
         if module.name.endswith("_extension"):
             ext_module = module.module_finder.find_module(module.name).load_module(
                 module.name
             )
-            exts = ext_module.get_extension(data_store, chat_event_bus) or []
+            exts = ext_module.get_extension(data_store) or []
             if isinstance(exts, ChatbotExtension):
                 exts = [exts]
             for ext in exts:

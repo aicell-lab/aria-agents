@@ -9,7 +9,6 @@ from typing import Callable, Dict, List, Union
 
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
-from schema_agents.utils.common import EventBus
 from tqdm.auto import tqdm
 
 from aria_agents.chatbot_extensions.aux import (
@@ -157,9 +156,7 @@ async def write_protocol(
     return protocol_updated
 
 
-def create_experiment_compiler_function(
-    data_store: HyphaDataStore = None, chat_event_bus: EventBus = None
-):
+def create_experiment_compiler_function(data_store: HyphaDataStore = None):
     @schema_tool
     async def run_experiment_compiler(
         project_name: str = Field(
@@ -180,13 +177,16 @@ def create_experiment_compiler_function(
                 os.path.join(project_folders, project_name)
             )
             os.makedirs(project_folder, exist_ok=True)
+            event_bus = None
+        else:
+            event_bus = data_store.get_event_bus()
 
         protocol_writer = Role(
             name="Protocol Writer",
             instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
         You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
             constraints=constraints,
-            event_bus=chat_event_bus,
+            event_bus=event_bus,
             register_default_events=True,
             model=LLM_MODEL,
         )
@@ -195,7 +195,7 @@ def create_experiment_compiler_function(
             name="Protocol manager",
             instructions="You are an expert laboratory scientist. You read protocols and manage them to ensure that they are clear and detailed enough for a new student to follow them exactly without any questions or doubts.",
             constraints=constraints,
-            event_bus=chat_event_bus,
+            event_bus=event_bus,
             register_default_events=True,
             model=LLM_MODEL,
         )
@@ -250,7 +250,7 @@ def create_experiment_compiler_function(
             name="Website Writer",
             instructions="You are the website writer. You create a single-page website summarizing the information in the experimental protocol appropriately including any diagrams.",
             constraints=None,
-            event_bus=chat_event_bus,
+            event_bus=event_bus,
             register_default_events=True,
             model=LLM_MODEL,
         )
