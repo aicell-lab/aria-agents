@@ -54,7 +54,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 1000; /* Ensure it's above other elements */
+            transition: margin 0.5s ease;
         }
 
         .margin-right-artefacts {
@@ -86,16 +86,37 @@
 
         .sidebar {
             width: var(--width-sidebar);
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 1rem;
+            position: fixed;
+            top: 0;
+            left: 0;
+            min-height: 100vh;
         }
 
         .artefacts-panel {
             width: var(--width-artefacts-panel);
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 1rem;
+            position: fixed;
+            top: 0;
+            right: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
         .main-panel {
             transition: margin 0.5s ease, width 0.5s ease;
             margin-left: var(--width-sidebar);
             width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
         }
 
         .main-panel-full {
@@ -352,7 +373,7 @@
                 <div className="min-h-screen flex flex-col ">
                     <div className="flex-1 flex ">
                         <Sidebar onLogin={handleLogin} onEditProfile={() => setShowProfileDialog(true)} />
-                        <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'} flex flex-col items-center justify-center p-4`}>
+                        <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'}`}>
                             <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-3xl">
                                 <h1 className="text-3xl font-bold mb-4 text-center">🚀 Great science starts here</h1>
                                 {chatHistory.length === 0 && (
@@ -527,7 +548,7 @@
 
         function Sidebar({ onLogin, onEditProfile }) {
             return (
-                <div className="sidebar bg-white shadow-md p-4 fixed top-0 left-0 min-h-screen">
+                <div className="sidebar">
                     <div className="text-xl font-bold mb-4">Aria Agents</div>
                     <div className="mb-4">
                         <button className="w-full text-left py-2 px-4 rounded hover:bg-gray-200">🏠 Home</button>
@@ -620,7 +641,7 @@
             const modifiedContent = artefact ? modifyLinks(artefact.artefact) : '';
 
             return (
-                <div className="artefacts-panel bg-white shadow-md p-4 fixed top-0 right-0 min-h-screen flex flex-col">
+                <div className="artefacts-panel">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-xl font-bold">Artefacts</h2>
                         <button onClick={onClose} className="text-gray-600 hover:text-gray-900">X</button>
