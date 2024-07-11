@@ -491,7 +491,7 @@ async def register_chat_service(server):
     ):
         print(f"To test the Aria Assistant locally, visit: {server_url}/chat")
     print(
-        f"\nThe chat client are available publicly at: https://bioimage.io/chat?server={server_url}&service_id={service_id}\n"
+        # f"\nThe chat client are available publicly at: https://bioimage.io/chat?server={server_url}&service_id={service_id}\n"
         "\n=============================\n"
     )
 
