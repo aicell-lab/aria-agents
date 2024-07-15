@@ -21,6 +21,7 @@ from aria_agents.chatbot_extensions.aux import (
     SummaryWebsite,
     create_pubmed_corpus,
     create_query_function,
+    write_website,
 )
 from aria_agents.hypha_store import HyphaDataStore
 
@@ -30,10 +31,23 @@ os.makedirs(project_folders, exist_ok=True)
 
 
 class StudyDiagram(BaseModel):
-    """A diagram written in mermaid.js showing what the expected data from a study will look like"""
+    """A diagram written in mermaid.js showing the workflow for the study and what expected data from the study will look like. An example:
+```
+graph TD
+X[Cells] --> |Culturing| A
+A[Aniline Exposed Samples] -->|With NAC| B[Reduced Hepatotoxicity]
+A -->|Without NAC| C[Increased Hepatotoxicity]
+B --> D[Normal mmu_circ_26984 Levels]
+C --> E[Elevated mmu_circ_26984 Levels]
+style D fill:#4CAF50
+style E fill:#f44336
+```
+Do not include specific conditions, temperatures, times, or other specific experimental protocol conditions just the general workflow and expected outcomes (for example, instead of 40 degrees say "high temperature").
+Do not include any special characters, only simple ascii characters.
+    """
 
     diagram_code: str = Field(
-        description="The code for a mermaid.js diagram (either a XYChart, Pie, or QuadrantChart) showing what the expected data results would look like for the experiment"
+        description="The code for a mermaid.js figure showing the study workflow and what the expected outcomes would look like for the experiment"
     )
 
 
@@ -126,22 +140,8 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
         study_with_diagram = StudyWithDiagram(
             suggested_study=suggested_study, study_diagram=study_diagram
         )
-        website_writer = Role(
-            name="Website Writer",
-            instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
-            constraints=None,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=LLM_MODEL,
-        )
 
-        summary_website = await website_writer.aask(
-            [
-                f"Create a single-page website summarizing the information in the suggested study appropriately including the diagrams",
-                study_with_diagram,
-            ],
-            SummaryWebsite,
-        )
+        summary_website = await write_website(study_with_diagram, event_bus, LLM_MODEL, "suggested_study")
 
         if data_store is None:
             # Save the suggested study to a JSON file

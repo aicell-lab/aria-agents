@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Callable
 import asyncio
 import aiohttp
-from schema_agents import schema_tool
+from schema_agents import schema_tool, Role
 from llama_index.llms.openai import OpenAI
 from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.core import VectorStoreIndex
@@ -22,7 +22,8 @@ class SuggestedStudy(BaseModel):
     experiment_name : str = Field(description = "The name of the experiment")
     experiment_material : List[str] = Field(description = "The materials required for the experiment")
     experiment_expected_results : str = Field(description = "The expected results of the experiment")
-    experiment_protocol : List[str] = Field(description = "The protocol steps for the experiment")
+    # experiment_protocol : List[str] = Field(description = "The protocol steps for the experiment")
+    experiment_workflow: str = Field(description = "A high-level description of the workflow for the experiment")
     experiment_hypothesis : str = Field(description = "The hypothesis to be tested by the experiment")
     experiment_reasoning : str = Field(description="The reasoning behind the choice of this experiment including the relevant background and pointers to references.")
     references : List[str] = Field(description="Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design.")
@@ -134,3 +135,130 @@ async def pmc_efetch(pmc_ids: List[str] = Field(description="The PubMed Central 
     query_response = await call_api(url)
     query_response = query_response.decode()
     return query_response
+
+async def write_website(input_model : BaseModel, event_bus, llm_model : str, website_type : str) -> SummaryWebsite:
+    """Writes a summary website for the suggested study or experimental protocol"""
+    website_writer = Role(
+            name="Website Writer",
+            instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
+            constraints=None,
+            event_bus=event_bus,
+            register_default_events=True,
+            model=LLM_MODEL,
+        )
+    
+    if website_type == "suggested_study":
+        website_prompt = """Create a single-page website summarizing the information in the suggested study using the following template:
+```
+        <html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>`TITLE OF EXPERIMENT`</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #333; }
+        h2 { color: #555; }
+        p { line-height: 1.6; }
+        ul { line-height: 1.6; }
+        .diagram { margin-top: 20px; }
+    </style>
+    <!-- Include the Mermaid.js library -->
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</head>
+<body>
+    <h1>`TITLE OF EXPERIMENT`</h1>
+    <h2>User Request</h2>
+    <p>`The original user request`</p>
+    <h2>Hypothesis</h2>
+    <p>`The hypothesis to be tested by the experiment`</p>
+    <h2>Study Diagram</h2>
+    <div class="mermaid">
+        `The diagram illustrating the workflow for the suggested study`
+    </div>
+    <h2>Workflow</h2>
+    <p>`A high-level description of the workflow for the experiment`</p>
+    <h2>Reasoning</h2>
+    <p>`The reasoning behind the choice of this experiment including the relevant background and pointers to references.`</p>
+    <h2>Expected Results</h2>
+    <p>`The expected results of the experiment`</p>
+    <h2>Materials Required</h2>
+    <ul>
+        `The materials required for the experiment`
+    </ul>
+    <h2>References</h2>
+    <ul>
+        `Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design. These can be referred to in other parts of the html`
+    </ul>
+</body>
+</html>
+```
+Where the appropriate fields are filled in with the information from the suggested study.
+        """
+        
+    elif website_type == "experimental_protocol":
+        website_prompt = """Create a single-page website summarizing the information in the experimental protocol using the following template:
+        ```
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>`The title of the protocol`</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #333; }
+        h2 { color: #555; }
+        p { line-height: 1.6; }
+        ul { line-height: 1.6; }
+        .diagram { margin-top: 20px; }
+        a:hover { text-decoration: underline; }
+        .section { margin-bottom: 40px; }
+        .references { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>`The title of the protocol`</h1>
+
+    <div class="section">
+        <h2>`First Protocol Section name`</h2>
+        <ol>
+            `The protocol section steps`
+        </ol>
+        <div class="references">
+            <h3>References</h3>
+            <ul>
+                `A list of references to existing protocols that the steps were taken from. These references should be in the form of URLs to the original protocol.`
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>`Second Protocol Section name`</h2>
+        <ol>
+            `The protocol section steps`
+        </ol>
+        <div class="references">
+            <h3>References</h3>
+            <ul>
+                `A list of references to existing protocols that the steps were taken from. These references should be in the form of URLs to the original protocol.`
+            </ul>
+        </div>
+    </div>
+
+    
+    </div>
+</body>
+</html>
+        ```
+        Where the appropriate fields are filled in with the information from the experimental protocol.
+        """    
+    summary_website = await website_writer.aask([website_prompt, input_model], SummaryWebsite,)
+    return summary_website
+
+    
+    
+    

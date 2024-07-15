@@ -17,6 +17,7 @@ from aria_agents.chatbot_extensions.aux import (
     SummaryWebsite,
     create_pubmed_corpus,
     create_query_function,
+    write_website,
 )
 from aria_agents.hypha_store import HyphaDataStore
 
@@ -45,6 +46,7 @@ class ExperimentalProtocol(BaseModel):
     Do not include any data analysis portion of the study, only the procedure through the point of data collection. That means no statistical tests or data processing should be included unless they are necessary for downstream data collection steps.
     """
 
+    protocol_title: str = Field(..., description="The title of the protocol")
     # steps : List[str] = Field(..., description="A list of steps that must be followed in order to carry out the experiment. This string MUST be in markdown format and should contain no irregular characters.")
     sections: List[ProtocolSection] = Field(
         ...,
@@ -246,22 +248,8 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
             pbar.update(1)
         pbar.close()
 
-        website_writer = Role(
-            name="Website Writer",
-            instructions="You are the website writer. You create a single-page website summarizing the information in the experimental protocol appropriately including any diagrams.",
-            constraints=None,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=LLM_MODEL,
-        )
-
-        summary_website = await website_writer.aask(
-            [
-                f"Create a single-page website summarizing experimental protocol appropriately including any diagrams and references",
-                protocol,
-            ],
-            SummaryWebsite,
-        )
+        summary_website = await write_website(protocol, event_bus, LLM_MODEL, "experimental_protocol")
+        
 
         if data_store is None:
             # Save the suggested study to a JSON file
