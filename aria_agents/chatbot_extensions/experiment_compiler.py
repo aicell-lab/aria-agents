@@ -253,13 +253,13 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
 
         if data_store is None:
             # Save the suggested study to a JSON file
-            protocol_file = os.path.join(project_folder, "protocol.json")
+            protocol_file = os.path.join(project_folder, "experimental_protocol.json")
             with open(protocol_file, "w") as f:
                 json.dump(protocol.dict(), f, indent=4)
             protocol_url = "file://" + protocol_file
 
             # Save the summary website to a HTML file
-            summary_website_file = os.path.join(project_folder, "protocol.html")
+            summary_website_file = os.path.join(project_folder, "experimental_protocol.html")
             with open(summary_website_file, "w") as f:
                 f.write(summary_website.html_code)
             summary_website_url = "file://" + summary_website_file
@@ -268,7 +268,7 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
             protocol_id = data_store.put(
                 obj_type="json",
                 value=protocol.dict(),
-                name=f"{project_name}:protocol.json",
+                name=f"{project_name}:experimental_protocol.json",
             )
             protocol_url = data_store.get_url(protocol_id)
 
@@ -276,7 +276,7 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
             summary_website_id = data_store.put(
                 obj_type="file",
                 value=summary_website.html_code,
-                name=f"{project_name}:protocol.html",
+                name=f"{project_name}:experimental_protocol.html",
             )
             summary_website_url = data_store.get_url(summary_website_id)
 
