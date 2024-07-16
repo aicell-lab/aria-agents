@@ -9,7 +9,7 @@ function App() {
     const [chatHistory, setChatHistory] = useState([]);
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
-    const [status, setStatus] = useState("Ready to chat! Type your message and press enter!");
+    const [status, setStatus] = useState("Please log in before sending a message.");
     const [showProfileDialog, setShowProfileDialog] = useState(false);
     const [userProfile, setUserProfile] = useState({
         name: "",
@@ -35,6 +35,7 @@ function App() {
         const token = await login();
         const service = await getService(token);
         setSvc(service);
+        setStatus("Ready to chat! Type your message and press enter!");
         setIsLoading(false);
     };
 
@@ -63,7 +64,6 @@ function App() {
 
     const handleSend = async () => {
         if (!svc) {
-            setStatus("Please log in before sending a message.");
             await handleLogin();
             return;
         }
@@ -103,26 +103,24 @@ function App() {
     return (
         <div className="min-h-screen flex flex-col">
             <div className="flex-1 flex">
-                <Sidebar onLogin={handleLogin} onEditProfile={() => setShowProfileDialog(true)} />
+                <Sidebar onEditProfile={() => setShowProfileDialog(true)} />
                 <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'}`}>
                     <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-3xl">
                         <h1 className="text-3xl font-bold mb-4 text-center">🚀 Great science starts here</h1>
                         {chatHistory.length === 0 && (
-                            <ChatInput 
+                            <ChatInput
+                                onLogin={handleLogin}
                                 question={question}
                                 setQuestion={setQuestion}
                                 handleSend={handleSend}
-                                isSending={isSending}
                                 svc={svc}
                             />
                         )}
                         <div className="text-center text-gray-700 mb-4 markdown-body" dangerouslySetInnerHTML={{ __html: status }}></div>
                         {chatHistory.length === 0 ? (
-                            <SuggestedStudies 
-                                setQuestion={setQuestion}
-                            />
+                            <SuggestedStudies setQuestion={setQuestion}/>
                         ) : (
-                            <ChatHistory 
+                            <ChatHistory
                                 chatHistory={chatHistory}
                                 streamingContent={streamingContent}
                                 assistantName={assistantName}

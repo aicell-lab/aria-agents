@@ -1,4 +1,4 @@
-function ChatInput({ question, setQuestion, handleSend, isSending, svc }) {
+function ChatInput({ onLogin, question, setQuestion, handleSend, svc }) {
     return (
         <div className="mb-4 flex flex-col items-center">
             <input
@@ -18,11 +18,11 @@ function ChatInput({ question, setQuestion, handleSend, isSending, svc }) {
                 </button>
             ) : (
                 <button
-                    disabled
-                    className="w-full bg-gray-400 text-white py-2 px-4 rounded text-lg"
+                    onClick={onLogin}
+                    className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded transition duration-300 ease-in-out transform hover:scale-105"
                     title="Please login to send"
                 >
-                    Please Login 🚀
+                    Login 🚀
                 </button>
             )}
         </div>

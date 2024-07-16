@@ -1,4 +1,4 @@
-function Sidebar({ onLogin, onEditProfile }) {
+function Sidebar({ onEditProfile }) {
     return (
         <div className="sidebar">
             <div className="text-xl font-bold mb-4">Aria Agents</div>
@@ -12,9 +12,6 @@ function Sidebar({ onLogin, onEditProfile }) {
                     <span>👤 User Profile</span>
                 </div>
             </div>
-            <button onClick={onLogin} className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded transition duration-300 ease-in-out transform hover:scale-105">
-                Login 🚀
-            </button>
         </div>
     );
 }
