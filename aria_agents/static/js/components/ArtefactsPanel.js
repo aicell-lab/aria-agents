@@ -1,21 +1,6 @@
 function ArtefactsPanel({ onClose, artefacts, currentArtefactIndex, onPrev, onNext }) {
     const artefact = artefacts[currentArtefactIndex];
 
-    // Function to modify the links in the iframe content
-    const modifyLinks = (content) => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(content, 'text/html');
-        const links = doc.querySelectorAll('a');
-        links.forEach(link => {
-            link.setAttribute('target', '_blank');
-            link.setAttribute('rel', 'noopener noreferrer');
-        });
-        return doc.documentElement.outerHTML;
-    };
-
-    // Modify the artefact content if it exists
-    const modifiedContent = artefact ? modifyLinks(artefact.artefact) : '';
-
     return (
         <div className="artefacts-panel">
             <div className="flex justify-between items-center mb-4">
@@ -25,7 +10,7 @@ function ArtefactsPanel({ onClose, artefacts, currentArtefactIndex, onPrev, onNe
             <div className="flex-1 overflow-y-auto mb-4">
                 {artefact && (
                     <iframe
-                        srcDoc={modifiedContent}
+                        srcDoc={artefact.artefact}
                         title={`Artefact ${currentArtefactIndex + 1}`}
                         className="w-full h-full border border-gray-300"
                         style={{ height: 'calc(100vh - 200px)' }} // Adjust height to account for buttons
