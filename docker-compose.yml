@@ -1,0 +1,10 @@
+version: '3.9'
+
+services:
+  start-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ghcr.io/aicell-lab/aria-agents:latest
+    env_file:
+      - .env
