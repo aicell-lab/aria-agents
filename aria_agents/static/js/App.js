@@ -124,6 +124,9 @@ function App() {
                                 chatHistory={chatHistory}
                                 streamingContent={streamingContent}
                                 assistantName={assistantName}
+                                question={question}
+                                setQuestion={setQuestion}
+                                handleSend={handleSend}
                             />
                         )}
                     </div>

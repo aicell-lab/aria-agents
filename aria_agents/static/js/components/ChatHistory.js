@@ -1,4 +1,4 @@
-function ChatHistory({ chatHistory, streamingContent, assistantName }) {
+function ChatHistory({ chatHistory, streamingContent, assistantName, question, setQuestion, handleSend}) {
     const { marked } = window; // Ensure marked library is available for markdown rendering
     const { completeCodeBlocks } = window.helpers; // Ensure helpers are available
 
