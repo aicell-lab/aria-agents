@@ -53,26 +53,26 @@ class SuggestedStudy(BaseModel):
     )
 
 
-async def call_api(base_url: str, params: dict) -> str:
-    async with aiohttp.ClientSession() as session:
-        async with session.get(base_url, params=params) as response:
-            if response.status == 200:
-                return await response.text()
-            else:
-                raise Exception(
-                    f"NCBI API call request failed. Status code: {response.status}"
-                )
+# async def call_api(base_url: str, params: dict) -> str:
+#     async with aiohttp.ClientSession() as session:
+#         async with session.get(base_url, params=params) as response:
+#             if response.status == 200:
+#                 return await response.text()
+#             else:
+#                 raise Exception(
+#                     f"NCBI API call request failed. Status code: {response.status}"
+#                 )
 
 
-async def fetch_pmc_articles(pmcids: List[str]) -> str:
-    base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-    params = {
-        "db": "pmc",  # Database: PubMed Central
-        "rettype": "full",  # Return type: Full article text
-        "retmode": "xml",  # Return mode: XML
-        "id": ",".join(pmcids),  # List of PMCIDs
-    }
-    return await call_api(base_url, params)
+# async def fetch_pmc_articles(pmcids: List[str]) -> str:
+#     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+#     params = {
+#         "db": "pmc",  # Database: PubMed Central
+#         "rettype": "full",  # Return type: Full article text
+#         "retmode": "xml",  # Return mode: XML
+#         "id": ",".join(pmcids),  # List of PMCIDs
+#     }
+#     return await call_api(base_url, params)
 
 
 class PMCQuery(BaseModel):
@@ -86,7 +86,7 @@ class PMCQuery(BaseModel):
 
 
 @schema_tool
-async def create_pubmed_corpus(
+def create_pubmed_corpus(
     pmc_query: PMCQuery = Field(
         ..., description="The query to search the NCBI PubMed Central Database"
     )
@@ -107,7 +107,7 @@ async def create_pubmed_corpus(
 
 def create_query_function(query_engine: CitationQueryEngine) -> Callable:
     @schema_tool
-    async def query_corpus(
+    def query_corpus(
         question: str = Field(
             ...,
             description="The query statement the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.",
@@ -124,69 +124,69 @@ def create_query_function(query_engine: CitationQueryEngine) -> Callable:
     return query_corpus
 
 
-@schema_tool
-async def pmc_cited_search(
-    pmc_query: PMCQuery = Field(
-        ..., description="The query to search the NCBI PubMed Central Database"
-    ),
-    literature_question: str = Field(
-        ...,
-        description="The question to ask the LLM agent based on the papers found in the search results",
-    ),
-) -> str:
-    """Searches the PubMed Central database using the `pmc_query`, gets the resulting paper content, and uses an LLM agent to answer the question `literature_question` based on the paper contents"""
+# @schema_tool
+# def pmc_cited_search(
+#     pmc_query: PMCQuery = Field(
+#         ..., description="The query to search the NCBI PubMed Central Database"
+#     ),
+#     literature_question: str = Field(
+#         ...,
+#         description="The question to ask the LLM agent based on the papers found in the search results",
+#     ),
+# ) -> str:
+#     """Searches the PubMed Central database using the `pmc_query`, gets the resulting paper content, and uses an LLM agent to answer the question `literature_question` based on the paper contents"""
 
-    loader = PubmedReader()
-    documents = loader.load_data(
-        search_query=pmc_query.query, max_results=CONFIG["aux"]["paper_limit"]
-    )
-    Settings.llm = OpenAI(model=CONFIG["llm_model"])
-    Settings.embed_model = OpenAIEmbedding(model=CONFIG["aux"]["embedding_model"])
-    index = VectorStoreIndex.from_documents(documents)
-    query_engine = CitationQueryEngine.from_args(
-        index,
-        similarity_top_k=CONFIG["aux"]["similarity_top_k"],
-        citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
-    )
-    response = query_engine.query(f"{literature_question}")
-    response_str = f"""The following question was asked for the literature review:\n```{literature_question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\nAnd the citations refer to the following papers:"""
-    for i_node, node in enumerate(response.source_nodes):
-        response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
-    return response_str
-
-
-@schema_tool
-async def pmc_search(
-    ncbi_query_url: str = Field(
-        description="The NCBI API web url to use for this query."
-    ),
-) -> str:
-    """Uses the NCBI web API to search the PubMed Central (pmc) database."""
-    query_response = await call_api(ncbi_query_url)
-    query_response = query_response.decode()
-    return query_response
+#     loader = PubmedReader()
+#     documents = loader.load_data(
+#         search_query=pmc_query.query, max_results=CONFIG["aux"]["paper_limit"]
+#     )
+#     Settings.llm = OpenAI(model=CONFIG["llm_model"])
+#     Settings.embed_model = OpenAIEmbedding(model=CONFIG["aux"]["embedding_model"])
+#     index = VectorStoreIndex.from_documents(documents)
+#     query_engine = CitationQueryEngine.from_args(
+#         index,
+#         similarity_top_k=CONFIG["aux"]["similarity_top_k"],
+#         citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
+#     )
+#     response = query_engine.query(f"{literature_question}")
+#     response_str = f"""The following question was asked for the literature review:\n```{literature_question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\nAnd the citations refer to the following papers:"""
+#     for i_node, node in enumerate(response.source_nodes):
+#         response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
+#     return response_str
 
 
-@schema_tool
-async def make_pmc_db(
-    pmc_ids: List[str] = Field(description="The PubMed Central IDs of the articles"),
-) -> str:
-    """Bulk downloads a set of papers from the PubMed Central database given their IDs and creates a vector database to store the papers"""
-    bulk_content = await fetch_pmc_articles(pmc_ids)
+# @schema_tool
+# async def pmc_search(
+#     ncbi_query_url: str = Field(
+#         description="The NCBI API web url to use for this query."
+#     ),
+# ) -> str:
+#     """Uses the NCBI web API to search the PubMed Central (pmc) database."""
+#     query_response = await call_api(ncbi_query_url)
+#     query_response = query_response.decode()
+#     return query_response
 
 
-@schema_tool
-async def pmc_efetch(
-    pmc_ids: List[str] = Field(description="The PubMed Central IDs of the articles"),
-) -> str:
-    """Uses the NCBI Eutils API's efetch functionality to get in-depth information about a set of papers in the PubMed Central database given their IDs"""
-    pmc_ids = ",".join(pmc_ids)
-    url = (
-        f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={pmc_ids}"
-    )
-    query_response = await call_api(url)
-    query_response = query_response.decode()
-    return query_response
+# @schema_tool
+# async def make_pmc_db(
+#     pmc_ids: List[str] = Field(description="The PubMed Central IDs of the articles"),
+# ) -> str:
+#     """Bulk downloads a set of papers from the PubMed Central database given their IDs and creates a vector database to store the papers"""
+#     bulk_content = await fetch_pmc_articles(pmc_ids)
+
+
+# @schema_tool
+# async def pmc_efetch(
+#     pmc_ids: List[str] = Field(description="The PubMed Central IDs of the articles"),
+# ) -> str:
+#     """Uses the NCBI Eutils API's efetch functionality to get in-depth information about a set of papers in the PubMed Central database given their IDs"""
+#     pmc_ids = ",".join(pmc_ids)
+#     url = (
+#         f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={pmc_ids}"
+#     )
+#     query_response = await call_api(url)
+#     query_response = query_response.decode()
+#     return query_response
 
 
 async def write_website(

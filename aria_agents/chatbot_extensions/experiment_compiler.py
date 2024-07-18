@@ -160,7 +160,7 @@ async def write_protocol(
     return protocol_updated
 
 
-def create_experiment_compiler_function(data_store: HyphaDataStore = None):
+def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Callable:
     @schema_tool
     async def run_experiment_compiler(
         project_name: str = Field(
@@ -174,7 +174,7 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
             CONFIG["experiment_compiler"]["max_revisions"],
             description="The maximum number of protocol revision rounds to allow",
         ),
-    ):
+    ) -> Dict[str, str]:
         """Generate an investigation from a suggested study"""
         if data_store is None:
             project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")

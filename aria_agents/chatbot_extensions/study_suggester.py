@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import os
+from typing import Callable, Dict
 
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
@@ -57,7 +58,7 @@ class StudyWithDiagram(BaseModel):
     )
 
 
-def create_study_suggester_function(data_store: HyphaDataStore = None):
+def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callable:
     @schema_tool
     async def run_study_suggester(
         user_request: str = Field(
@@ -70,7 +71,7 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
             "",
             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
         ),
-    ):
+    ) -> Dict[str, str]:
         """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
         project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
         project_folder = os.path.abspath(os.path.join(project_folders, project_name))
@@ -117,12 +118,13 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
             register_default_events=True,
             model=CONFIG["llm_model"],
         )
+        query_function = create_query_function(query_engine)
         suggested_study = await study_suggester.acall(
             [
                 f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
                 "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
             ],
-            tools=[create_query_function(query_engine)],
+            tools=[query_function],
             output_schema=SuggestedStudy,
         )
 

@@ -10,7 +10,7 @@ from aria_agents.utils import ChatbotExtension
 # from aria_agents.chatbot_extensions.analyzers import create_analyzers_function
 
 
-def get_extension(data_store: HyphaDataStore = None):
+def get_extension(data_store: HyphaDataStore = None) -> ChatbotExtension:
     return ChatbotExtension(
         id="aria",
         name="Aria",
