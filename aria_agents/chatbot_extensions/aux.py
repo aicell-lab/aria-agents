@@ -12,6 +12,8 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from llama_index.core import Settings
 
+from aria_agents.chatbot_extensions.constants import *
+
 class SummaryWebsite(BaseModel):
     """A summary single-page webpage written in html that neatly presents the suggested study or experimental protocol for user review"""
     html_code: str = Field(description = "The html code for a single page website summarizing the information in the suggested study or experimental protocol appropriately including any diagrams. Make sure to include the original user request as well if available. References should appear as links (e.g. a url `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11129507/` can appear as a link with the name `PMC11129507` referencing the PMCID)")
@@ -54,12 +56,6 @@ To search in a specific journal (for example Bio-Protocol) use the term "Bio-pro
     query : str = Field(description = "The query to search the NCBI PubMed Central Database")
 
 
-PAPER_LIMIT = 20
-LLM_MODEL = 'gpt-4o'
-EMBEDDING_MODEL = "text-embedding-3-small"
-SIMILARITY_TOP_K = 5
-CITATION_CHUNK_SIZE = 1024
-
 @schema_tool
 async def create_pubmed_corpus(pmc_query : PMCQuery = Field(..., description = "The query to search the NCBI PubMed Central Database")) -> CitationQueryEngine:
     """Searches the PubMed Central database using the `pmc_query` and returns a citation query engine object that can be used to query the papers found in the search results."""
@@ -79,7 +75,7 @@ async def create_pubmed_corpus(pmc_query : PMCQuery = Field(..., description = "
         similarity_top_k = SIMILARITY_TOP_K,
         citation_chunk_size = CITATION_CHUNK_SIZE,
     )
-    return query_engine
+    return query_engine, index
 
 def create_query_function(query_engine: CitationQueryEngine) -> Callable:
     @schema_tool

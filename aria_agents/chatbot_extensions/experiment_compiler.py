@@ -5,7 +5,12 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from typing import Callable, Dict, List, Union
+
+from llama_index.core.storage import StorageContext
+from llama_index.core import load_index_from_storage
+from llama_index.core.query_engine import CitationQueryEngine
 
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
@@ -20,9 +25,8 @@ from aria_agents.chatbot_extensions.aux import (
     write_website,
 )
 from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.chatbot_extensions.constants import *
 
-MAX_REVISIONS = 3
-LLM_MODEL = "gpt-4o"
 project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
 os.makedirs(project_folders, exist_ok=True)
 
@@ -214,14 +218,29 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
                     suggested_study = SuggestedStudy(**obj["value"])
                     break
 
-        pmc_query = await protocol_writer.aask(
-            [
-                f"Read the following suggested study and use it construct a query to search PubMed Central for relevant protocols that you will use to construct steps. Limit your search to ONLY open access papers",
-                suggested_study,
-            ],
-            PMCQuery,
-        )
-        query_engine = await create_pubmed_corpus(pmc_query)
+        # pmc_query = await protocol_writer.aask(
+        #     [
+        #         f"Read the following suggested study and use it construct a query to search PubMed Central for relevant protocols that you will use to construct steps. Limit your search to ONLY open access papers",
+        #         suggested_study,
+        #     ],
+        #     PMCQuery,
+        # )
+        # query_engine = await create_pubmed_corpus(pmc_query)
+        if data_store is None:
+            query_index_dir = os.path.join(project_folder, "query_index")
+        else:
+            for obj in data_store.storage.values():
+                if obj["name"] == f"{project_name}:PUBMED_INDEX_DIR":
+                    query_index_dir = obj["value"]
+                    break
+        query_storage_context = StorageContext.from_defaults(persist_dir=query_index_dir)
+        query_index = load_index_from_storage(query_storage_context)
+        query_engine = CitationQueryEngine.from_args(
+                                query_index,
+                                similarity_top_k = SIMILARITY_TOP_K,
+                                citation_chunk_size = CITATION_CHUNK_SIZE,
+                            )
+        
         query_function = create_query_function(query_engine)
 
         protocol = await write_protocol(

@@ -23,9 +23,10 @@ from aria_agents.chatbot_extensions.aux import (
     create_query_function,
     write_website,
 )
+from aria_agents.chatbot_extensions.constants import *
 from aria_agents.hypha_store import HyphaDataStore
 
-LLM_MODEL = "gpt-4o"
+
 project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
 os.makedirs(project_folders, exist_ok=True)
 
@@ -111,7 +112,15 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
             ],
             PMCQuery,
         )
-        query_engine = await create_pubmed_corpus(pmc_query)
+        query_engine, query_index = await create_pubmed_corpus(pmc_query)
+        query_index_dir = os.path.join(project_folder, "query_index")
+        query_index.storage_context.persist(query_index_dir)    
+        if data_store is not None:
+            query_index_dir_id = data_store.put(
+                obj_type="file",
+                value=query_index_dir,
+                name=f"{project_name}:PUBMED_INDEX_DIR",
+            )
         query_function = create_query_function(query_engine)
         suggested_study = await study_suggester.acall(
             [
