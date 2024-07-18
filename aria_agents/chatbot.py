@@ -1,3 +1,6 @@
+import dotenv
+
+dotenv.load_dotenv()
 import asyncio
 import datetime
 import json
@@ -33,7 +36,11 @@ logger = logging.getLogger("bioimageio-chatbot")
 logger.setLevel(logging.INFO)
 
 
-LLM_MODEL = "gpt-4o"
+# Load the configuration file
+this_dir = os.path.dirname(os.path.abspath(__file__))
+config_file = os.path.join(this_dir, "config.json")
+with open(config_file, "r") as file:
+    CONFIG = json.load(file)
 
 
 class UserProfile(BaseModel):
@@ -176,11 +183,13 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
     )
 
     aria = Role(
+        name="Aria",
         instructions=aria_instructions,
+        icon="🤖",
         actions=[respond_to_user],
         event_bus=event_bus,
         register_default_events=True,
-        model=LLM_MODEL,
+        model=CONFIG["llm_model"],
     )
 
     # convert to a list

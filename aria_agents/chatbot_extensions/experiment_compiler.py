@@ -5,30 +5,28 @@ import argparse
 import asyncio
 import json
 import os
-import sys
 from typing import Callable, Dict, List, Union
 
-from llama_index.core.storage import StorageContext
 from llama_index.core import load_index_from_storage
 from llama_index.core.query_engine import CitationQueryEngine
-
+from llama_index.core.storage import StorageContext
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
 from tqdm.auto import tqdm
 
 from aria_agents.chatbot_extensions.aux import (
-    PMCQuery,
     SuggestedStudy,
-    SummaryWebsite,
-    create_pubmed_corpus,
     create_query_function,
     write_website,
 )
 from aria_agents.hypha_store import HyphaDataStore
-from aria_agents.chatbot_extensions.constants import *
 
-project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-os.makedirs(project_folders, exist_ok=True)
+
+# Load the configuration file
+this_dir = os.path.dirname(os.path.abspath(__file__))
+config_file = os.path.join(this_dir, "config.json")
+with open(config_file, "r") as file:
+    CONFIG = json.load(file)
 
 
 class ProtocolSection(BaseModel):
@@ -173,75 +171,70 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
         ),
         max_revisions: int = Field(
-            MAX_REVISIONS,
+            CONFIG["experiment_compiler"]["max_revisions"],
             description="The maximum number of protocol revision rounds to allow",
         ),
     ):
         """Generate an investigation from a suggested study"""
         if data_store is None:
+            project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
             project_folder = os.path.abspath(
                 os.path.join(project_folders, project_name)
             )
-            os.makedirs(project_folder, exist_ok=True)
             event_bus = None
         else:
             event_bus = data_store.get_event_bus()
+
+        if data_store is None:
+            # Load the suggested study from a JSON file
+            suggested_study_file = os.path.join(project_folder, "suggested_study.json")
+            suggested_study = SuggestedStudy(
+                **json.loads(open(suggested_study_file).read())
+            )
+
+            # Set the query index directory to the project folder
+            query_index_dir = os.path.join(project_folder, "query_index")
+        else:
+            # TODO: Find a better way to get the suggested study from the datastore
+            for obj in data_store.storage.values():
+                if obj["name"] == f"{project_name}:suggested_study.json":
+                    # Load the suggested study from the HyphaDataStore
+                    suggested_study = SuggestedStudy(**obj["value"])
+                if obj["name"] == f"{project_name}:pubmed_index_dir":
+                    # Set the query index directory to the project folder
+                    query_index_dir = obj["value"]
+
+        query_storage_context = StorageContext.from_defaults(
+            persist_dir=query_index_dir
+        )
+        query_index = load_index_from_storage(query_storage_context)
+        query_engine = CitationQueryEngine.from_args(
+            query_index,
+            similarity_top_k=CONFIG["aux"]["similarity_top_k"],
+            citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
+        )
+        query_function = create_query_function(query_engine)
 
         protocol_writer = Role(
             name="Protocol Writer",
             instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
         You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
+            icon="🤖",
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=LLM_MODEL,
+            model=CONFIG["llm_model"],
         )
 
         protocol_manager = Role(
             name="Protocol manager",
             instructions="You are an expert laboratory scientist. You read protocols and manage them to ensure that they are clear and detailed enough for a new student to follow them exactly without any questions or doubts.",
+            icon="🤖",
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=LLM_MODEL,
+            model=CONFIG["llm_model"],
         )
-
-        if data_store is None:
-            suggested_study_file = os.path.join(project_folder, "suggested_study.json")
-            suggested_study = SuggestedStudy(
-                **json.loads(open(suggested_study_file).read())
-            )
-        else:
-            # TODO: Find a better way to get the suggested study from the datastore
-            for obj in data_store.storage.values():
-                if obj["name"] == f"{project_name}:suggested_study.json":
-                    suggested_study = SuggestedStudy(**obj["value"])
-                    break
-
-        # pmc_query = await protocol_writer.aask(
-        #     [
-        #         f"Read the following suggested study and use it construct a query to search PubMed Central for relevant protocols that you will use to construct steps. Limit your search to ONLY open access papers",
-        #         suggested_study,
-        #     ],
-        #     PMCQuery,
-        # )
-        # query_engine = await create_pubmed_corpus(pmc_query)
-        if data_store is None:
-            query_index_dir = os.path.join(project_folder, "query_index")
-        else:
-            for obj in data_store.storage.values():
-                if obj["name"] == f"{project_name}:PUBMED_INDEX_DIR":
-                    query_index_dir = obj["value"]
-                    break
-        query_storage_context = StorageContext.from_defaults(persist_dir=query_index_dir)
-        query_index = load_index_from_storage(query_storage_context)
-        query_engine = CitationQueryEngine.from_args(
-                                query_index,
-                                similarity_top_k = SIMILARITY_TOP_K,
-                                citation_chunk_size = CITATION_CHUNK_SIZE,
-                            )
-        
-        query_function = create_query_function(query_engine)
 
         protocol = await write_protocol(
             protocol=suggested_study,
@@ -267,8 +260,9 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
             pbar.update(1)
         pbar.close()
 
-        summary_website = await write_website(protocol, event_bus, LLM_MODEL, "experimental_protocol")
-        
+        summary_website = await write_website(
+            protocol, event_bus, "experimental_protocol"
+        )
 
         if data_store is None:
             # Save the suggested study to a JSON file
@@ -278,7 +272,9 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
             protocol_url = "file://" + protocol_file
 
             # Save the summary website to a HTML file
-            summary_website_file = os.path.join(project_folder, "experimental_protocol.html")
+            summary_website_file = os.path.join(
+                project_folder, "experimental_protocol.html"
+            )
             with open(summary_website_file, "w") as f:
                 f.write(summary_website.html_code)
             summary_website_url = "file://" + summary_website_file
@@ -302,7 +298,6 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None):
         return {
             "summary_website_url": summary_website_url,
             "protocol_url": protocol_url,
-            "protocol": protocol.dict(),
         }
 
     return run_experiment_compiler
@@ -317,7 +312,7 @@ async def main():
         "--max_revisions",
         type=int,
         help="The maximum number of protocol agent revisions to allow",
-        default=MAX_REVISIONS,
+        default=CONFIG["experiment_compiler"]["max_revisions"],
     )
     parser.add_argument(
         "--constraints",

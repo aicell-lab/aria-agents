@@ -1,9 +1,4 @@
-import os
-
 import dotenv
-from schema_agents import schema_tool
-
-from aria_agents.hypha_store import HyphaDataStore
 
 dotenv.load_dotenv()
 import argparse
@@ -11,40 +6,39 @@ import asyncio
 import json
 import os
 
-import dotenv
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
 
 from aria_agents.chatbot_extensions.aux import (
     PMCQuery,
     SuggestedStudy,
-    SummaryWebsite,
     create_pubmed_corpus,
     create_query_function,
     write_website,
 )
-from aria_agents.chatbot_extensions.constants import *
 from aria_agents.hypha_store import HyphaDataStore
 
-
-project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-os.makedirs(project_folders, exist_ok=True)
+# Load the configuration file
+this_dir = os.path.dirname(os.path.abspath(__file__))
+config_file = os.path.join(this_dir, "config.json")
+with open(config_file, "r") as file:
+    CONFIG = json.load(file)
 
 
 class StudyDiagram(BaseModel):
     """A diagram written in mermaid.js showing the workflow for the study and what expected data from the study will look like. An example:
-```
-graph TD
-X[Cells] --> |Culturing| A
-A[Aniline Exposed Samples] -->|With NAC| B[Reduced Hepatotoxicity]
-A -->|Without NAC| C[Increased Hepatotoxicity]
-B --> D[Normal mmu_circ_26984 Levels]
-C --> E[Elevated mmu_circ_26984 Levels]
-style D fill:#4CAF50
-style E fill:#f44336
-```
-Do not include specific conditions, temperatures, times, or other specific experimental protocol conditions just the general workflow and expected outcomes (for example, instead of 40 degrees say "high temperature").
-Do not include any special characters, only simple ascii characters.
+    ```
+    graph TD
+    X[Cells] --> |Culturing| A
+    A[Aniline Exposed Samples] -->|With NAC| B[Reduced Hepatotoxicity]
+    A -->|Without NAC| C[Increased Hepatotoxicity]
+    B --> D[Normal mmu_circ_26984 Levels]
+    C --> E[Elevated mmu_circ_26984 Levels]
+    style D fill:#4CAF50
+    style E fill:#f44336
+    ```
+    Do not include specific conditions, temperatures, times, or other specific experimental protocol conditions just the general workflow and expected outcomes (for example, instead of 40 degrees say "high temperature").
+    Do not include any special characters, only simple ascii characters.
     """
 
     diagram_code: str = Field(
@@ -78,11 +72,11 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
         ),
     ):
         """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
+        project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
+        project_folder = os.path.abspath(os.path.join(project_folders, project_name))
+        os.makedirs(project_folder, exist_ok=True)
+
         if data_store is None:
-            project_folder = os.path.abspath(
-                os.path.join(project_folders, project_name)
-            )
-            os.makedirs(project_folder, exist_ok=True)
             event_bus = None
         else:
             event_bus = data_store.get_event_bus()
@@ -90,21 +84,12 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
         ncbi_querier = Role(
             name="NCBI Querier",
             instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
+            icon="🤖",
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=LLM_MODEL,
+            model=CONFIG["llm_model"],
         )
-
-        study_suggester = Role(
-            name="Study Suggester",
-            instructions="You are the study suggester. You suggest a study to test a new hypothesis based on the cutting-edge information from the literature review.",
-            constraints=constraints,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=LLM_MODEL,
-        )
-
         pmc_query = await ncbi_querier.aask(
             [
                 f"Take the following user request and use it construct a query to search PubMed Central for relevant papers. Limit your search to ONLY open access papers",
@@ -112,32 +97,43 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
             ],
             PMCQuery,
         )
+
         query_engine, query_index = await create_pubmed_corpus(pmc_query)
         query_index_dir = os.path.join(project_folder, "query_index")
-        query_index.storage_context.persist(query_index_dir)    
+        query_index.storage_context.persist(query_index_dir)
         if data_store is not None:
             query_index_dir_id = data_store.put(
                 obj_type="file",
                 value=query_index_dir,
-                name=f"{project_name}:PUBMED_INDEX_DIR",
+                name=f"{project_name}:pubmed_index_dir",
             )
-        query_function = create_query_function(query_engine)
+
+        study_suggester = Role(
+            name="Study Suggester",
+            instructions="You are the study suggester. You suggest a study to test a new hypothesis based on the cutting-edge information from the literature review.",
+            icon="🤖",
+            constraints=constraints,
+            event_bus=event_bus,
+            register_default_events=True,
+            model=CONFIG["llm_model"],
+        )
         suggested_study = await study_suggester.acall(
             [
                 f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
                 "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
             ],
-            tools=[query_function],
+            tools=[create_query_function(query_engine)],
             output_schema=SuggestedStudy,
         )
 
         diagrammer = Role(
             name="Diagrammer",
             instructions="You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
+            icon="🤖",
             constraints=None,
             event_bus=event_bus,
             register_default_events=True,
-            model=LLM_MODEL,
+            model=CONFIG["llm_model"],
         )
         study_diagram = await diagrammer.aask(
             [
@@ -150,8 +146,9 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
             suggested_study=suggested_study, study_diagram=study_diagram
         )
 
-        summary_website = await write_website(study_with_diagram, event_bus, LLM_MODEL, "suggested_study")
-
+        summary_website = await write_website(
+            study_with_diagram, event_bus, "suggested_study"
+        )
         if data_store is None:
             # Save the suggested study to a JSON file
             suggested_study_file = os.path.join(project_folder, "suggested_study.json")
@@ -184,7 +181,6 @@ def create_study_suggester_function(data_store: HyphaDataStore = None):
         return {
             "summary_website_url": summary_website_url,
             "suggested_study_url": suggested_study_url,
-            "suggested_study": suggested_study.dict(),
         }
 
     return run_study_suggester
