@@ -63,8 +63,14 @@ CITATION_CHUNK_SIZE = 1024
 @schema_tool
 async def create_pubmed_corpus(pmc_query : PMCQuery = Field(..., description = "The query to search the NCBI PubMed Central Database")) -> CitationQueryEngine:
     """Searches the PubMed Central database using the `pmc_query` and returns a citation query engine object that can be used to query the papers found in the search results."""
+    loop = asyncio.get_event_loop()
     loader = PubmedReader()
-    documents = loader.load_data(search_query = pmc_query.query, max_results = PAPER_LIMIT)
+    documents = await loop.run_in_executor(
+        None,
+        loader.load_data,
+        pmc_query.query,
+        PAPER_LIMIT
+    )
     Settings.llm = OpenAI(model = LLM_MODEL)
     Settings.embed_model = OpenAIEmbedding(model = EMBEDDING_MODEL)
     index = VectorStoreIndex.from_documents(documents)
