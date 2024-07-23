@@ -38,7 +38,7 @@ logger.setLevel(logging.INFO)
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
-config_file = os.path.join(this_dir, "config.json")
+config_file = os.path.join(this_dir, "chatbot_extensions", "config.json")
 with open(config_file, "r") as file:
     CONFIG = json.load(file)
 
@@ -410,7 +410,7 @@ async def register_chat_service(server):
         artefact_callback=None,
         session_id=None,
         extensions=None,
-        assistant_name="Skyler",
+        assistant_name="Aria",
         context=None,
     ):
         if login_required and context and context.get("user"):

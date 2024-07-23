@@ -13,7 +13,7 @@ from schema_agents import Role, schema_tool
 from aria_agents.chatbot_extensions.aux import (
     PMCQuery,
     SuggestedStudy,
-    create_pubmed_corpus,
+    create_corpus_function,
     create_query_function,
     write_website,
 )
@@ -91,23 +91,16 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
             register_default_events=True,
             model=CONFIG["llm_model"],
         )
-        pmc_query = await ncbi_querier.aask(
+
+        corpus_context = {}
+        response = await ncbi_querier.acall(
             [
-                f"Take the following user request and use it construct a query to search PubMed Central for relevant papers. Limit your search to ONLY open access papers",
+                f"Take the following user request and use it construct a query to search PubMed Central for relevant papers. Limit your search to ONLY open access papers. Finally, use the PMCQuery to create a corpus of papers.",
                 user_request,
             ],
-            PMCQuery,
+            tools=[create_corpus_function(corpus_context, project_folder, data_store)],
+            thoughts_schema=PMCQuery,
         )
-
-        query_engine, query_index = await create_pubmed_corpus(pmc_query)
-        query_index_dir = os.path.join(project_folder, "query_index")
-        query_index.storage_context.persist(query_index_dir)
-        if data_store is not None:
-            query_index_dir_id = data_store.put(
-                obj_type="file",
-                value=query_index_dir,
-                name=f"{project_name}:pubmed_index_dir",
-            )
 
         study_suggester = Role(
             name="Study Suggester",
@@ -118,7 +111,7 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
             register_default_events=True,
             model=CONFIG["llm_model"],
         )
-        query_function = create_query_function(query_engine)
+        query_function = create_query_function(corpus_context["query_engine"])
         suggested_study = await study_suggester.acall(
             [
                 f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",

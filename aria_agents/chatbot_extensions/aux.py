@@ -12,6 +12,8 @@ from llama_index.readers.papers import PubmedReader
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
 
+from aria_agents.hypha_store import HyphaDataStore
+
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
 config_file = os.path.join(this_dir, "config.json")
@@ -84,25 +86,40 @@ class PMCQuery(BaseModel):
         description="The query to search the NCBI PubMed Central Database"
     )
 
+def create_corpus_function(context: dict, project_folder: str, data_store: HyphaDataStore = None) -> Callable:
+    @schema_tool
+    def create_pubmed_corpus(
+        pmc_query: PMCQuery = Field(
+            ..., description="The query to search the NCBI PubMed Central Database"
+        )
+    ) -> str:
+        """Searches the PubMed Central database using the `pmc_query` and creates a citation query engine object that can be used to query the papers found in the search results."""
+        loader = PubmedReader()
+        documents = loader.load_data(pmc_query.query, CONFIG["aux"]["paper_limit"])
+        Settings.llm = OpenAI(model=CONFIG["llm_model"])
+        Settings.embed_model = OpenAIEmbedding(model=CONFIG["aux"]["embedding_model"])
+        query_index = VectorStoreIndex.from_documents(documents)
 
-@schema_tool
-def create_pubmed_corpus(
-    pmc_query: PMCQuery = Field(
-        ..., description="The query to search the NCBI PubMed Central Database"
-    )
-) -> CitationQueryEngine:
-    """Searches the PubMed Central database using the `pmc_query` and returns a citation query engine object that can be used to query the papers found in the search results."""
-    loader = PubmedReader()
-    documents = loader.load_data(pmc_query.query, CONFIG["aux"]["paper_limit"])
-    Settings.llm = OpenAI(model=CONFIG["llm_model"])
-    Settings.embed_model = OpenAIEmbedding(model=CONFIG["aux"]["embedding_model"])
-    index = VectorStoreIndex.from_documents(documents)
-    query_engine = CitationQueryEngine.from_args(
-        index,
-        similarity_top_k=CONFIG["aux"]["similarity_top_k"],
-        citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
-    )
-    return query_engine, index
+        # Save the query index to disk
+        query_index_dir = os.path.join(project_folder, "query_index")
+        query_index.storage_context.persist(query_index_dir)
+        if data_store is not None:
+            project_name = os.path.basename(project_folder)
+            query_index_dir_id = data_store.put(
+                obj_type="file",
+                value=query_index_dir,
+                name=f"{project_name}:pubmed_index_dir",
+            )
+
+        # Create a citation query engine object
+        context["query_engine"] = CitationQueryEngine.from_args(
+            query_index,
+            similarity_top_k=CONFIG["aux"]["similarity_top_k"],
+            citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
+        )
+        return "Pubmed corpus has been successfully created."
+    
+    return create_pubmed_corpus
 
 
 def create_query_function(query_engine: CitationQueryEngine) -> Callable:

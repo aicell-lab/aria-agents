@@ -19,8 +19,8 @@ def get_extension(data_store: HyphaDataStore = None) -> ChatbotExtension:
         name="Aria",
         description="Utility tools for suggesting studies, compiling experiments, and analyzing data.",
         tools=dict(
-            # study_suggester=create_study_suggester_function(data_store), # gkreder
-            # experiment_compiler=create_experiment_compiler_function(data_store), # gkreder
+            study_suggester=create_study_suggester_function(data_store),
+            experiment_compiler=create_experiment_compiler_function(data_store),
             # data_analyst=create_analyzers_function(data_store),
             data_analyst=create_analyzer_function(data_store),
         ),
