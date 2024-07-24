@@ -5,10 +5,13 @@ import argparse
 import asyncio
 import json
 import os
+import uuid
 from typing import Callable, Dict
 
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
+from schema_agents.role import create_session_context
+from schema_agents.utils.common import current_session
 
 from aria_agents.chatbot_extensions.aux import (
     PMCQuery,
@@ -73,6 +76,9 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         ),
     ) -> Dict[str, str]:
         """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
+        pre_session = current_session.get()
+        session_id = pre_session.id if pre_session else str(uuid.uuid4())
+
         project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
         project_folder = os.path.abspath(os.path.join(project_folders, project_name))
         os.makedirs(project_folder, exist_ok=True)
@@ -93,14 +99,19 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         )
 
         corpus_context = {}
-        response = await ncbi_querier.acall(
-            [
-                f"Take the following user request and use it construct a query to search PubMed Central for relevant papers. Limit your search to ONLY open access papers. Finally, use the PMCQuery to create a corpus of papers.",
-                user_request,
-            ],
-            tools=[create_corpus_function(corpus_context, project_folder, data_store)],
-            thoughts_schema=PMCQuery,
-        )
+        async with create_session_context(
+            id=session_id, role_setting=ncbi_querier._setting
+        ):
+            response = await ncbi_querier.acall(
+                [
+                    f"Take the following user request and use it construct a query to search PubMed Central for relevant papers. Limit your search to ONLY open access papers. Finally, use the PMCQuery to create a corpus of papers.",
+                    user_request,
+                ],
+                tools=[
+                    create_corpus_function(corpus_context, project_folder, data_store)
+                ],
+                thoughts_schema=PMCQuery,
+            )
 
         study_suggester = Role(
             name="Study Suggester",
@@ -112,14 +123,31 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
             model=CONFIG["llm_model"],
         )
         query_function = create_query_function(corpus_context["query_engine"])
-        suggested_study = await study_suggester.acall(
-            [
-                f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
-                "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
-            ],
-            tools=[query_function],
-            output_schema=SuggestedStudy,
-        )
+        async with create_session_context(
+            id=session_id, role_setting=study_suggester._setting
+        ):
+            suggested_study = await study_suggester.acall(
+                [
+                    f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
+                    "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
+                ],
+                tools=[query_function],
+                output_schema=SuggestedStudy,
+            )
+        if data_store is None:
+            # Save the suggested study to a JSON file
+            suggested_study_file = os.path.join(project_folder, "suggested_study.json")
+            with open(suggested_study_file, "w") as f:
+                json.dump(suggested_study.dict(), f, indent=4)
+            suggested_study_url = "file://" + suggested_study_file
+        else:
+            # Save the suggested study to the HyphaDataStore
+            suggested_study_id = data_store.put(
+                obj_type="json",
+                value=suggested_study.dict(),
+                name=f"{project_name}:suggested_study.json",
+            )
+            suggested_study_url = data_store.get_url(suggested_study_id)
 
         diagrammer = Role(
             name="Diagrammer",
@@ -130,48 +158,23 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
             register_default_events=True,
             model=CONFIG["llm_model"],
         )
-        study_diagram = await diagrammer.aask(
-            [
-                f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
-                suggested_study,
-            ],
-            StudyDiagram,
-        )
+        async with create_session_context(
+            id=session_id, role_setting=study_suggester._setting
+        ):
+            study_diagram = await diagrammer.aask(
+                [
+                    f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
+                    suggested_study,
+                ],
+                StudyDiagram,
+            )
         study_with_diagram = StudyWithDiagram(
             suggested_study=suggested_study, study_diagram=study_diagram
         )
 
-        summary_website = await write_website(
-            study_with_diagram, event_bus, "suggested_study"
+        summary_website_url = await write_website(
+            study_with_diagram, event_bus, data_store, "suggested_study", project_folder
         )
-        if data_store is None:
-            # Save the suggested study to a JSON file
-            suggested_study_file = os.path.join(project_folder, "suggested_study.json")
-            with open(suggested_study_file, "w") as f:
-                json.dump(suggested_study.dict(), f, indent=4)
-            suggested_study_url = "file://" + suggested_study_file
-
-            # Save the summary website to a HTML file
-            summary_website_file = os.path.join(project_folder, "suggested_study.html")
-            with open(summary_website_file, "w") as f:
-                f.write(summary_website.html_code)
-            summary_website_url = "file://" + summary_website_file
-        else:
-            # Save the suggested study to the HyphaDataStore
-            suggested_study_id = data_store.put(
-                obj_type="json",
-                value=suggested_study.dict(),
-                name=f"{project_name}:suggested_study.json",
-            )
-            suggested_study_url = data_store.get_url(suggested_study_id)
-
-            # Save the summary website to the HyphaDataStore
-            summary_website_id = data_store.put(
-                obj_type="file",
-                value=summary_website.html_code,
-                name=f"{project_name}:suggested_study.html",
-            )
-            summary_website_url = data_store.get_url(summary_website_id)
 
         return {
             "summary_website_url": summary_website_url,

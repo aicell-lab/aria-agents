@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import os
+import uuid
 from typing import Callable, Dict, List, Union
 
 from llama_index.core import load_index_from_storage
@@ -12,6 +13,8 @@ from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.core.storage import StorageContext
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
+from schema_agents.role import create_session_context
+from schema_agents.utils.common import current_session
 from tqdm.auto import tqdm
 
 from aria_agents.chatbot_extensions.aux import (
@@ -20,7 +23,6 @@ from aria_agents.chatbot_extensions.aux import (
     write_website,
 )
 from aria_agents.hypha_store import HyphaDataStore
-
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -80,21 +82,25 @@ async def get_protocol_feedback(
     protocol: ExperimentalProtocol,
     protocol_manager: Role,
     existing_feedback: ProtocolFeedback = None,
+    session_id: str = None,
 ) -> ProtocolFeedback:
     if existing_feedback is None:
         pf = ProtocolFeedback(complete=False, feedback="", previous_feedback=[])
     else:
         pf = existing_feedback
-    res = await protocol_manager.aask(
-        [
-            """Is the following protocol specified in enough detail for a new student to follow it exactly without any questions or doubts? If not, say why.
-                                       First you will be given the previous feedback you wrote for this protocol then you will be given the current version of the protocol.
-                                       If the previous feedback is non-empty, do not give redundant feedback, give new feedback that will help the protocol writer improve the protocol further and make sure to save the previous feedback into the `previous_feedback` field""",
-            pf,
-            protocol,
-        ],
-        output_schema=ProtocolFeedback,
-    )
+    async with create_session_context(
+        id=session_id, role_setting=protocol_manager._setting
+    ):
+        res = await protocol_manager.aask(
+            [
+                """Is the following protocol specified in enough detail for a new student to follow it exactly without any questions or doubts? If not, say why.
+                                        First you will be given the previous feedback you wrote for this protocol then you will be given the current version of the protocol.
+                                        If the previous feedback is non-empty, do not give redundant feedback, give new feedback that will help the protocol writer improve the protocol further and make sure to save the previous feedback into the `previous_feedback` field""",
+                pf,
+                protocol,
+            ],
+            output_schema=ProtocolFeedback,
+        )
     return res
 
 
@@ -134,29 +140,35 @@ async def write_protocol(
     feedback: ProtocolFeedback,
     query_function: Callable,
     role: Role,
+    session_id: str = None,
 ) -> ExperimentalProtocol:
-    if isinstance(protocol, SuggestedStudy):
-        prompt = f"""Take the following suggested study and use it to produce a detailed protocol telling a student exactly what steps they should follow in the lab to collect data. Do not include any data analysis or conclusion-drawing steps, only data collection."""
-        messages = [prompt, protocol]
-        protocol_updated = await role.aask(messages, output_schema=ExperimentalProtocol)
-    else:
-        prompt = f"""You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
-        messages = [prompt, protocol, feedback]
-        query_messages = [x for x in messages] + [
-            "Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."
-        ]
-        queries = await role.aask(query_messages, output_schema=CorpusQueries)
-        queries_responses = CorpusQueriesResponses(
-            responses={query: await query_function(query) for query in queries.queries}
-        )
-        protocol_messages = [x for x in messages] + [
-            f"You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
-            queries_responses,
-            f"Use these protocol corpus query responses to update and revise your protocol according to the feedback. Save the queries you used into the running list of previous queries. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io",
-        ]
-        protocol_updated = await role.aask(
-            protocol_messages, output_schema=ExperimentalProtocol
-        )
+    async with create_session_context(id=session_id, role_setting=role._setting):
+        if isinstance(protocol, SuggestedStudy):
+            prompt = f"""Take the following suggested study and use it to produce a detailed protocol telling a student exactly what steps they should follow in the lab to collect data. Do not include any data analysis or conclusion-drawing steps, only data collection."""
+            messages = [prompt, protocol]
+            protocol_updated = await role.aask(
+                messages, output_schema=ExperimentalProtocol
+            )
+        else:
+            prompt = f"""You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
+            messages = [prompt, protocol, feedback]
+            query_messages = [x for x in messages] + [
+                "Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."
+            ]
+            queries = await role.aask(query_messages, output_schema=CorpusQueries)
+            queries_responses = CorpusQueriesResponses(
+                responses={
+                    query: await query_function(query) for query in queries.queries
+                }
+            )
+            protocol_messages = [x for x in messages] + [
+                f"You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
+                queries_responses,
+                f"Use these protocol corpus query responses to update and revise your protocol according to the feedback. Save the queries you used into the running list of previous queries. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io",
+            ]
+            protocol_updated = await role.aask(
+                protocol_messages, output_schema=ExperimentalProtocol
+            )
     return protocol_updated
 
 
@@ -176,6 +188,9 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
         ),
     ) -> Dict[str, str]:
         """Generate an investigation from a suggested study"""
+        pre_session = current_session.get()
+        session_id = pre_session.id if pre_session else str(uuid.uuid4())
+
         if data_store is None:
             project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
             project_folder = os.path.abspath(
@@ -241,9 +256,12 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
             feedback=None,
             query_function=query_function,
             role=protocol_writer,
+            session_id=session_id,
         )
 
-        protocol_feedback = await get_protocol_feedback(protocol, protocol_manager)
+        protocol_feedback = await get_protocol_feedback(
+            protocol, protocol_manager, session_id=session_id
+        )
         revisions = 0
         pbar = tqdm(total=max_revisions)
         while not protocol_feedback.complete and revisions < max_revisions:
@@ -252,17 +270,14 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
                 feedback=protocol_feedback,
                 query_function=query_function,
                 role=protocol_writer,
+                session_id=session_id,
             )
             protocol_feedback = await get_protocol_feedback(
-                protocol, protocol_manager, protocol_feedback
+                protocol, protocol_manager, protocol_feedback, session_id=session_id
             )
             revisions += 1
             pbar.update(1)
         pbar.close()
-
-        summary_website = await write_website(
-            protocol, event_bus, "experimental_protocol"
-        )
 
         if data_store is None:
             # Save the suggested study to a JSON file
@@ -270,14 +285,6 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
             with open(protocol_file, "w") as f:
                 json.dump(protocol.dict(), f, indent=4)
             protocol_url = "file://" + protocol_file
-
-            # Save the summary website to a HTML file
-            summary_website_file = os.path.join(
-                project_folder, "experimental_protocol.html"
-            )
-            with open(summary_website_file, "w") as f:
-                f.write(summary_website.html_code)
-            summary_website_url = "file://" + summary_website_file
         else:
             # Save the suggested study to the HyphaDataStore
             protocol_id = data_store.put(
@@ -287,13 +294,9 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
             )
             protocol_url = data_store.get_url(protocol_id)
 
-            # Save the summary website to the HyphaDataStore
-            summary_website_id = data_store.put(
-                obj_type="file",
-                value=summary_website.html_code,
-                name=f"{project_name}:experimental_protocol.html",
-            )
-            summary_website_url = data_store.get_url(summary_website_id)
+        summary_website_url = await write_website(
+            protocol, event_bus, data_store, "experimental_protocol", project_folder
+        )
 
         return {
             "summary_website_url": summary_website_url,

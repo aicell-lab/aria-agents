@@ -1,9 +1,8 @@
-import asyncio
 import json
 import os
+import uuid
 from typing import Callable, List
 
-import aiohttp
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.embeddings.openai import OpenAIEmbedding
@@ -11,6 +10,8 @@ from llama_index.llms.openai import OpenAI
 from llama_index.readers.papers import PubmedReader
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
+from schema_agents.role import create_session_context
+from schema_agents.utils.common import current_session
 
 from aria_agents.hypha_store import HyphaDataStore
 
@@ -86,7 +87,10 @@ class PMCQuery(BaseModel):
         description="The query to search the NCBI PubMed Central Database"
     )
 
-def create_corpus_function(context: dict, project_folder: str, data_store: HyphaDataStore = None) -> Callable:
+
+def create_corpus_function(
+    context: dict, project_folder: str, data_store: HyphaDataStore = None
+) -> Callable:
     @schema_tool
     def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
@@ -118,7 +122,7 @@ def create_corpus_function(context: dict, project_folder: str, data_store: Hypha
             citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
         )
         return "Pubmed corpus has been successfully created."
-    
+
     return create_pubmed_corpus
 
 
@@ -207,7 +211,7 @@ def create_query_function(query_engine: CitationQueryEngine) -> Callable:
 
 
 async def write_website(
-    input_model: BaseModel, event_bus, website_type: str
+    input_model: BaseModel, event_bus, data_store, website_type: str, project_folder: str
 ) -> SummaryWebsite:
     """Writes a summary website for the suggested study or experimental protocol"""
     website_writer = Role(
@@ -329,8 +333,32 @@ Where the appropriate fields are filled in with the information from the suggest
         ```
         Where the appropriate fields are filled in with the information from the experimental protocol.
         """
-    summary_website = await website_writer.aask(
-        [website_prompt, input_model],
-        SummaryWebsite,
-    )
-    return summary_website
+
+    pre_session = current_session.get()
+    session_id = pre_session.id if pre_session else str(uuid.uuid4())
+
+    async with create_session_context(
+        id=session_id, role_setting=website_writer._setting
+    ):
+        summary_website = await website_writer.aask(
+            [website_prompt, input_model],
+            SummaryWebsite,
+        )
+
+    if data_store is None:
+        # Save the summary website to a HTML file
+        summary_website_file = os.path.join(project_folder, f"{website_type}.html")
+        with open(summary_website_file, "w") as f:
+            f.write(summary_website.html_code)
+        summary_website_url = "file://" + summary_website_file
+    else:
+        # Save the summary website to the HyphaDataStore
+        project_name = os.path.basename(project_folder)
+        summary_website_id = data_store.put(
+            obj_type="file",
+            value=summary_website.html_code,
+            name=f"{project_name}:{website_type}.html",
+        )
+        summary_website_url = data_store.get_url(summary_website_id)
+        
+    return summary_website_url

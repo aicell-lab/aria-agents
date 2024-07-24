@@ -36,8 +36,8 @@ function App() {
     };
 
 const statusCallback = (message) => {
-    const { type, role_setting, status, content, arguments: args, name, query_id } = message;
-    const { name: roleName, icon: roleIcon } = role_setting || {};
+    const { type, session: { id, role_setting: roleSetting }, status, content, arguments: args, name, query_id } = message;
+    const { name: roleName, icon: roleIcon } = roleSetting || {};
     
     const headerStartInProgress = marked(`### ⏳ Calling tool 🛠️ \`${name}\`...\n\n`);
     const headerFinished = marked(`### Tool 🛠️ \`${name}\`\n\n`);
