@@ -79,15 +79,20 @@ function App() {
                 const lastMessage = updatedHistory.get(query_id);
                 if (lastMessage) {
                     if (name === 'SummaryWebsite') {
-                        const artefactIndex = artefacts.length;
-                        lastMessage.content = `
-                            <button 
-                                class="button" 
-                                onclick="openSummaryWebsite(${artefactIndex})"
-                                ${artefactIndex >= artefacts.length ? '' : 'disabled'}
-                            >
-                                View Summary Website
-                            </button>`;
+                        // Get the latest artefacts length using a functional update
+                        setArtefacts(prevArtefacts => {
+                            const artefactIndex = prevArtefacts.length;
+
+                            lastMessage.content = `
+                                <button 
+                                    class="button" 
+                                    onclick="openSummaryWebsite(${artefactIndex})"
+                                >
+                                    View Summary Website
+                                </button>`;
+                            
+                            return prevArtefacts; // Return unchanged artefacts
+                        });
                     } else {
                         let finalContent = (content || jsonToMarkdown(args) || "");
                         finalContent = modifyLinksToOpenInNewTab(marked(completeCodeBlocks(finalContent)));
@@ -103,8 +108,10 @@ function App() {
 
     // Define the global function to open the summary website
     window.openSummaryWebsite = (index) => {
-        setIsArtefactsPanelOpen(true);
-        setCurrentArtefactIndex(index);
+        if (index <= artefacts.length) {
+            setIsArtefactsPanelOpen(true);
+            setCurrentArtefactIndex(index);
+        }
     };
 
     const artefactCallback = (artefact, url) => {
