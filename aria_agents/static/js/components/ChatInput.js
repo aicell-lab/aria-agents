@@ -12,14 +12,14 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc }) {
             {svc ? (
                 <button
                     onClick={handleSend}
-                    className="w-full bg-blue-600 text-white py-2 px-4 rounded text-lg transition duration-300 ease-in-out transform hover:scale-105"
+                    className="button w-full"
                 >
                     Send ✈️
                 </button>
             ) : (
                 <button
                     onClick={onLogin}
-                    className="w-full mt-4 bg-blue-600 text-white py-2 px-4 rounded transition duration-300 ease-in-out transform hover:scale-105"
+                    className="button w-full mt-4"
                     title="Please login to send"
                 >
                     Login 🚀

@@ -35,65 +35,77 @@ function App() {
         setIsLoading(false);
     };
 
-const statusCallback = (message) => {
-    const { type, session: { id, role_setting: roleSetting }, status, content, arguments: args, name, query_id } = message;
-    const { name: roleName, icon: roleIcon } = roleSetting || {};
+    const statusCallback = (message) => {
+        const { type, session: { id, role_setting: roleSetting }, status, content, arguments: args, name, query_id } = message;
+        const { name: roleName, icon: roleIcon } = roleSetting || {};
+        
+        const headerStartInProgress = marked(`### ⏳ Calling tool 🛠️ \`${name}\`...\n\n`);
+        const headerFinished = marked(`### Tool 🛠️ \`${name}\`\n\n`);
     
-    const headerStartInProgress = marked(`### ⏳ Calling tool 🛠️ \`${name}\`...\n\n`);
-    const headerFinished = marked(`### Tool 🛠️ \`${name}\`\n\n`);
-
-    if (status === 'start') {
+        if (status === 'start') {
         // Initialize new message entry in chat history
-        setChatHistory(prevHistory => {
-            const updatedHistory = new Map(prevHistory);
-            updatedHistory.set(query_id, {
-                role: roleName || 'Agent',
-                icon: roleIcon || '🤖',
-                toolName: name,
-                accumulatedArgs: '',
-                content: headerStartInProgress,
-                status: 'in_progress',
+            setChatHistory(prevHistory => {
+                const updatedHistory = new Map(prevHistory);
+                updatedHistory.set(query_id, {
+                    role: roleName || 'Agent',
+                    icon: roleIcon || '🤖',
+                    toolName: name,
+                    accumulatedArgs: '',
+                    content: headerStartInProgress,
+                    status: 'in_progress',
+                });
+                return updatedHistory;
             });
-            return updatedHistory;
-        });
-    } else if (status === 'in_progress') {
+        } else if (status === 'in_progress') {
         // Update existing message entry with new content
-        setChatHistory(prevHistory => {
-            const updatedHistory = new Map(prevHistory);
-            const lastMessage = updatedHistory.get(query_id);
-            if (lastMessage) {
+            setChatHistory(prevHistory => {
+                const updatedHistory = new Map(prevHistory);
+                const lastMessage = updatedHistory.get(query_id);
+                if (lastMessage) {
                 lastMessage.accumulatedArgs += (args || "").replace(/\n/g, ''); // Accumulate arguments
-                if (name === 'SummaryWebsite') {
-                    lastMessage.content = 'Generating summary website...';
-                } else {
-                    lastMessage.content = headerStartInProgress + `<div>${lastMessage.accumulatedArgs}</div>`;
+                    if (name === 'SummaryWebsite') {
+                        lastMessage.content = 'Generating summary website...';
+                    } else {
+                        lastMessage.content = headerStartInProgress + `<div>${lastMessage.accumulatedArgs}</div>`;
+                    }
+                    updatedHistory.set(query_id, lastMessage);
                 }
-                updatedHistory.set(query_id, lastMessage);
-            }
-            return updatedHistory;
-        });
-    } else if (status === 'finished') {
+                return updatedHistory;
+            });
+        } else if (status === 'finished') {
         // Finalize the message entry
-        setChatHistory(prevHistory => {
-            const updatedHistory = new Map(prevHistory);
-            const lastMessage = updatedHistory.get(query_id);
-            if (lastMessage) {
-                if (name === 'SummaryWebsite') {
-                    // TODO: Update the URL to the actual summary website
-                    lastMessage.content = `<a href="${null}" target="_blank">View Summary Website</a>`;
-                } else {
-                    let finalContent = (content || jsonToMarkdown(args) || "");
-                    finalContent = modifyLinksToOpenInNewTab(marked(completeCodeBlocks(finalContent)));
-                    lastMessage.content = headerFinished + finalContent;
+            setChatHistory(prevHistory => {
+                const updatedHistory = new Map(prevHistory);
+                const lastMessage = updatedHistory.get(query_id);
+                if (lastMessage) {
+                    if (name === 'SummaryWebsite') {
+                        const artefactIndex = artefacts.length;
+                        lastMessage.content = `
+                            <button 
+                                class="button" 
+                                onclick="openSummaryWebsite(${artefactIndex})"
+                                ${artefactIndex >= artefacts.length ? '' : 'disabled'}
+                            >
+                                View Summary Website
+                            </button>`;
+                    } else {
+                        let finalContent = (content || jsonToMarkdown(args) || "");
+                        finalContent = modifyLinksToOpenInNewTab(marked(completeCodeBlocks(finalContent)));
+                        lastMessage.content = headerFinished + finalContent;
+                    }
+                    lastMessage.status = 'finished';
+                    updatedHistory.set(query_id, lastMessage);
                 }
-                lastMessage.status = 'finished';
-                updatedHistory.set(query_id, lastMessage);
-            }
-            return updatedHistory;
-        });
-    }
-};
+                return updatedHistory;
+            });
+        }
+    };
 
+    // Define the global function to open the summary website
+    window.openSummaryWebsite = (index) => {
+        setIsArtefactsPanelOpen(true);
+        setCurrentArtefactIndex(index);
+    };
 
     const artefactCallback = (artefact, url) => {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
@@ -189,7 +201,7 @@ const statusCallback = (message) => {
             ) : (
                 <button
                     onClick={() => setIsArtefactsPanelOpen(!isArtefactsPanelOpen)}
-                    className="fixed top-0 right-0 mt-4 mr-4 bg-blue-600 text-white py-2 px-4 rounded text-lg transition duration-300 ease-in-out transform hover:scale-105"
+                    className="button fixed top-0 right-0 mt-4 mr-4"
                 >
                     Artefacts
                 </button>

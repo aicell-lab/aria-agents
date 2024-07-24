@@ -1,3 +1,5 @@
+const { openSummaryWebsite } = window;  // Global function to open the summary website
+
 function ChatHistory({ chatHistory, isSending }) {
     const { marked } = window;
     const { completeCodeBlocks } = window.helpers;

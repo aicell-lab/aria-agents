@@ -104,7 +104,7 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         ):
             response = await ncbi_querier.acall(
                 [
-                    f"Take the following user request and use it construct a query to search PubMed Central for relevant papers. Limit your search to ONLY open access papers. Finally, use the PMCQuery to create a corpus of papers.",
+                    f"Take the following user request and use it construct a query in the schema of 'PMCQuery' to search PubMed Central for relevant papers. Limit your search to ONLY open access papers. Finally, use the PMCQuery to create a corpus of papers.",
                     user_request,
                 ],
                 tools=[

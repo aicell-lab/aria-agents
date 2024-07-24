@@ -45,8 +45,8 @@ function ProfileDialog({ userProfile, onClose, onSave }) {
                     />
                 </div>
                 <div className="flex justify-end">
-                    <button onClick={onClose} className="bg-gray-500 text-white py-2 px-4 rounded mr-2 transition duration-300 ease-in-out transform hover:scale-105">Cancel</button>
-                    <button onClick={handleSave} className="bg-blue-600 text-white py-2 px-4 rounded transition duration-300 ease-in-out transform hover:scale-105">Save</button>
+                    <button onClick={onClose} className="button bg-gray-500 mr-2">Cancel</button>
+                    <button onClick={handleSave} className="button">Save</button>
                 </div>
             </div>
         </div>

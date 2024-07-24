@@ -38,7 +38,7 @@ function ArtefactsPanel({ onClose, artefacts, currentArtefactIndex, onPrev, onNe
                     href={artefact.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="bg-blue-600 text-white py-2 px-4 rounded text-center"
+                    className="button text-center"
                 >
                     Download current artefact
                 </a>
