@@ -1,12 +1,11 @@
 const { useState, useEffect } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
-const { getService, login, completeCodeBlocks, generateMessage, generateSessionID } = window.helpers;
+const { generateSessionID, getService, login, completeCodeBlocks, jsonToMarkdown, modifyLinksToOpenInNewTab } = window.helpers;
 const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, ArtefactsPanel } = window;
-
 
 function App() {
     const [question, setQuestion] = useState("");
-    const [chatHistory, setChatHistory] = useState([]);
+    const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
     const [status, setStatus] = useState("Please log in before sending a message.");
@@ -19,11 +18,8 @@ function App() {
     const [isArtefactsPanelOpen, setIsArtefactsPanelOpen] = useState(false);
     const [artefacts, setArtefacts] = useState([]);
     const [currentArtefactIndex, setCurrentArtefactIndex] = useState(0);
-    const [assistantName, setAssistantName] = useState("Aria");
-    const [streamingContent, setStreamingContent] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [isSending, setIsSending] = useState(false);
-    const [accumulatedArgs, setAccumulatedArgs] = useState("");
 
     useEffect(() => {
         // Automatically generate a session ID
@@ -39,24 +35,65 @@ function App() {
         setIsLoading(false);
     };
 
-    const statusCallback = (message) => {
-        if (message.type === 'function_call' || message.type === 'text') {
-            setAccumulatedArgs((prevArgs) => {
-                const newArgs = prevArgs + (message.arguments || message.content);
-                if (!newArgs) return "";
-                const args = newArgs.replace(/\\n/g, '\n');
+const statusCallback = (message) => {
+    const { type, role_setting, status, content, arguments: args, name, query_id } = message;
+    const { name: roleName, icon: roleIcon } = role_setting || {};
+    
+    const headerStartInProgress = marked(`### ⏳ Calling tool 🛠️ \`${name}\`...\n\n`);
+    const headerFinished = marked(`### Tool 🛠️ \`${name}\`\n\n`);
 
-                let content;
-                if (message.name === "CompleteUserQuery") {
-                    content = `## ✅ Generating Final Response...\n\n${args}`;
-                } else {
-                    content = `## ⏳ Calling tool 🛠️ \`${message.name}\`...\n\n${args}`;
-                }
-                setStreamingContent(marked(completeCodeBlocks(content)));
-                return newArgs;
+    if (status === 'start') {
+        // Initialize new message entry in chat history
+        setChatHistory(prevHistory => {
+            const updatedHistory = new Map(prevHistory);
+            updatedHistory.set(query_id, {
+                role: roleName || 'Agent',
+                icon: roleIcon || '🤖',
+                toolName: name,
+                accumulatedArgs: '',
+                content: headerStartInProgress,
+                status: 'in_progress',
             });
-        }
-    };
+            return updatedHistory;
+        });
+    } else if (status === 'in_progress') {
+        // Update existing message entry with new content
+        setChatHistory(prevHistory => {
+            const updatedHistory = new Map(prevHistory);
+            const lastMessage = updatedHistory.get(query_id);
+            if (lastMessage) {
+                lastMessage.accumulatedArgs += (args || "").replace(/\n/g, ''); // Accumulate arguments
+                if (name === 'SummaryWebsite') {
+                    lastMessage.content = 'Generating summary website...';
+                } else {
+                    lastMessage.content = headerStartInProgress + `<div>${lastMessage.accumulatedArgs}</div>`;
+                }
+                updatedHistory.set(query_id, lastMessage);
+            }
+            return updatedHistory;
+        });
+    } else if (status === 'finished') {
+        // Finalize the message entry
+        setChatHistory(prevHistory => {
+            const updatedHistory = new Map(prevHistory);
+            const lastMessage = updatedHistory.get(query_id);
+            if (lastMessage) {
+                if (name === 'SummaryWebsite') {
+                    // TODO: Update the URL to the actual summary website
+                    lastMessage.content = `<a href="${null}" target="_blank">View Summary Website</a>`;
+                } else {
+                    let finalContent = (content || jsonToMarkdown(args) || "");
+                    finalContent = modifyLinksToOpenInNewTab(marked(completeCodeBlocks(finalContent)));
+                    lastMessage.content = headerFinished + finalContent;
+                }
+                lastMessage.status = 'finished';
+                updatedHistory.set(query_id, lastMessage);
+            }
+            return updatedHistory;
+        });
+    }
+};
+
 
     const artefactCallback = (artefact, url) => {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
@@ -67,31 +104,26 @@ function App() {
             await handleLogin();
             return;
         }
-
+    
         if (question.trim()) {
             const currentQuestion = question;
             const newChatHistory = [
                 ...chatHistory,
-                { role: "user", content: currentQuestion, sources: "", image: "" }
+                { role: "user", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
             ];
-            setChatHistory(newChatHistory);
+            setChatHistory(new Map(newChatHistory.map((item, index) => [index.toString(), item])));
             setQuestion("");
             setStatus("🤔 Thinking...");
             setIsSending(true);
-
-            const currentMessageId = "message-" + (newChatHistory.length + 1);
-
+    
             try {
+                const currentChatHistory = Array.from(chatHistory.values()).map(chat => {
+                    const { role, content, ...rest } = chat;
+                    return { ...rest, role: role.toString(), content: content.toString() };
+                });
                 const extensions = [{ id: "aria" }];
-                const response = await svc.chat(currentQuestion, newChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions, assistantName);
-                const message = generateMessage(response.text, response.steps);
-                setChatHistory([
-                    ...newChatHistory,
-                    { role: "assistant", content: message, sources: response.sources || "", image: response.image || "" }
-                ]);
+                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions);
                 setStatus("Ready to chat! Type your message and press enter!");
-                setStreamingContent(""); // Clear streaming content after completion
-                setAccumulatedArgs(""); // Reset accumulated arguments after completion
             } catch (e) {
                 setStatus(`❌ Error: ${e.message}`);
             } finally {
@@ -107,7 +139,7 @@ function App() {
                 <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'}`}>
                     <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-3xl">
                         <h1 className="text-3xl font-bold mb-4 text-center">🚀 Great science starts here</h1>
-                        {chatHistory.length === 0 && (
+                        {chatHistory.size === 0 && (
                             <ChatInput
                                 onLogin={handleLogin}
                                 question={question}
@@ -117,16 +149,12 @@ function App() {
                             />
                         )}
                         <div className="text-center text-gray-700 mb-4 markdown-body" dangerouslySetInnerHTML={{ __html: status }}></div>
-                        {chatHistory.length === 0 ? (
-                            <SuggestedStudies setQuestion={setQuestion}/>
+                        {chatHistory.size === 0 ? (
+                            <SuggestedStudies setQuestion={setQuestion} />
                         ) : (
                             <ChatHistory
                                 chatHistory={chatHistory}
-                                streamingContent={streamingContent}
-                                assistantName={assistantName}
-                                question={question}
-                                setQuestion={setQuestion}
-                                handleSend={handleSend}
+                                isSending={isSending}
                             />
                         )}
                     </div>
@@ -171,11 +199,9 @@ function App() {
                     <div className="spinner"></div>
                 </div>
             )}
-            {isSending && (
-                <div className={`spinner-container ${isArtefactsPanelOpen ? 'margin-right-artefacts' : ''}`}>
-                    <div className="spinner"></div>
-                </div>
-            )}
         </div>
     );
 }
+
+// Expose App globally
+window.App = App;

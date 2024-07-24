@@ -185,7 +185,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
     aria = Role(
         name="Aria",
         instructions=aria_instructions,
-        icon="🤖",
+        icon="./img/favicon-32x32.png",
         actions=[respond_to_user],
         event_bus=event_bus,
         register_default_events=True,

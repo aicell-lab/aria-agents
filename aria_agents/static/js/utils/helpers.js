@@ -1,3 +1,7 @@
+function generateSessionID() {
+    return "session-" + Math.random().toString(36).substr(2, 9);
+}
+
 async function getService(token) {
     const urlParams = new URLSearchParams(window.location.search);
     const service_id = urlParams.get('service_id');
@@ -58,66 +62,75 @@ function completeCodeBlocks(markdownText) {
     }
 
     return markdownText;
-};
+}
 
 
-function generateMessage(text, steps) {
-    let message = text ? marked(text) : "";
+function jsonToMarkdown(jsonStr) {
+    const json = JSON.parse(jsonStr);
 
-    if (steps && steps.length > 0) {
-        let details = "<details class='details-box'> <summary>🔍More Details</summary>\n\n";
-        for (let step of steps) {
-            details += `## ${step.name}\n\n`;
+    function createListMarkdown(data, indentLevel = 0) {
+        let markdown = '';
+        const indent = '  '.repeat(indentLevel);
 
-            if (step.details.details) {
-                for (let detail of step.details.details) {
-                    details += `-----\n### Tool Call: \`${detail.name}\`\n\n`;
-                    details += "#### Arguments:\n\n";
-                    if (detail.args && detail.args.length > 0) {
-                        for (let arg of detail.args) {
-                            const argValue = JSON.stringify(arg);
-                            details += `\`\`\`\n${argValue}\n\`\`\`\n\n`;
-                        }
-                        details += "\n\n";
+        for (const [key, value] of Object.entries(data)) {
+            if (typeof value === 'string' || value === null) {
+                markdown += `${indent}- **${key}**: ${value === null ? 'null' : value}\n`;
+            } else if (Array.isArray(value)) {
+                markdown += `${indent}- **${key}**:\n`;
+                value.forEach(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        markdown += createListMarkdown(item, indentLevel + 1);
+                    } else {
+                        markdown += `${indent}  - ${item === null ? 'null' : item}\n`;
                     }
-
-                    if (detail.kwargs) {
-                        for (let kwarg in detail.kwargs) {
-                            const kwargValue = typeof detail.kwargs[kwarg] === 'string' ? detail.kwargs[kwarg] : JSON.stringify(detail.kwargs[kwarg], null, 2);
-                            if (kwargValue.includes('\n'))
-                                details += `**- \`${kwarg}\`**:\n\n\`\`\`\n${kwargValue}\n\`\`\`\n\n`;
-                            else
-                                details += `**- \`${kwarg}\`**: \`${kwargValue}\`\n\n`;
-                        }
-                        details += "\n\n";
-                    }
-
-                    if (detail.result) {
-                        const result = typeof detail.result === 'string' ? detail.result : JSON.stringify(detail.result, null, 2);
-                        if (result.includes('\n'))
-                            details += `#### Result:\n\n\`\`\`\n${result}\n\`\`\`\n\n`;
-                        else
-                            details += `#### Result: \`${result}\`\n\n`;
-                    }
-                }
+                });
+            } else if (typeof value === 'object') {
+                markdown += `${indent}- **${key}**:\n`;
+                markdown += createListMarkdown(value, indentLevel + 1);
             }
         }
-        details += "\n\n</details>";
-        details = marked(details);
-        message = message + details;
+        return markdown;
     }
-    return message;
-};
+
+    let markdown = '';
+
+    for (const [key, value] of Object.entries(json)) {
+        markdown += `#### ${key}\n`;
+        if (typeof value === 'string' || value === null) {
+            markdown += `- ${value === null ? 'null' : value}\n`;
+        } else if (Array.isArray(value)) {
+            value.forEach(item => {
+                if (typeof item === 'object' && item !== null) {
+                    markdown += createListMarkdown(item, 1);
+                } else {
+                    markdown += `- ${item === null ? 'null' : item}\n`;
+                }
+            });
+        } else if (typeof value === 'object') {
+            markdown += createListMarkdown(value, 1);
+        }
+        markdown += '\n';
+    }
+
+    return markdown;
+}
 
 
-function generateSessionID() {
-    return "session-" + Math.random().toString(36).substr(2, 9);
+function modifyLinksToOpenInNewTab(htmlContent) {
+    const div = document.createElement('div');
+    div.innerHTML = htmlContent;
+    const links = div.querySelectorAll('a');
+    links.forEach(link => {
+        link.setAttribute('target', '_blank');
+    });
+    return div.innerHTML;
 }
 
 window.helpers = {
+    generateSessionID: generateSessionID,
     getService: getService,
     login: login,
     completeCodeBlocks: completeCodeBlocks,
-    generateMessage: generateMessage,
-    generateSessionID: generateSessionID,
+    jsonToMarkdown: jsonToMarkdown,
+    modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
 };

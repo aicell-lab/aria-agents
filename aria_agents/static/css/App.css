@@ -31,6 +31,7 @@
     justify-content: center;
     align-items: center;
     transition: margin 0.5s ease;
+    background: none; /* Ensure background is fully transparent */
 }
 
 .margin-right-artefacts {
@@ -103,4 +104,11 @@
 .main-panel-artefacts {
     margin-right: var(--width-artefacts-panel);
     max-width: calc(100% - var(--width-sidebar) - var(--width-artefacts-panel));
+}
+
+.icon-emoji {
+    font-size: 1.2rem;
+    line-height: 1;
+    margin-bottom: 1px;
+    margin-right: 1px;
 }
