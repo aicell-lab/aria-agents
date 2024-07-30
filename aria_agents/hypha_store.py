@@ -35,12 +35,6 @@ class HyphaDataStore:
         if obj_type == 'file':
             data = value
             assert isinstance(data, (str, bytes)), "Value must be a string or bytes"
-            if isinstance(data, str) and data.startswith("file://"):
-                # File URL examples:
-                # Absolute URL: `file:///home/data/myfile.png`
-                # Relative URL: `file://./myimage.png`, or `file://myimage.png`
-                with open(data.replace("file://", ""), 'rb') as fil:
-                    data = fil.read()
             mime_type, _ = mimetypes.guess_type(name)
             self.storage[obj_id] = {
                 'id': obj_id,
@@ -77,7 +71,7 @@ class HyphaDataStore:
 
         if obj['type'] == 'file':
             data = obj['value']
-            if isinstance(data, str):
+            if isinstance(data, str) and data.startswith('file://'):
                 if not os.path.isfile(data):
                     return {
                         "status": 404,
@@ -88,14 +82,14 @@ class HyphaDataStore:
                     data = fil.read()
             headers = {
                 'Content-Type': obj['mime_type'],
-                'Content-Length': str(len(obj['value'])),
+                'Content-Length': str(len(data)),
                 'Content-Disposition': f'inline; filename="{obj["name"].split("/")[-1]}"'
             }
             
             return {
                 'status': 200,
                 'headers': headers,
-                'body': obj['value']
+                'body': data
             }
         else:
             return {
@@ -124,6 +118,8 @@ class HyphaDataStore:
 
 async def test_data_store(server_url="https://ai.imjoy.io"):
     from imjoy_rpc.hypha import connect_to_server, login
+    import httpx
+
     token = await login({"server_url": server_url})
     server = await connect_to_server({"server_url": server_url, "token": token})
 
@@ -135,16 +131,31 @@ async def test_data_store(server_url="https://ai.imjoy.io"):
     # file_id = ds.put('file', 'file:///home/data.txt', 'data.txt')
     binary_id = ds.put('file', b'Some binary content', 'example.bin')
     json_id = ds.put('json', {'hello': 'world'}, 'example.json')
+    string_id = ds.put('file', 'Hello world', 'example')
 
     # Test GET operation
     # assert ds.get(file_id)['type'] == 'file'
     assert ds.get(binary_id)['type'] == 'file'
     assert ds.get(json_id)['type'] == 'json'
+    assert ds.get(string_id)['type'] == 'file'
 
     # Test GET URL generation
     # print("URL for getting file", ds.get_url(file_id))
     print("URL for getting binary object", ds.get_url(binary_id))
     print("URL for getting json object", ds.get_url(json_id))
+    print("URL for getting string object", ds.get_url(string_id))
+
+    # Test http_get operation
+    httpx_client = httpx.AsyncClient()
+    response = await httpx_client.get(ds.get_url(binary_id))
+    assert response.status_code == 200
+    assert response.content == b'Some binary content'
+    response = await httpx_client.get(ds.get_url(json_id))
+    assert response.status_code == 200
+    assert response.json() == {'hello': 'world'}
+    response = await httpx_client.get(ds.get_url(string_id))
+    assert response.status_code == 200
+    assert response.text == 'Hello world'
 
 if __name__ == "__main__":
     import asyncio
