@@ -2,6 +2,7 @@ import json
 import os
 import uuid
 from typing import Callable, List
+import urllib
 
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.query_engine import CitationQueryEngine
@@ -94,12 +95,19 @@ def create_corpus_function(
     @schema_tool
     def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
-            ..., description="The query to search the NCBI PubMed Central Database"
+            ..., description='The query to search the NCBI PubMed Central Database. Always quote the terms and add [Title/Abstract] for exact matches in the title or abstract, for example: "small cats"[Title/Abstract] AND "large dogs"[Title/Abstract] AND "open access"[filter]'
         )
     ) -> str:
         """Searches the PubMed Central database using the `pmc_query` and creates a citation query engine object that can be used to query the papers found in the search results."""
         loader = PubmedReader()
-        documents = loader.load_data(pmc_query.query, CONFIG["aux"]["paper_limit"])
+        terms = urllib.parse.urlencode({"term": pmc_query.query, "db": "pmc"})
+        print(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}")
+        documents = loader.load_data(
+            search_query=pmc_query.query,
+            max_results=CONFIG["aux"]["paper_limit"]
+        )
+        if len(documents) == 0:
+            return "No papers were found in the PubMed Central database for the given query. Please try different terms for the query."
         Settings.llm = OpenAI(model=CONFIG["llm_model"])
         Settings.embed_model = OpenAIEmbedding(model=CONFIG["aux"]["embedding_model"])
         query_index = VectorStoreIndex.from_documents(documents)
@@ -121,7 +129,7 @@ def create_corpus_function(
             similarity_top_k=CONFIG["aux"]["similarity_top_k"],
             citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
         )
-        return "Pubmed corpus has been successfully created."
+        return f"Pubmed corpus with {len(documents)} papers has been created."
 
     return create_pubmed_corpus
 
