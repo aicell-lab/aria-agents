@@ -32,7 +32,8 @@ RUN chown -R aria_agents:aria_agents /app/
 # Switch to the non-root user
 USER aria_agents
 
-# Start a new hypha server
-ENTRYPOINT ["python", "-m", "aria_agents", "start-server"]
+# Expose port
+EXPOSE 9520
 
-LABEL org.opencontainers.image.source https://github.com/aicell-lab/aria-agents
+# Start a new hypha server
+ENTRYPOINT ["python", "-m", "aria_agents", "start-server", "--port", "9520"]
