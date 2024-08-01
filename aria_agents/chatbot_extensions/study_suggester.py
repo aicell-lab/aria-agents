@@ -110,7 +110,6 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
                 tools=[
                     create_corpus_function(corpus_context, project_folder, data_store)
                 ],
-                thoughts_schema=PMCQuery,  # TODO: remove this, because a thought schema is supposed to be a chain of thoughts with reflection, self criticism, reasoning, etc.
             )
 
         study_suggester = Role(
