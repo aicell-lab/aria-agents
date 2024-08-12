@@ -80,8 +80,23 @@ class SuggestedStudy(BaseModel):
 
 
 class PMCQuery(BaseModel):
-    """A plain-text query to search the NCBI PubMed Central Database. It should follow standard NCBI search syntax for example 'cancer AND (mouse or monkey)'.
-    To search in a specific journal (for example Bio-Protocol) use the term "Bio-protocol"[journal]". To search only open-access articles use the term "open access"[filter]"
+    """
+    A plain-text query formatted according to the NCBI search syntax. The query must include:
+
+    1. Exact Match Terms: Enclose search terms in double quotes for precise matches. For example, `"lung cancer"` searches for the exact phrase "lung cancer".
+
+    2. Boolean Operators: Use Boolean operators (AND, OR, NOT) to combine search terms. For instance, `"lung cancer" AND ("mouse" OR "monkey")`.
+
+    3. Field Specification: Append `[Title/Abstract]` to each term to limit the search to article titles and abstracts. For example: `"rat"[Title/Abstract] OR "mouse"[Title/Abstract]`.
+
+    4. Specific Journal Search: To restrict the search to articles from a particular journal, use the format `"[Journal Name]"[journal]`. For example, `"Bio-protocol"[journal]`.
+
+    5. Open Access Filter: To filter results to only include open-access articles, add `"open access"[filter]` to the query.
+
+    Example Query: 
+    ```
+    "lung cancer"[Title/Abstract] AND ("mouse"[Title/Abstract] OR "monkey"[Title/Abstract]) AND "Bio-protocol"[journal] AND "open access"[filter]
+    ```
     """
 
     query: str = Field(
@@ -95,7 +110,7 @@ def create_corpus_function(
     @schema_tool
     def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
-            ..., description='The query to search the NCBI PubMed Central Database. Always quote the terms and add [Title/Abstract] for exact matches in the title or abstract, for example: "small cats"[Title/Abstract] AND "large dogs"[Title/Abstract] AND "open access"[filter]'
+            ..., description="The query to search the NCBI PubMed Central Database."
         )
     ) -> str:
         """Searches the PubMed Central database using the `pmc_query` and creates a citation query engine object that can be used to query the papers found in the search results."""
