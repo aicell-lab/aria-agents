@@ -177,7 +177,7 @@ function App() {
                                 isSending={isSending}
                             />
                         )}
-                        {!isSending && (
+                        {!isSending && chatHistory.size > 0 && (
                             <ChatInput
                                 onLogin={handleLogin}
                                 question={question}
@@ -187,8 +187,6 @@ function App() {
                                 placeholder=""
                             />
                         )}
-                        {/* Add a div for scrolling to the end */}
-                        <div ref={chatContainerRef} style={{ height: 0, overflow: 'hidden' }} />
                     </div>
                 </div>
             </div>
