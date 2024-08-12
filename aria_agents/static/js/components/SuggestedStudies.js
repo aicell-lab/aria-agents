@@ -5,9 +5,9 @@ function SuggestedStudies({ setQuestion }) {
             <div className="flex flex-wrap justify-center">
                 <button
                     className="bg-gray-200 p-2 m-1 rounded-lg cursor-pointer text-lg transition duration-300 ease-in-out transform hover:scale-105"
-                    onClick={() => setQuestion("I want to study the effect of osmotic pressure on yeast cells.")}
+                    onClick={() => setQuestion("I want to study the effect of osmotic stress on yeast cells.")}
                 >
-                    Osmotic pressure on yeast cells
+                    Osmotic stress on yeast cells
                 </button>
                 <button
                     className="bg-gray-200 p-2 m-1 rounded-lg cursor-pointer text-lg transition duration-300 ease-in-out transform hover:scale-105"

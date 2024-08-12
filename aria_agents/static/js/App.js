@@ -43,7 +43,7 @@ function App() {
         const headerFinished = marked(`### Tool 🛠️ \`${name}\`\n\n`);
     
         if (status === 'start') {
-        // Initialize new message entry in chat history
+            // Initialize new message entry in chat history
             setChatHistory(prevHistory => {
                 const updatedHistory = new Map(prevHistory);
                 updatedHistory.set(query_id, {
@@ -57,12 +57,12 @@ function App() {
                 return updatedHistory;
             });
         } else if (status === 'in_progress') {
-        // Update existing message entry with new content
+            // Update existing message entry with new content
             setChatHistory(prevHistory => {
                 const updatedHistory = new Map(prevHistory);
                 const lastMessage = updatedHistory.get(query_id);
                 if (lastMessage) {
-                lastMessage.accumulatedArgs += (args || "").replace(/\n/g, ''); // Accumulate arguments
+                    lastMessage.accumulatedArgs += (args || "").replace(/\n/g, ''); // Accumulate arguments
                     if (name === 'SummaryWebsite') {
                         lastMessage.content = 'Generating summary website...';
                     } else {
@@ -73,7 +73,7 @@ function App() {
                 return updatedHistory;
             });
         } else if (status === 'finished') {
-        // Finalize the message entry
+            // Finalize the message entry
             setChatHistory(prevHistory => {
                 const updatedHistory = new Map(prevHistory);
                 const lastMessage = updatedHistory.get(query_id);
@@ -165,6 +165,7 @@ function App() {
                                 setQuestion={setQuestion}
                                 handleSend={handleSend}
                                 svc={svc}
+                                placeholder="Type what you want to study"
                             />
                         )}
                         <div className="text-center text-gray-700 mb-4 markdown-body" dangerouslySetInnerHTML={{ __html: status }}></div>
@@ -176,6 +177,18 @@ function App() {
                                 isSending={isSending}
                             />
                         )}
+                        {!isSending && (
+                            <ChatInput
+                                onLogin={handleLogin}
+                                question={question}
+                                setQuestion={setQuestion}
+                                handleSend={handleSend}
+                                svc={svc}
+                                placeholder=""
+                            />
+                        )}
+                        {/* Add a div for scrolling to the end */}
+                        <div ref={chatContainerRef} style={{ height: 0, overflow: 'hidden' }} />
                     </div>
                 </div>
             </div>
