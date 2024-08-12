@@ -16,6 +16,7 @@ from schema_agents.utils.common import current_session
 from aria_agents.chatbot_extensions.aux import (
     PMCQuery,
     SuggestedStudy,
+    test_pmc_query_hits,
     create_corpus_function,
     create_query_function,
     write_website,
@@ -104,10 +105,11 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         ):
             response = await ncbi_querier.acall(
                 [
-                    f"Take the following user request and use it construct a query in the schema of 'PMCQuery' to search PubMed Central for relevant papers. Limit your search to ONLY open access papers. Finally, use the PMCQuery to create a corpus of papers.",
+                    f"Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.",
                     user_request,
                 ],
                 tools=[
+                    test_pmc_query_hits,
                     create_corpus_function(corpus_context, project_folder, data_store)
                 ],
             )

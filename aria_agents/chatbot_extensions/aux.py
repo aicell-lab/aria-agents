@@ -3,6 +3,8 @@ import os
 import uuid
 from typing import Callable, List
 import urllib
+import xml.etree.ElementTree as xml
+import requests
 
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.query_engine import CitationQueryEngine
@@ -104,6 +106,35 @@ class PMCQuery(BaseModel):
     )
 
 
+@schema_tool
+def test_pmc_query_hits(
+    pmc_query: PMCQuery = Field(
+            ..., description="The query to search the NCBI PubMed Central Database."
+        )
+    ) -> str:
+    """Tests the `PMCQuery` to see how many hits it returns in the PubMed Central database."""
+
+    parameters = {
+        "tool": "tool",
+        "email": "email",
+        "db": "pmc",
+        "term": pmc_query.query,
+        "retmax": CONFIG["aux"]["paper_limit"]
+    }
+    resp = requests.get(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+        params=parameters,
+    )
+
+    # Parse the XML response
+    root = xml.fromstring(resp.content)
+
+    # Extract the number of hits from the <Count> element
+    n_hits = len([elem for elem in root.iter() if elem.tag == "Id"])
+
+    return f"The query `{pmc_query.query}` returned {n_hits} hits."
+
+
 def create_corpus_function(
     context: dict, project_folder: str, data_store: HyphaDataStore = None
 ) -> Callable:
@@ -113,10 +144,11 @@ def create_corpus_function(
             ..., description="The query to search the NCBI PubMed Central Database."
         )
     ) -> str:
-        """Searches the PubMed Central database using the `pmc_query` and creates a citation query engine object that can be used to query the papers found in the search results."""
+        """Searches PubMed Central using `PMCQuery` and creates a citation query engine."""
         loader = PubmedReader()
         terms = urllib.parse.urlencode({"term": pmc_query.query, "db": "pmc"})
         print(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}")
+        print(test_pmc_query_hits(pmc_query))
         documents = loader.load_data(
             search_query=pmc_query.query,
             max_results=CONFIG["aux"]["paper_limit"]
