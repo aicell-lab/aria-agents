@@ -177,7 +177,7 @@ function App() {
                                 isSending={isSending}
                             />
                         )}
-                        {!isSending && chatHistory.size > 0 && (
+                        {/* {!isSending && chatHistory.size > 0 && (
                             <ChatInput
                                 onLogin={handleLogin}
                                 question={question}
@@ -186,7 +186,7 @@ function App() {
                                 svc={svc}
                                 placeholder=""
                             />
-                        )}
+                        )} */}
                     </div>
                 </div>
             </div>

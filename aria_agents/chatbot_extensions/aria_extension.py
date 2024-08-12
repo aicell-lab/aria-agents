@@ -22,7 +22,7 @@ def get_extension(data_store: HyphaDataStore = None) -> ChatbotExtension:
             study_suggester=create_study_suggester_function(data_store),
             experiment_compiler=create_experiment_compiler_function(data_store),
             # data_analyst=create_analyzers_function(data_store),
-            data_analyst=create_analyzer_function(data_store),
+            # data_analyst=create_analyzer_function(data_store),
         ),
     )
 
