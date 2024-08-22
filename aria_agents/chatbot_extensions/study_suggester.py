@@ -129,7 +129,7 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         ):
             suggested_study = await study_suggester.acall(
                 [
-                    f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
+                    f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",       
                     "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
                 ],
                 tools=[query_function],
