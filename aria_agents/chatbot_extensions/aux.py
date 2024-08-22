@@ -302,25 +302,21 @@ async def write_website(
     </script>
 </head>
 <body>
-    <h1>`TITLE OF EXPERIMENT`</h1>
+    <h1>`TITLE OF STUDY`</h1>
     <h2>User Request</h2>
     <p>`The original user request`</p>
     <h2>Hypothesis</h2>
-    <p>`The hypothesis to be tested by the experiment`</p>
+    <p>`The hypothesis to be tested by the study`</p>
     <h2>Study Diagram</h2>
     <div class="mermaid">
         `The diagram illustrating the workflow for the suggested study`
     </div>
     <h2>Workflow</h2>
-    <p>`A high-level description of the workflow for the experiment`</p>
+    <p>`A high-level description of the workflow for the study`</p>
     <h2>Reasoning</h2>
-    <p>`The reasoning behind the choice of this experiment including the relevant background and pointers to references.`</p>
+    <p>`The reasoning behind the choice of this study including the relevant background and pointers to references.`</p>
     <h2>Expected Results</h2>
-    <p>`The expected results of the experiment`</p>
-    <h2>Materials Required</h2>
-    <ul>
-        `The materials required for the experiment`
-    </ul>
+    <p>`The expected results of the study`</p>
     <h2>References</h2>
     <ul>
         `Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design. These can be referred to in other parts of the html`
