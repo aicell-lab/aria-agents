@@ -105,7 +105,10 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         ):
             response = await ncbi_querier.acall(
                 [
-                    f"Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.",
+                    f"""Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. 
+                    Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. 
+                    If no queries return hits, adjust the queries to be more general (for example, by removing the `[Title/Abstract]` field specifications from search terms), and try again.
+                    Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.""",
                     user_request,
                 ],
                 tools=[
