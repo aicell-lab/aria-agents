@@ -148,7 +148,7 @@ def create_corpus_function(
         loader = PubmedReader()
         terms = urllib.parse.urlencode({"term": pmc_query.query, "db": "pmc"})
         print(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}")
-        print(test_pmc_query_hits(pmc_query))
+        # print(test_pmc_query_hits(pmc_query))
         documents = loader.load_data(
             search_query=pmc_query.query,
             max_results=CONFIG["aux"]["paper_limit"]
