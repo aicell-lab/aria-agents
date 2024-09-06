@@ -52,6 +52,7 @@ class ExperimentalProtocol(BaseModel):
 
     protocol_title: str = Field(..., description="The title of the protocol")
     # steps : List[str] = Field(..., description="A list of steps that must be followed in order to carry out the experiment. This string MUST be in markdown format and should contain no irregular characters.")
+    equipment: List[str] = Field(..., description="A list of equipment, materials, reagents, and devices needed for the entire protocol.")
     sections: List[ProtocolSection] = Field(
         ...,
         description="A list of sections that must be followed in order to carry out the experiment.",

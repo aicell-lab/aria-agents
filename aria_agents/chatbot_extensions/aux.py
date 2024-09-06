@@ -350,6 +350,12 @@ Where the appropriate fields are filled in with the information from the suggest
 </head>
 <body>
     <h1>`The title of the protocol`</h1>
+    <div class="section">
+        <h2>Equipment and Materials</h2>
+        <ul>
+            `The equipment and materials required for the experiment`
+        </ul>
+    </div>
 
     <div class="section">
         <h2>`First Protocol Section name`</h2>
