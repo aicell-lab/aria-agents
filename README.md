@@ -6,13 +6,68 @@ Aria Agents is a Python package designed to empower autonomous scientific discov
 ## Installation
 
 ### Prerequisites
+
+Create a new Conda environment called "aria-agents" with Python version 3.10.13:
+
 ```
 conda create -n aria-agents python=3.10.13
 conda activate aria-agents
 ```
 
+### Install dependencies
+
+Install packages pandasai and pydantic:
+
+```
+pip install pandasai pydantic
+```
+
+Install required packages:
+
+```
+pip install -r requirements.txt
+pip install -e .
+```
+
 ### `isatools` module installation
 
 The PyPI version of isatools does not install correctly, apparently because of some issue with PyYAML~=5.4.1. The GitHub version is more up to date and the requirements.txt file calls for PyYAML~=6.0.1. You must fork or clone a version of the [[https://github.com/ISA-tools/isa-api][isa-api repo]] and pip install the package from the repo.
+
+### Running the chatbot
+
+Use the following configuration to start the chatbot locally. For VSCode, save it as `aria-agents/.vscode/launch.json`, then select it as a debug configuration for `aria-agents/aria_agents/__main__.py`. Fill in `<JWT_SECRET>` with your JWT secret and `<API_KEY>` with your OpenAI API key. If you do not have a JWT secret, go to [Generate a new JWT secret](#generate-a-new-jwt-secret) for instructions on how to get one. If you do not have an OpenAI API key, go to [Get a new OpenAI API key](#get-a-new-openai-api-key).
+
 ```
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: start-server",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "aria_agents",
+            "justMyCode": false,
+            "env": {
+                "JWT_SECRET": "<JWT_SECRET>",
+                "OPENAI_API_KEY": "<API_KEY>",
+                "OPENAI_API_MODEL": "gpt-4o",
+                "BIOIMAGEIO_DEBUG": "true",
+    
+            },
+            "args": [
+                "start-server",
+                "--port=9527",
+                "--login-required"
+            ]
+        },
+    ]
+}
 ```
+
+### Generate a new JWT secret
+
+
+
+### Get a new OpenAI API key
+
+To get an OpenAI API key, go to the [[https://platform.openai.com/account/api-keys][OpenAI API keys dashboard]] and click the "Create API Key" button. Copy the API key and paste it into the configuration file.
