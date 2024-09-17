@@ -66,7 +66,7 @@ Use the following configuration to start the chatbot locally. For VSCode, save i
 
 ### Generate a new JWT secret
 
-
+You can generate a new JWT secret here: https://jwtsecret.com/generate
 
 ### Get a new OpenAI API key
 
