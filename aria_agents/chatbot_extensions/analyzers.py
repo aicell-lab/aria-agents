@@ -46,9 +46,47 @@ def read_df(file_path : str) -> pd.DataFrame:
         raise ValueError(f"Unsupported file format ({ext}): {file_path}")
     
 def is_data_file(file_path : str) -> bool:
+    if not os.path.isfile(file_path):
+        return False
+    
     ext = os.path.splitext(file_path)[1]
     return ext in [".csv", ".tsv", ".xlsx"]
 
+def get_analyzer_folders(project_name: str, env_var: str, default_val: str) -> tuple[str]:
+    project_folders = os.environ.get(env_var, default_val)
+    project_folder = os.path.abspath(os.path.join(project_folders, project_name))
+    data_folder = os.path.join(project_folder, "data")
+    analysis_folder = os.path.join(project_folder, "analysis")
+    
+    for this_folder in [project_folder, data_folder, analysis_folder]:
+            os.makedirs(this_folder, exist_ok=True)
+    
+    return project_folder, data_folder, analysis_folder
+
+def get_session_id() -> str:
+    pre_session = current_session.get()
+    session_id = pre_session.id if pre_session else str(uuid.uuid4())
+    return session_id
+
+def get_data_files(data_folder: str) -> List[str]:
+    data_listdir = os.listdir(data_folder)
+    all_data_paths = [os.path.join(data_folder, data_item) for data_item in data_listdir]    
+    data_files = filter(is_data_file, all_data_paths)
+    
+    return data_files
+
+def get_pai_agent(data_files: List[str], save_charts_path: str) -> PaiAgent:
+    dataframes = [read_df(file_path) for file_path in data_files]
+    pai_llm = PaiOpenAI()
+    pai_agent_config = {
+        'llm' : pai_llm,
+        'save_chargs' : True,
+        'save_charts_path' : save_charts_path,
+        'open_charts' : True,
+        'max_retries' : 10 # default is 3
+    }
+    pai_agent = PaiAgent(dataframes, config = pai_agent_config, memory_size = 25)
+    return pai_agent
 
 def create_analyzer_function(data_store: HyphaDataStore = None) -> Callable:
 
@@ -68,34 +106,10 @@ def create_analyzer_function(data_store: HyphaDataStore = None) -> Callable:
         """Analyzes the data files generated from a scientific experiment using a recruited AI agent that has access to the files.
         Files must be in tabular (csv, tsv, excel) format. 
         Returns the response and explanation from the agent."""
-        pre_session = current_session.get()
-        session_id = pre_session.id if pre_session else str(uuid.uuid4())
-
-        project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-        project_folder = os.path.abspath(os.path.join(project_folders, project_name))
-        data_folder = os.path.join(project_folder, "data")
-        analysis_folder = os.path.join(project_folder, "analysis")
-        for d in [project_folder, data_folder, analysis_folder]:
-            os.makedirs(d, exist_ok=True)
-        data_files = [os.path.join(data_folder, x) for x in os.listdir(data_folder) if os.path.isfile(os.path.join(data_folder, x)) and is_data_file(os.path.join(data_folder, x))]
-
-
-        if data_store is None:
-            event_bus = None
-        else:
-            event_bus = data_store.get_event_bus()
-
-        dataframes = [read_df(file_path) for file_path in data_files]
-
-        pai_llm = PaiOpenAI()
-        pai_agent_config = {
-            'llm' : pai_llm,
-            'save_chargs' : True,
-            'save_charts_path' : project_folder,
-            'open_charts' : True,
-            'max_retries' : 10 # default is 3
-        }
-        pai_agent = PaiAgent(dataframes, config = pai_agent_config, memory_size = 25)
+        
+        project_folder, data_folder, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
+        data_files = get_data_files(data_folder)
+        pai_agent = get_pai_agent(data_files, project_folder)
 
         response = pai_agent.chat(user_request)
         explanation = pai_agent.explain()
