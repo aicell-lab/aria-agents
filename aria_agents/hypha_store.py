@@ -22,6 +22,7 @@ class HyphaDataStore:
               "require_context": False
             },
             "get": self.http_get,
+            "put": self.put,
         }, overwrite=True)
 
     def get_url(self, obj_id: str):

@@ -1,6 +1,6 @@
 const { useState, useEffect } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
-const { generateSessionID, getService, login, completeCodeBlocks, jsonToMarkdown, modifyLinksToOpenInNewTab } = window.helpers;
+const { generateSessionID, getService, login, completeCodeBlocks, jsonToMarkdown, modifyLinksToOpenInNewTab, getServiceWithId } = window.helpers;
 const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, ArtefactsPanel } = window;
 
 function App() {
@@ -8,6 +8,7 @@ function App() {
     const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
+    const [dataStore, setDataStore] = useState(null);
     const [status, setStatus] = useState("Please log in before sending a message.");
     const [showProfileDialog, setShowProfileDialog] = useState(false);
     const [userProfile, setUserProfile] = useState({
@@ -30,10 +31,53 @@ function App() {
         setIsLoading(true);
         const token = await login();
         const service = await getService(token);
+        const dataStore = await getServiceWithId(token, 'public/workspace-manager:data-store');
+        setDataStore(dataStore);
         setSvc(service);
         setStatus("Ready to chat! Type your message and press enter!");
         setIsLoading(false);
     };
+
+    const handleAttachment = async (event) => {
+        const file = event.target.files[0];
+        await uploadAttachment(file);
+    };
+
+    const uploadAttachment = async (file) => {
+        const fileBytes = await file.arrayBuffer();
+        const byteArray = new Uint8Array(fileBytes);
+        
+        const fileId = await dataStore.put('file', byteArray, 'chat_attachment');
+
+        addItemToLocalStorageArr('attachments', {
+            'value': file.name,
+            'id': fileId,
+        });
+
+        return fileId;
+    };
+
+    const addItemToLocalStorageArr = (arrName, item) => {
+        const arr = JSON.parse(localStorage.getItem(arrName)) || [];
+        arr.push(item);
+        localStorage.setItem(arrName, JSON.stringify(arr));
+    };
+
+    const testUploadAttachment = async () => {
+        const fileContents = 'Hello, World!';
+        const file = new File([fileContents], 'test.txt', { type: 'text/plain' });
+        const fileId = await uploadAttachment(file);
+
+        const returned_object = await dataStore.get({
+            'query_string': 'id=' + fileId
+        });
+        const returnedBytes = returned_object.body;
+        const returnedFileContents = new Blob([returnedBytes], { type: 'text/plain' });
+        const returnedText = await returnedFileContents.text();
+
+        console.assert(returnedText === fileContents, 'File contents do not match');
+    };
+        
 
     const statusCallback = (message) => {
         const { type, session: { id, role_setting: roleSetting }, status, content, arguments: args, name, query_id } = message;
@@ -165,6 +209,7 @@ function App() {
                                 setQuestion={setQuestion}
                                 handleSend={handleSend}
                                 svc={svc}
+                                handleAttachment={handleAttachment}
                                 placeholder="Type what you want to study"
                             />
                         )}

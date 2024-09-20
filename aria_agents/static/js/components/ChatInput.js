@@ -1,4 +1,5 @@
-function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholder }) {
+function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholder, handleAttachment }) {
+
     return (
         <div className="mb-4 flex flex-col items-center">
             <input
@@ -10,12 +11,20 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                 onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             />
             {svc ? (
-                <button
-                    onClick={handleSend}
-                    className="button w-full"
-                >
-                    Send ✈️
-                </button>
+                <>
+                    <button
+                        onClick={handleSend}
+                        className="button w-full"
+                    >
+                        Send ✈️
+                    </button>
+                    <input
+                        type="file"
+                        accept=".zip"
+                        onChange={handleAttachment}
+                        className="mt-2"
+                    />
+                </>
             ) : (
                 <button
                     onClick={onLogin}

@@ -2,16 +2,35 @@ function generateSessionID() {
     return "session-" + Math.random().toString(36).substr(2, 9);
 }
 
-async function getService(token) {
+function getServerUrl() {
     const urlParams = new URLSearchParams(window.location.search);
-    const service_id = urlParams.get('service_id');
     let serverUrl = urlParams.get('server') || window.location.origin;
     if (serverUrl.includes('localhost')) {
         serverUrl = "http://localhost:9000";
     }
+
+    return serverUrl;
+}
+
+function getServiceId() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('service_id');
+}
+
+async function getService(token, ping = true) {
+    const serviceId = getServiceId();
+    return await getServiceWithId(token, serviceId, ping);
+}
+
+async function getServiceWithId(token, serviceId, ping = false) {
+    const serverUrl = getServerUrl();
+    console.log("service ID: ", serviceId);
     const server = await hyphaWebsocketClient.connectToServer({ "server_url": serverUrl, "token": token });
-    const svc = await server.getService(service_id || "public/workspace-manager:aria-agents");
-    await svc.ping();
+    const svc = await server.getService(serviceId || "public/workspace-manager:aria-agents");
+    
+    if (ping) {
+        await svc.ping();
+    }
     console.log("service connected: ", svc);
     return svc;
 }
@@ -21,11 +40,7 @@ function login_callback(context) {
 }
 
 async function login() {
-    const urlParams = new URLSearchParams(window.location.search);
-    let serverUrl = urlParams.get('server') || window.location.origin;
-    if (serverUrl.includes('localhost')) {
-        serverUrl = "http://localhost:9000";
-    }
+    const serverUrl = getServerUrl();
     let token = localStorage.getItem('token');
     if (token) {
         const tokenExpiry = localStorage.getItem('tokenExpiry');
@@ -133,4 +148,5 @@ window.helpers = {
     completeCodeBlocks: completeCodeBlocks,
     jsonToMarkdown: jsonToMarkdown,
     modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
+    getServiceWithId: getServiceWithId,
 };
