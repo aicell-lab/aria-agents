@@ -210,7 +210,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    # from imjoy_rpc.hypha import connect_to_server
+    # from hypha_rpc import connect_to_server
     # server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
     # data_store = HyphaDataStore()
     # await data_store.setup(server)

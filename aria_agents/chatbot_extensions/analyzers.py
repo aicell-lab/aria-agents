@@ -18,7 +18,7 @@ import json
 from aria_agents.hypha_store import HyphaDataStore
 # from aria_agents.chatbot_extensions.code_execution import execute_code
 from schema_agents import Role, schema_tool
-from imjoy_rpc.hypha import connect_to_server, login
+from hypha_rpc import connect_to_server, login
 from typing import List, Callable
 from pydantic import BaseModel, Field
 from langchain_experimental.tools.python.tool import PythonAstREPLTool

@@ -78,7 +78,7 @@ async def extension_to_tools(extension: ChatbotExtension):
 
 
 async def main():
-    from imjoy_rpc.hypha import connect_to_server
+    from hypha_rpc import connect_to_server
 
     server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
     data_store = HyphaDataStore()

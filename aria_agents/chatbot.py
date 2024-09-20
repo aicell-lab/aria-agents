@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 import pkg_resources
-from imjoy_rpc.hypha import connect_to_server, login
+from hypha_rpc import connect_to_server, login
 from pydantic import BaseModel, Field
 from schema_agents import Message, Role
 from schema_agents.utils.common import EventBus

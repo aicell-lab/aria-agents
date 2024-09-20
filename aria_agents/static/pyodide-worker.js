@@ -82,8 +82,8 @@ or summary contain a given string such as "spam", type "modules spam".
 __builtins__.help = lambda *args, **kwargs: print(help_string)
 
 # patch hypha services
-import imjoy_rpc.hypha
-_connect_to_server = imjoy_rpc.hypha.connect_to_server
+import hypha_rpc
+_connect_to_server = hypha_rpc.connect_to_server
 
 async def patched_connect_to_server(*args, **kwargs):
     server = await _connect_to_server(*args, **kwargs)
@@ -98,7 +98,7 @@ async def patched_connect_to_server(*args, **kwargs):
     server.registerService = patched_register_service
     return server
 
-imjoy_rpc.hypha.connect_to_server = patched_connect_to_server
+hypha_rpc.connect_to_server = patched_connect_to_server
 
 # For redirecting stdout and stderr later.
 class JSOutWriter(io.TextIOBase):
