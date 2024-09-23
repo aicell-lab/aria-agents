@@ -22,7 +22,7 @@ Install packages pandasai and pydantic:
 pip install pandasai pydantic
 ```
 
-Install required packages:
+Install other required packages:
 
 ```
 pip install -r requirements.txt
@@ -35,7 +35,7 @@ The PyPI version of isatools does not install correctly, apparently because of s
 
 ### Running the chatbot
 
-Use the following configuration to start the chatbot locally. For VSCode, save it as `aria-agents/.vscode/launch.json`, then select it as a debug configuration for `aria-agents/aria_agents/__main__.py`. Fill in `<JWT_SECRET>` with your JWT secret and `<API_KEY>` with your OpenAI API key. If you do not have a JWT secret, go to [Generate a new JWT secret](#generate-a-new-jwt-secret) for instructions on how to get one. If you do not have an OpenAI API key, go to [Get a new OpenAI API key](#get-a-new-openai-api-key).
+Use the following configuration to start the chatbot locally. For VSCode, save it as `aria-agents/.vscode/launch.json`. Fill in `<JWT_SECRET>` with your JWT secret and `<API_KEY>` with your OpenAI API key. If you do not have a JWT secret, any number will do. If you do not have an OpenAI API key, go to [Get a new OpenAI API key](#get-a-new-openai-api-key). To run the configuration in VSCode, select it as a debug configuration under "Run and debug" and run.
 
 ```
 {
@@ -63,10 +63,6 @@ Use the following configuration to start the chatbot locally. For VSCode, save i
     ]
 }
 ```
-
-### Generate a new JWT secret
-
-You can generate a new JWT secret here: https://jwtsecret.com/generate
 
 ### Get a new OpenAI API key
 
