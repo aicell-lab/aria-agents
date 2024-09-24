@@ -188,7 +188,7 @@ function App() {
                 await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions);
                 setStatus("Ready to chat! Type your message and press enter!");
             } catch (e) {
-                setStatus(`❌ Error: ${e.message}`);
+                setStatus(`❌ Error: ${e.message || e}`);
             } finally {
                 setIsSending(false);
             }
