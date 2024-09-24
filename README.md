@@ -22,10 +22,10 @@ Install packages pandasai and pydantic:
 pip install pandasai pydantic
 ```
 
-Install latest version of `schema-agents` (private repo, make sure you have access to that repo):
+Install latest version of `schema-agents` (a private repo, so make sure you have access to it):
 
 ```
-pip install git+https://github.com/aicell-lab/schema-agents.git
+pip install git+ssh://git@github.com/aicell-lab/schema-agents.git
 ```
 
 Install requirements:
