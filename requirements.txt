@@ -4,6 +4,7 @@ pypdf==4.2.0
 pillow==10.3.0
 matplotlib==3.9.0
 hypha==0.15.50
+hypha-rpc==0.20.37
 tqdm==4.66.4
 aiofiles==23.2.1
 serpapi==0.1.5
