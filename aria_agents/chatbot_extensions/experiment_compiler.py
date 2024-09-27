@@ -252,6 +252,7 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
             model=CONFIG["llm_model"],
         )
 
+
         protocol = await write_protocol(
             protocol=suggested_study,
             feedback=None,
@@ -260,11 +261,13 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
             session_id=session_id,
         )
 
+
         protocol_feedback = await get_protocol_feedback(
             protocol, protocol_manager, session_id=session_id
         )
         revisions = 0
         pbar = tqdm(total=max_revisions)
+
         while not protocol_feedback.complete and revisions < max_revisions:
             protocol = await write_protocol(
                 protocol=protocol,
@@ -273,6 +276,7 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
                 role=protocol_writer,
                 session_id=session_id,
             )
+            
             protocol_feedback = await get_protocol_feedback(
                 protocol, protocol_manager, protocol_feedback, session_id=session_id
             )
@@ -286,6 +290,7 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
             with open(protocol_file, "w") as f:
                 json.dump(protocol.dict(), f, indent=4)
             protocol_url = "file://" + protocol_file
+            
         else:
             # Save the suggested study to the HyphaDataStore
             protocol_id = data_store.put(
@@ -294,6 +299,8 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
                 name=f"{project_name}:experimental_protocol.json",
             )
             protocol_url = data_store.get_url(protocol_id)
+            
+        
 
         summary_website_url = await write_website(
             protocol, event_bus, data_store, "experimental_protocol", project_folder
