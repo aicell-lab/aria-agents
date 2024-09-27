@@ -4,7 +4,7 @@ from aria_agents.chatbot_extensions.experiment_compiler import (
 from aria_agents.chatbot_extensions.study_suggester import (
     create_study_suggester_function,
 )
-from aria_agents.chatbot_extensions.analyzers import (
+from aria_agents.chatbot_extensions.code_interpreter import (
     create_analyzer_function,
 )
 from aria_agents.hypha_store import HyphaDataStore
