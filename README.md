@@ -14,34 +14,18 @@ conda create -n aria-agents python=3.10.13
 conda activate aria-agents
 ```
 
+Make sure you have access to the repo `schema-agents` as it is a dependency of Aria Agents.
+
 ### Install dependencies
 
-Install packages pandasai and pydantic:
-
 ```
-pip install pandasai pydantic
-```
-
-Install latest version of `schema-agents` (a private repo, so make sure you have access to it):
-
-```
-pip install git+ssh://git@github.com/aicell-lab/schema-agents.git
-```
-
-Install requirements:
-
-```
-pip install -r requirements.txt
+pip install -r requirements_test.txt
 pip install -e .
 ```
 
-### `isatools` module installation
+### Running Aria Agents
 
-The PyPI version of isatools does not install correctly, apparently because of some issue with PyYAML~=5.4.1. The GitHub version is more up to date and the requirements.txt file calls for PyYAML~=6.0.1. You must fork or clone a version of the [[https://github.com/ISA-tools/isa-api][isa-api repo]] and pip install the package from the repo.
-
-### Running the chatbot
-
-Use the following configuration to start the chatbot locally. For VSCode, save it as `aria-agents/.vscode/launch.json`. Fill in `<JWT_SECRET>` with your JWT secret and `<API_KEY>` with your OpenAI API key. If you do not have a JWT secret, any number will do. If you do not have an OpenAI API key, go to [Get a new OpenAI API key](#get-a-new-openai-api-key). To run the configuration in VSCode, select it as a debug configuration under "Run and debug" and run.
+Use the following configuration to start Aria Agents locally. For VSCode, save it as `aria-agents/.vscode/launch.json`. Fill in `<JWT_SECRET>` with your JWT secret and `<API_KEY>` with your OpenAI API key (or get a new one at the [[https://platform.openai.com/account/api-keys][OpenAI API keys dashboard]]). If you do not have a JWT secret, any integer will do. To run the configuration in VSCode, select it as a debug configuration under "Run and debug" and run.
 
 ```
 {
@@ -69,7 +53,3 @@ Use the following configuration to start the chatbot locally. For VSCode, save i
     ]
 }
 ```
-
-### Get a new OpenAI API key
-
-To get an OpenAI API key, go to the [[https://platform.openai.com/account/api-keys][OpenAI API keys dashboard]] and click the "Create API Key" button. Copy the API key and paste it into the configuration file.
