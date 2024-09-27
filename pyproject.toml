@@ -26,6 +26,9 @@ dependencies = [
   "langchain-community>=0.0.27",
   "html2text",
   "isatools",
+  "llama_index",
+  "langchain-experimental",
+  "llama-index-readers-papers",
 ]
 
 [tool.setuptools]

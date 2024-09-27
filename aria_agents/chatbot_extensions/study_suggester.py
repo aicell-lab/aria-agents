@@ -1,158 +1,227 @@
-import os
 import dotenv
+
 dotenv.load_dotenv()
-import time
-from tqdm.auto import tqdm
 import argparse
-from pydantic import BaseModel, Field
-from typing import List
 import asyncio
-from schema_agents import schema_tool, Role
-import dotenv
-import re
 import json
-from aria_agents.chatbot_extensions.aux_classes import SuggestedStudy
-from aria_agents.chatbot_extensions.aux_tools import *
+import os
+import uuid
+from typing import Callable, Dict
 
-class PapersSummary(BaseModel):
-    """A summary of the papers found in the PubMed Central database search"""
-    state_of_field : str = Field(description="A summary of the current state of the field")
-    open_questions : str = Field(description="A summary of the open questions in the field")
+from pydantic import BaseModel, Field
+from schema_agents import Role, schema_tool
+from schema_agents.role import create_session_context
+from schema_agents.utils.common import current_session
 
-class StructuredUserInput(BaseModel):
-    """The user's input parsed scraped for relevant terms to search on pubmed"""
-    user_request : str = Field(description = "The original user request")
-    search_keywords : str = Field(description = "The keywords that will be used to search PubMed Central for recent relevant papers")
+from aria_agents.chatbot_extensions.aux import (
+    PMCQuery,
+    SuggestedStudy,
+    test_pmc_query_hits,
+    create_corpus_function,
+    create_query_function,
+    write_website,
+)
+from aria_agents.hypha_store import HyphaDataStore
 
-class StructuredQuery(BaseModel):
-    """A query formatted to search the NCBI PubMed Central Database (open-access subset ONLY) inspired by the user's input query"""
-    query: str = Field(description = "The NCBI PubMed query string, it MUST fit the NCBI PubMed database search syntax.")
-    query_url: str = Field(description = """The query converted into a NCBI E-utils url. It must be only the url and it must folow the E-utils syntax. It should specify xml return mode, search the pmc database and the search MUST include `"+AND+open+access[filter]` to limit the search to open access articles.""")
+# Load the configuration file
+this_dir = os.path.dirname(os.path.abspath(__file__))
+config_file = os.path.join(this_dir, "config.json")
+with open(config_file, "r") as file:
+    CONFIG = json.load(file)
 
-class ContextualizedPaperSummary(BaseModel):
-    """A short summary of a paper in the context of the user's request. ONLY include information that is relevant to the original user request."""
-    state_of_field : str = Field(description="Brief summary of any information in the paper relating to the state of the field relevant to the user's request")
-    open_questions : str = Field(description="Brief summary of any information in the paper relating to open questions in the field relevant to the user's request")
-    
-async def process_paper(pb, pmc_id, user_request, semaphore):
-    async with semaphore:
-        r = Role(name=f"Paper Agent PMC ID {pmc_id}",
-                 instructions=f"You are an agent assigned to study the paper (PMC ID {pmc_id}) provided to you in the context of the user's request (`{user_request}`)",
-                 constraints=None,
-                 register_default_events=True,
-                 model='gpt-4o')
-        return await r.aask([f"The user wants to design a cutting-edge scientific study based on the original request:\n`{user_request}`\nRead the following paper's contents and scrape it for information relevant to designing a study for the user",
-                             f"Paper content:\n`{pb}`"], ContextualizedPaperSummary)
-    
-class LiteratureReview(BaseModel):
-    """A collection of summaries from papers found to be relevant to the user's request"""
-    paper_summaries : List[ContextualizedPaperSummary] = Field(description = """The summaries from the individual papers""")
 
 class StudyDiagram(BaseModel):
-    """A diagram written in mermaid.js showing what the expected data from a study will look like"""
-    diagram_code : str = Field(description = "The code for a mermaid.js diagram (either a XYChart, Pie, or QuadrantChart) showing what the expected data results would look like for the experiment")
+    """A diagram written in mermaid.js showing the workflow for the study and what expected data from the study will look like. An example:
+    ```
+    graph TD
+    X[Cells] --> |Culturing| A
+    A[Aniline Exposed Samples] -->|With NAC| B[Reduced Hepatotoxicity]
+    A -->|Without NAC| C[Increased Hepatotoxicity]
+    B --> D[Normal mmu_circ_26984 Levels]
+    C --> E[Elevated mmu_circ_26984 Levels]
+    style D fill:#4CAF50
+    style E fill:#f44336
+    ```
+    Do not include specific conditions, temperatures, times, or other specific experimental protocol conditions just the general workflow and expected outcomes (for example, instead of 40 degrees say "high temperature").
+    Do not include any special characters, only simple ascii characters.
+    """
+
+    diagram_code: str = Field(
+        description="The code for a mermaid.js figure showing the study workflow and what the expected outcomes would look like for the experiment"
+    )
+
 
 class StudyWithDiagram(BaseModel):
     """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge information from the literature review"""
-    suggested_study : SuggestedStudy = Field(description = "The suggested study to test a new hypothesis")
-    study_diagram : StudyDiagram = Field(description = "The diagram illustrating the workflow for the suggested study")
 
-class SummaryWebsite(BaseModel):
-    """A summary single-page webpage written in html that neatly presents the suggested study for user review"""
-    html_code: str = Field(description = "The html code for a single page website summarizing the information in the suggested studies appropriately including the diagrams. Make sure to include the original user request as well.")
+    suggested_study: SuggestedStudy = Field(
+        description="The suggested study to test a new hypothesis"
+    )
+    study_diagram: StudyDiagram = Field(
+        description="The diagram illustrating the workflow for the suggested study"
+    )
 
-    
 
-CONCURENCY_LIMIT = 3
-PAPER_LIMIT = 5
-LLM_MODEL = 'gpt-4o'
-project_folders = os.environ.get('PROJECT_FOLDERS', './projects')
-os.makedirs(project_folders, exist_ok = True)
+def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callable:
+    @schema_tool
+    async def run_study_suggester(
+        user_request: str = Field(
+            description="The user's request to create a study around, framed in terms of a scientific question"
+        ),
+        project_name: str = Field(
+            description="The name of the project, used to create a folder to store the output files"
+        ),
+        constraints: str = Field(
+            "",
+            description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
+        ),
+    ) -> Dict[str, str]:
+        """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
+        pre_session = current_session.get()
+        session_id = pre_session.id if pre_session else str(uuid.uuid4())
 
-@schema_tool
-async def run_study_suggester(
-    user_request: str = Field(description = "The user's request to create a study around, framed in terms of a scientific question"),
-    project_name: str = Field(description = "The name of the project, used to create a folder to store the output files"),
-):
-    """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, a diagram of the study, and a summary website."""
-    os.makedirs(os.path.join(project_folders, project_name), exist_ok = True)
-    ncbi_querier = Role(name = "NCBI Querier", 
-                        instructions = "You are the PubMed querier. You query the PubMed Central database for papers relevant to the user's input. You also scrape the abstracts and other relevant information from the papers.",
-                        constraints = None,
-                        register_default_events = True,
-                        model = LLM_MODEL,)
-    structured_user_input = await ncbi_querier.aask(user_request, StructuredUserInput)
-    structured_query = await ncbi_querier.aask([
-        f"Take this user's stated interest and use it to search PubMed Central for relevant papers. These papers will be used to figure out the state of the art of relevant to the user's interests. Ultimately this will be used to design new hypotheses and studies. Limit the search to return at most {PAPER_LIMIT} paper IDs.", 
-        structured_user_input],
-        StructuredQuery)
-    search_results = await pmc_search(ncbi_query_url = structured_query.query_url)
-    pmc_ids = re.findall(r'<Id>(\d+)</Id>', search_results)
-    paper_contents = []
-    for pmc_id in tqdm(pmc_ids):
-        paper_contents.append(await pmc_efetch(pmc_ids = [pmc_id]))
-        # time.sleep(0.3)
-        await asyncio.sleep(0.3)
-    paper_bodies = [x if len(x) > 0 else None for x in [re.findall(r'<body>.*</body>', p, flags = re.DOTALL) for p in paper_contents]]
-    paper_summaries = []
-    semaphore = asyncio.Semaphore(CONCURENCY_LIMIT)
-    tasks = [process_paper(pb, pmc_ids[i], user_request, semaphore)
-                for i, pb in enumerate(paper_bodies) if pb is not None]
+        project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
+        project_folder = os.path.abspath(os.path.join(project_folders, project_name))
+        os.makedirs(project_folder, exist_ok=True)
 
-    paper_summaries = await asyncio.gather(*tasks)
-    literature_review = LiteratureReview(paper_summaries = paper_summaries)
-    study_suggester = Role(name = "Study Suggester", 
-                        instructions = "You are the study suggester. You suggest a study to test a new hypothesis based on the cutting-edge information from the literature review.",
-                        constraints = None,
-                        register_default_events = True,
-                        model = 'gpt-4o',)
-    suggested_study = await study_suggester.aask([f"Based on the cutting-edge information from the literature review, suggest a study to test a new hypothesis relevant to the user's request:\n`{user_request}`", literature_review], 
-                                                 SuggestedStudy)
-    diagrammer = Role(name = "Diagrammer",
-                        instructions = "You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
-                        constraints = None,
-                        register_default_events = True,
-                        model = 'gpt-4-turbo-preview',)
-    study_diagram = await diagrammer.aask([f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`", suggested_study], StudyDiagram)
-    study_with_diagram = StudyWithDiagram(suggested_study = suggested_study, study_diagram = study_diagram)
-    website_writer = Role(name = "Website Writer",
-                            instructions = "You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
-                            constraints = None,
-                            register_default_events = True,
-                            model = 'gpt-4-turbo-preview',)
+        if data_store is None:
+            event_bus = None
+        else:
+            event_bus = data_store.get_event_bus()
 
-    summary_website = await website_writer.aask([f"Create a single-page website summarizing the information in the suggested study appropriately including the diagrams", study_with_diagram],
-                                                SummaryWebsite)
+        ncbi_querier = Role(
+            name="NCBI Querier",
+            instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
+            icon="🤖",
+            constraints=constraints,
+            event_bus=event_bus,
+            register_default_events=True,
+            model=CONFIG["llm_model"],
+        )
 
-    output_html = os.path.join(project_folders, project_name, 'output.html')
-    suggested_study_json = os.path.join(project_folders, project_name, 'suggested_study.json')
-    for d in [os.path.dirname(output_html)]:
-        if not os.path.exists(d):
-            os.makedirs(d)
-    with open(output_html, 'w') as f:
-        f.write(summary_website.html_code)
-    with open(suggested_study_json, 'w') as f:
-        json.dump(suggested_study.dict(), f, indent = 4)
-    return {
-        "suggested_study_json": suggested_study_json,
-        "suggested_study": suggested_study.dict()
-    }
+        corpus_context = {}
+        async with create_session_context(
+            id=session_id, role_setting=ncbi_querier._setting
+        ):
+            response = await ncbi_querier.acall(
+                [
+                    f"""Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. 
+                    Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. 
+                    If no queries return hits, adjust the queries to be more general (for example, by removing the `[Title/Abstract]` field specifications from search terms), and try again.
+                    Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.""",
+                    user_request,
+                ],
+                tools=[
+                    test_pmc_query_hits,
+                    create_corpus_function(corpus_context, project_folder, data_store)
+                ],
+            )
+
+        study_suggester = Role(
+            name="Study Suggester",
+            instructions="You are the study suggester. You suggest a study to test a new hypothesis based on the cutting-edge information from the literature review.",
+            icon="🤖",
+            constraints=constraints,
+            event_bus=event_bus,
+            register_default_events=True,
+            model=CONFIG["llm_model"],
+        )
+        query_function = create_query_function(corpus_context["query_engine"])
+        async with create_session_context(
+            id=session_id, role_setting=study_suggester._setting
+        ):
+            suggested_study = await study_suggester.acall(
+                [
+                    f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",       
+                    "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
+                ],
+                tools=[query_function],
+                output_schema=SuggestedStudy,
+            )
+        if data_store is None:
+            # Save the suggested study to a JSON file
+            suggested_study_file = os.path.join(project_folder, "suggested_study.json")
+            with open(suggested_study_file, "w") as f:
+                json.dump(suggested_study.dict(), f, indent=4)
+            suggested_study_url = "file://" + suggested_study_file
+        else:
+            # Save the suggested study to the HyphaDataStore
+            suggested_study_id = data_store.put(
+                obj_type="json",
+                value=suggested_study.dict(),
+                name=f"{project_name}:suggested_study.json",
+            )
+            suggested_study_url = data_store.get_url(suggested_study_id)
+
+        diagrammer = Role(
+            name="Diagrammer",
+            instructions="You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
+            icon="🤖",
+            constraints=None,
+            event_bus=event_bus,
+            register_default_events=True,
+            model=CONFIG["llm_model"],
+        )
+        async with create_session_context(
+            id=session_id, role_setting=study_suggester._setting
+        ):
+            study_diagram = await diagrammer.aask(
+                [
+                    f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
+                    suggested_study,
+                ],
+                StudyDiagram,
+            )
+        study_with_diagram = StudyWithDiagram(
+            suggested_study=suggested_study, study_diagram=study_diagram
+        )
+
+        summary_website_url = await write_website(
+            study_with_diagram, event_bus, data_store, "suggested_study", project_folder
+        )
+
+        return {
+            "summary_website_url": summary_website_url,
+            "suggested_study_url": suggested_study_url,
+        }
+
+    return run_study_suggester
+
 
 async def main():
-    parser = argparse.ArgumentParser(description='Run the study suggester pipeline')
-    parser.add_argument('--user_request', type=str, help='The user request to create a study around', required = True)
-    parser.add_argument('--concurrency_limit', type=int,  default = 3, help='The number of concurrent requests to make to the NCBI API')
-    parser.add_argument('--paper_limit', type=int, default = 5, help='The maximum number of paper to fetch from PubMed Central')
-    parser.add_argument('--output_html', type = str, default = 'output.html', help = 'The path to save the output html')
-    parser.add_argument('--suggested_study_json', type = str, default = 'suggested_study.json', help = 'The path to save the suggested study')
+    parser = argparse.ArgumentParser(description="Run the study suggester pipeline")
+    parser.add_argument(
+        "--user_request",
+        type=str,
+        help="The user request to create a study around",
+        required=True,
+    )
+    parser.add_argument(
+        "--project_name",
+        type=str,
+        help="The name of the project, used to create a folder to store the output files",
+        default="test",
+    )
+    parser.add_argument(
+        "--constraints",
+        type=str,
+        help="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
+        default="",
+    )
     args = parser.parse_args()
-    await run_study_suggester(user_request = args.user_request, project_name = 'test')
+
+    # from hypha_rpc import connect_to_server
+    # server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
+    # data_store = HyphaDataStore()
+    # await data_store.setup(server)
+    data_store = None
+
+    run_study_suggester = create_study_suggester_function(data_store)
+    await run_study_suggester(**vars(args))
+
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except Exception as e:
         print(e)
-    # loop = asyncio.get_event_loop()
-    # loop.create_task(main())
-    # loop.run_forever()
