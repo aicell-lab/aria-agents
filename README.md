@@ -6,13 +6,50 @@ Aria Agents is a Python package designed to empower autonomous scientific discov
 ## Installation
 
 ### Prerequisites
+
+Create a new Conda environment called "aria-agents" with Python version 3.10.13:
+
 ```
 conda create -n aria-agents python=3.10.13
 conda activate aria-agents
 ```
 
-### `isatools` module installation
+Make sure you have access to the repo `schema-agents` as it is a dependency of Aria Agents.
 
-The PyPI version of isatools does not install correctly, apparently because of some issue with PyYAML~=5.4.1. The GitHub version is more up to date and the requirements.txt file calls for PyYAML~=6.0.1. You must fork or clone a version of the [[https://github.com/ISA-tools/isa-api][isa-api repo]] and pip install the package from the repo.
+### Install dependencies
+
 ```
+pip install -r requirements_test.txt
+pip install -e .
+```
+
+### Running Aria Agents
+
+Use the following configuration to start Aria Agents locally. For VSCode, save it as `aria-agents/.vscode/launch.json`. Fill in `<JWT_SECRET>` with your JWT secret and `<API_KEY>` with your OpenAI API key (or get a new one at the [[https://platform.openai.com/account/api-keys][OpenAI API keys dashboard]]). If you do not have a JWT secret, any integer will do. To run the configuration in VSCode, select it as a debug configuration under "Run and debug" and run.
+
+```
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: start-server",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "aria_agents",
+            "justMyCode": false,
+            "env": {
+                "JWT_SECRET": "<JWT_SECRET>",
+                "OPENAI_API_KEY": "<API_KEY>",
+                "OPENAI_API_MODEL": "gpt-4o",
+                "BIOIMAGEIO_DEBUG": "true",
+    
+            },
+            "args": [
+                "start-server",
+                "--port=9527",
+                "--login-required"
+            ]
+        },
+    ]
+}
 ```
