@@ -5,6 +5,7 @@ const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, Artefa
 
 function App() {
     const [question, setQuestion] = useState("");
+    const [attachments, setAttachments] = useState([]);
     const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
@@ -40,6 +41,8 @@ function App() {
 
     const handleAttachment = async (event) => {
         const file = event.target.files[0];
+        setAttachments([...attachments, file]);
+        setStatus(`📎 Attached file: ${file.name}. ${attachments.length + 1} files in total.`);
         await uploadAttachment(file);
     };
 
@@ -162,6 +165,25 @@ function App() {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
     };
 
+    const readFileContent = async (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(file);
+        });
+    };
+
+    const getAttachmentContents = async (attachments) => {
+        try {
+            const contents = await Promise.all(attachments.map(attachment => readFileContent(attachment)));
+            return contents.join('\n[NEW FILE]\n');
+        } catch (error) {
+            setStatus('Error reading file contents: ', error);
+            return null;
+        }
+    };
+
     const handleSend = async () => {
         if (!svc) {
             await handleLogin();
@@ -169,7 +191,8 @@ function App() {
         }
     
         if (question.trim()) {
-            const currentQuestion = question;
+            const attachmentContents = await getAttachmentContents(attachments);
+            const currentQuestion = question + (attachmentContents ? `\n\n[ATTACHED FILES BELOW]\n ${attachmentContents}` : '');
             const newChatHistory = [
                 ...chatHistory,
                 { role: "user", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
