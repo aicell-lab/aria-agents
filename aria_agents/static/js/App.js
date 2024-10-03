@@ -9,7 +9,6 @@ function App() {
     const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
-    const [chatCompleted, setChatCompleted] = useState(false)
     const [dataStore, setDataStore] = useState(null);
     const [status, setStatus] = useState("Please log in before sending a message.");
     const [showProfileDialog, setShowProfileDialog] = useState(false);
@@ -230,7 +229,7 @@ function App() {
                                 isSending={isSending}
                             />
                         )}
-                        {chatCompleted && chatHistory.size > 0 && (
+                        {/* {!isSending && chatHistory.size > 0 && (
                             <ChatInput
                                 onLogin={handleLogin}
                                 question={question}
@@ -239,7 +238,7 @@ function App() {
                                 svc={svc}
                                 placeholder=""
                             />
-                        )}
+                        )} */}
                     </div>
                 </div>
             </div>
