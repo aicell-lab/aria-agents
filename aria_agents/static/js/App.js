@@ -5,10 +5,11 @@ const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, Artefa
 
 function App() {
     const [question, setQuestion] = useState("");
-    const [attachments, setAttachments] = useState([]);
+    const [attachmentNamesIds, setAttachmentNamesIds] = useState([]);
     const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
+    const [chatCompleted, setChatCompleted] = useState(false)
     const [dataStore, setDataStore] = useState(null);
     const [status, setStatus] = useState("Please log in before sending a message.");
     const [showProfileDialog, setShowProfileDialog] = useState(false);
@@ -41,16 +42,20 @@ function App() {
 
     const handleAttachment = async (event) => {
         const file = event.target.files[0];
-        setAttachments([...attachments, file]);
-        setStatus(`📎 Attached file: ${file.name}. ${attachments.length + 1} files in total.`);
-        await uploadAttachment(file);
+        const fileId = await uploadAttachment(file);
+        setStatus(`📎 Attached file: ${file.name}. ${attachmentNamesIds.length + 1} files in total.`);
+        const attachmentNameId = {
+            file_name: file.name,
+            file_id: fileId
+        }
+        setAttachmentNamesIds([...attachmentNamesIds, attachmentNameId]);
     };
 
     const uploadAttachment = async (file) => {
         const fileBytes = await file.arrayBuffer();
         const byteArray = new Uint8Array(fileBytes);
         
-        const fileId = await dataStore.put('file', byteArray, 'chat_attachment');
+        const fileId = await dataStore.put('file', byteArray, file.name);
 
         addItemToLocalStorageArr('attachments', {
             'value': file.name,
@@ -165,25 +170,6 @@ function App() {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
     };
 
-    const readFileContent = async (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(reader.error);
-            reader.readAsText(file);
-        });
-    };
-
-    const getAttachmentContents = async (attachments) => {
-        try {
-            const contents = await Promise.all(attachments.map(attachment => readFileContent(attachment)));
-            return contents.join('\n[NEW FILE]\n');
-        } catch (error) {
-            setStatus('Error reading file contents: ', error);
-            return null;
-        }
-    };
-
     const handleSend = async () => {
         if (!svc) {
             await handleLogin();
@@ -191,8 +177,7 @@ function App() {
         }
     
         if (question.trim()) {
-            const attachmentContents = await getAttachmentContents(attachments);
-            const currentQuestion = question + (attachmentContents ? `\n\n[ATTACHED FILES BELOW]\n ${attachmentContents}` : '');
+            const currentQuestion = question
             const newChatHistory = [
                 ...chatHistory,
                 { role: "user", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
@@ -208,8 +193,8 @@ function App() {
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
                 const extensions = [{ id: "aria" }];
-                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions);
-                setStatus("Ready to chat! Type your message and press enter!");
+                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions, attachmentNamesIds);
+                setStatus("Ready to chat! Type your message and press enter!"); 
             } catch (e) {
                 setStatus(`❌ Error: ${e.message || e}`);
             } finally {
@@ -245,7 +230,7 @@ function App() {
                                 isSending={isSending}
                             />
                         )}
-                        {/* {!isSending && chatHistory.size > 0 && (
+                        {chatCompleted && chatHistory.size > 0 && (
                             <ChatInput
                                 onLogin={handleLogin}
                                 question={question}
@@ -254,7 +239,7 @@ function App() {
                                 svc={svc}
                                 placeholder=""
                             />
-                        )} */}
+                        )}
                     </div>
                 </div>
             </div>
