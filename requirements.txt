@@ -1,3 +1,4 @@
+schema-agents @ git+ssh://git@github.com/aicell-lab/schema-agents@114bf65
 imjoy-rpc==0.5.48.post2
 requests==2.31.0
 pypdf==4.2.0
@@ -20,6 +21,6 @@ rank-bm25==0.2.2
 html2text==2020.1.16
 setuptools==70.0.0
 PyYAML==6.0.1
-llama_index==0.10.43
-llama-index-readers-papers==0.1.6
+llama_index==0.11.14
+llama-index-readers-papers==0.2.0
 ipdb
