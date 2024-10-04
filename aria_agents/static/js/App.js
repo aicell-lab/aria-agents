@@ -176,7 +176,7 @@ function App() {
         }
     
         if (question.trim()) {
-            const currentQuestion = question
+            const currentQuestion = question;
             const newChatHistory = [
                 ...chatHistory,
                 { role: "user", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
@@ -193,7 +193,7 @@ function App() {
                 });
                 const extensions = [{ id: "aria" }];
                 await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions, attachmentNamesIds);
-                setStatus("Ready to chat! Type your message and press enter!"); 
+                setStatus("Ready to chat! Type your message and press enter!");
             } catch (e) {
                 setStatus(`❌ Error: ${e.message || e}`);
             } finally {
