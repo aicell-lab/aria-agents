@@ -21,6 +21,7 @@ function App() {
     const [currentArtefactIndex, setCurrentArtefactIndex] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
     const [isSending, setIsSending] = useState(false);
+    const [isChatComplete, setIsChatComplete] = useState(false);
 
     useEffect(() => {
         // Automatically generate a session ID
@@ -165,6 +166,10 @@ function App() {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
     };
 
+    const finishedCallback = () => {
+        setIsChatComplete(true);
+    }
+
     const handleSend = async () => {
         if (!svc) {
             await handleLogin();
@@ -172,6 +177,7 @@ function App() {
         }
     
         if (question.trim()) {
+            setIsChatComplete(false);
             const currentQuestion = question;
             const newChatHistory = [
                 ...chatHistory,
@@ -188,7 +194,7 @@ function App() {
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
                 const extensions = [{ id: "aria" }];
-                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions);
+                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, finishedCallback, sessionId, extensions);
                 setStatus("Ready to chat! Type your message and press enter!");
             } catch (e) {
                 setStatus(`❌ Error: ${e.message || e}`);
@@ -225,16 +231,17 @@ function App() {
                                 isSending={isSending}
                             />
                         )}
-                        {/* {!isSending && chatHistory.size > 0 && (
+                        {isChatComplete && chatHistory.size > 0 && (
                             <ChatInput
                                 onLogin={handleLogin}
                                 question={question}
                                 setQuestion={setQuestion}
                                 handleSend={handleSend}
                                 svc={svc}
-                                placeholder=""
+                                handleAttachment={handleAttachment}
+                                placeholder="Type what you want to study"
                             />
-                        )} */}
+                        )}
                     </div>
                 </div>
             </div>
