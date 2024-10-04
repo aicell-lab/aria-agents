@@ -20,7 +20,7 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                     </button>
                     <input
                         type="file"
-                        accept=".csv, .xls, .xlsx"
+                        accept=".csv, .xls, .tsv, .xlsx"
                         onChange={handleAttachment}
                         className="mt-2"
                     />
