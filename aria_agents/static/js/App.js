@@ -83,8 +83,8 @@ function App() {
         const { type, session: { id, role_setting: roleSetting }, status, content, arguments: args, name, query_id } = message;
         const { name: roleName, icon: roleIcon } = roleSetting || {};
         
-        const headerStartInProgress = marked(`### ⏳ Calling tool 🛠️ \`${name}\`...\n\n`);
-        const headerFinished = marked(`### Tool 🛠️ \`${name}\`\n\n`);
+        const headerStartInProgress = marked(`### ⏳ Calling tool 🛠️ \`${name}\`...`);
+        const headerFinished = marked(`### Tool 🛠️ \`${name}\``);
     
         if (status === 'start') {
             // Initialize new message entry in chat history
@@ -95,7 +95,8 @@ function App() {
                     icon: roleIcon || '🤖',
                     toolName: name,
                     accumulatedArgs: '',
-                    content: headerStartInProgress,
+                    title: headerStartInProgress,
+                    content: "",
                     status: 'in_progress',
                 });
                 return updatedHistory;
@@ -108,9 +109,10 @@ function App() {
                 if (lastMessage) {
                     lastMessage.accumulatedArgs += (args || "").replace(/\n/g, ''); // Accumulate arguments
                     if (name === 'SummaryWebsite') {
-                        lastMessage.content = 'Generating summary website...';
+                        lastMessage.title = 'Generating summary website...';
                     } else {
-                        lastMessage.content = headerStartInProgress + `<div>${lastMessage.accumulatedArgs}</div>`;
+                        lastMessage.title = headerStartInProgress
+                        lastMessage.content = `<div>${lastMessage.accumulatedArgs}</div>`;
                     }
                     updatedHistory.set(query_id, lastMessage);
                 }
@@ -140,7 +142,8 @@ function App() {
                     } else {
                         let finalContent = (content || jsonToMarkdown(args) || "");
                         finalContent = modifyLinksToOpenInNewTab(marked(completeCodeBlocks(finalContent)));
-                        lastMessage.content = headerFinished + finalContent;
+                        lastMessage.title = headerFinished
+                        lastMessage.content = finalContent;
                     }
                     lastMessage.status = 'finished';
                     updatedHistory.set(query_id, lastMessage);
@@ -172,7 +175,7 @@ function App() {
             const currentQuestion = question;
             const newChatHistory = [
                 ...chatHistory,
-                { role: "user", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
+                { role: "user", title: "", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
             ];
             setChatHistory(new Map(newChatHistory.map((item, index) => [index.toString(), item])));
             setQuestion("");

@@ -4,13 +4,20 @@ function ChatHistory({ chatHistory, isSending }) {
 
     // Helper function to determine if the icon is an emoji
     const isEmoji = (icon) => /^[\p{Emoji}]+$/u.test(icon);
+    
+    // Convert chatHistory Map to an array
+    const chatArray = Array.from(chatHistory.values());
+    
+    // State to track collapsible visibility for each message
+    const [expandedMessages, setExpandedMessages] = React.useState(chatArray.map(() => false));
 
-    // State to track collapsible visibility
-    const [isExpanded, setIsExpanded] = React.useState(false);
-
-    // Function to toggle collapsible content
-    const toggleContent = () => {
-        setIsExpanded(!isExpanded);
+    // Function to toggle collapsible content for a specific message
+    const toggleContent = (index) => {
+        setExpandedMessages((prevState) => {
+            const newState = [...prevState];
+            newState[index] = !newState[index];
+            return newState;
+        });
     };
 
     // Helper function to render individual chat messages
@@ -37,7 +44,34 @@ function ChatHistory({ chatHistory, isSending }) {
                     </>
                 )}
             </div>
-            <div className="bg-gray-100 p-3 rounded mb-2 markdown-body" dangerouslySetInnerHTML={{ __html: chat.content }}></div>
+            <div className="bg-gray-100 p-3 rounded mb-2">
+                {chat.role !== "user" && (
+                    <>
+                        <div className="bg-gray-100 markdown-body" dangerouslySetInnerHTML={{ __html: chat.title }}></div>
+                        {chat.role !== "Aria" &&
+                        <div
+                            className="collapsible"
+                            onClick={() => toggleContent(index)}
+                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                        >
+                            <span
+                                className="arrow"
+                                style={{
+                                    marginRight: '10px',
+                                    transition: 'transform 0.3s ease',
+                                    transform: expandedMessages[index] ? 'rotate(90deg)' : 'rotate(0deg)'
+                                }}
+                            >
+                                ▶
+                            </span>
+                            <span>{expandedMessages[index] ? "Hide details" : "Show more details"}</span>
+                        </div>}
+                    </>
+                )}
+                {(expandedMessages[index] || chat.role === "user" || chat.role === "Aria") && (
+                    <div className="bg-gray-100 markdown-body" dangerouslySetInnerHTML={{ __html: chat.content }}></div>
+                )}
+            </div>
             {isSending && chat.status === 'in_progress' && (
                 <div className="absolute inset-0 flex items-center justify-center">
                     <div className="spinner"></div>
@@ -46,30 +80,11 @@ function ChatHistory({ chatHistory, isSending }) {
         </div>
     );
 
-    // Get all chat entries as an array
-    const chatArray = [...chatHistory.values()];
-
     return (
         <div className="mt-4">
-            {chatArray.length > 0 && renderChatMessage(chatArray[0], 0)}
-
-            {chatArray.length > 1 && (
-                <>
-                    <div className="collapsible" onClick={toggleContent} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                        <span className="arrow" style={{ marginRight: '10px', transition: 'transform 0.3s ease', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-                        <span>{isExpanded ? "Hide chat history" : "Show more chat history"}</span>
-                    </div>
-
-                    {isExpanded && (
-                        <div className="collapsible-content" style={{ paddingLeft: '20px', marginTop: '10px' }}>
-                            {chatArray.slice(1, -1).map((chat, index) => renderChatMessage(chat, index + 1))}
-                        </div>
-                    )}
-                </>
-            )}
-
-            {chatArray.length > 1 && renderChatMessage(chatArray[chatArray.length - 1], chatArray.length - 1)}
-
+            <div style={{ paddingLeft: '20px', marginTop: '10px' }}>
+                {chatArray.map((chat, index) => renderChatMessage(chat, index))}
+            </div>
         </div>
     );
 }
