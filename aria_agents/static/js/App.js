@@ -5,7 +5,7 @@ const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, Artefa
 
 function App() {
     const [question, setQuestion] = useState("");
-    const [attachmentNamesIds, setAttachmentNamesIds] = useState([]);
+    const [attachmentStatePrompts, setAttachmentStatePrompts] = useState([]);
     const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
@@ -42,12 +42,10 @@ function App() {
     const handleAttachment = async (event) => {
         const file = event.target.files[0];
         const fileId = await uploadAttachment(file);
-        setStatus(`📎 Attached file: ${file.name}. ${attachmentNamesIds.length + 1} files in total.`);
-        const attachmentNameId = {
-            file_name: file.name,
-            file_id: fileId
-        }
-        setAttachmentNamesIds([...attachmentNamesIds, attachmentNameId]);
+        const fileUrl = await dataStore.getUrl(fileId);
+        setStatus(`📎 Attached file: ${file.name}. ${attachmentStatePrompts.length + 1} files in total.`);
+        const fileStatePrompt = `The file ${file.name} is available at the URL ${fileUrl}`
+        setAttachmentStatePrompts([...attachmentStatePrompts, fileStatePrompt]);
     };
 
     const uploadAttachment = async (file) => {
@@ -177,6 +175,7 @@ function App() {
     
         if (question.trim()) {
             const currentQuestion = question;
+            const joinedStatePrompt = attachmentStatePrompts.join(". ");
             const newChatHistory = [
                 ...chatHistory,
                 { role: "user", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
@@ -192,7 +191,7 @@ function App() {
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
                 const extensions = [{ id: "aria" }];
-                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions, attachmentNamesIds);
+                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions, joinedStatePrompt);
                 setStatus("Ready to chat! Type your message and press enter!");
             } catch (e) {
                 setStatus(`❌ Error: ${e.message || e}`);

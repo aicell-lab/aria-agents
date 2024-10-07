@@ -50,12 +50,6 @@ class UserProfile(BaseModel):
     occupation: str = Field(description="The user's occupation.", max_length=128)
     background: str = Field(description="The user's background.", max_length=256)
 
-class AttachmentNameId(BaseModel):
-    """A file that has been attached to the user's prompt. This will be used to inform the response to the user."""
-    
-    file_name: str = Field(description="The name of the attached file", max_length=256)
-    file_id: str = Field(description="The ID of the attached file", max_length=64)
-
 class QuestionWithHistory(BaseModel):
     """The user's question, chat history, and user's profile."""
 
@@ -70,9 +64,9 @@ class QuestionWithHistory(BaseModel):
     chatbot_extensions: Optional[List[Dict[str, Any]]] = Field(
         None, description="Chatbot extensions."
     )
-    attachment_names_ids: Optional[List[AttachmentNameId]] = Field(
+    state_prompt: Optional[str] = Field(
         None,
-        description="Attachment file names and their IDs."
+        description="Names and URLs of files uploaded by the user."
     )
     context: Optional[Dict[str, Any]] = Field(
         None, description="The context of request."
@@ -104,7 +98,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         steps = []
         inputs = (
             [question_with_history.user_profile]
-            + list(question_with_history.attachment_names_ids)
+            + [question_with_history.state_prompt]
             + list(question_with_history.chat_history)
             + [question_with_history.question]
         )
@@ -420,7 +414,7 @@ async def register_chat_service(server):
         artefact_callback=None,
         session_id=None,
         extensions=None,
-        attachment_names_ids=None,
+        state_prompt=None,
         assistant_name="Aria",
         context=None,
     ):
@@ -456,7 +450,7 @@ async def register_chat_service(server):
             chat_history=chat_history,
             user_profile=UserProfile.model_validate(user_profile),
             chatbot_extensions=extensions,
-            attachment_names_ids=attachment_names_ids,
+            state_prompt=state_prompt,
             context=context,
         )
 
