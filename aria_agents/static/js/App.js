@@ -180,7 +180,7 @@ function App() {
             setIsChatComplete(false);
             const currentQuestion = question;
             const newChatHistory = [
-                ...chatHistory,
+                ...chatHistory.values(),
                 { role: "user", title: "", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
             ];
             setChatHistory(new Map(newChatHistory.map((item, index) => [index.toString(), item])));
@@ -190,7 +190,8 @@ function App() {
     
             try {
                 const currentChatHistory = Array.from(chatHistory.values()).map(chat => {
-                    const { role, content, ...rest } = chat;
+                    let { role, content, ...rest } = chat;
+                    role = role.toString() === "user" ? "user" : "assistant";
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
                 const extensions = [{ id: "aria" }];
