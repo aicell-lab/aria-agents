@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aria-agents
+description: A Helm chart for deploying the Aria Agents service.
+type: application
+version: 0.1.0
+appVersion: "latest"

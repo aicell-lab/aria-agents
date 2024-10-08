@@ -1,0 +1,24 @@
+replicaCount: 1
+
+image:
+  repository: your-docker-repo/aria-agents
+  pullPolicy: Always
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 9520
+
+resources: {}
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+env:
+  - name: WORKSPACE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: aria-agents-secrets
+        key: WORKSPACE_TOKEN
