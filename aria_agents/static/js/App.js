@@ -22,6 +22,7 @@ function App() {
     const [currentArtefactIndex, setCurrentArtefactIndex] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
     const [isSending, setIsSending] = useState(false);
+    const [isChatComplete, setIsChatComplete] = useState(false);
 
     useEffect(() => {
         // Automatically generate a session ID
@@ -88,8 +89,8 @@ function App() {
         const { type, session: { id, role_setting: roleSetting }, status, content, arguments: args, name, query_id } = message;
         const { name: roleName, icon: roleIcon } = roleSetting || {};
         
-        const headerStartInProgress = marked(`### ⏳ Calling tool 🛠️ \`${name}\`...\n\n`);
-        const headerFinished = marked(`### Tool 🛠️ \`${name}\`\n\n`);
+        const headerStartInProgress = marked(`### ⏳ Calling tool 🛠️ \`${name}\`...`);
+        const headerFinished = marked(`### Tool 🛠️ \`${name}\``);
     
         if (status === 'start') {
             // Initialize new message entry in chat history
@@ -100,7 +101,8 @@ function App() {
                     icon: roleIcon || '🤖',
                     toolName: name,
                     accumulatedArgs: '',
-                    content: headerStartInProgress,
+                    title: headerStartInProgress,
+                    content: "",
                     status: 'in_progress',
                 });
                 return updatedHistory;
@@ -113,9 +115,10 @@ function App() {
                 if (lastMessage) {
                     lastMessage.accumulatedArgs += (args || "").replace(/\n/g, ''); // Accumulate arguments
                     if (name === 'SummaryWebsite') {
-                        lastMessage.content = 'Generating summary website...';
+                        lastMessage.title = 'Generating summary website...';
                     } else {
-                        lastMessage.content = headerStartInProgress + `<div>${lastMessage.accumulatedArgs}</div>`;
+                        lastMessage.title = headerStartInProgress
+                        lastMessage.content = `<div>${lastMessage.accumulatedArgs}</div>`;
                     }
                     updatedHistory.set(query_id, lastMessage);
                 }
@@ -145,7 +148,8 @@ function App() {
                     } else {
                         let finalContent = (content || jsonToMarkdown(args) || "");
                         finalContent = modifyLinksToOpenInNewTab(marked(completeCodeBlocks(finalContent)));
-                        lastMessage.content = headerFinished + finalContent;
+                        lastMessage.title = headerFinished
+                        lastMessage.content = finalContent;
                     }
                     lastMessage.status = 'finished';
                     updatedHistory.set(query_id, lastMessage);
@@ -167,6 +171,10 @@ function App() {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
     };
 
+    const finishedCallback = () => {
+        setIsChatComplete(true);
+    }
+
     const handleSend = async () => {
         if (!svc) {
             await handleLogin();
@@ -174,11 +182,12 @@ function App() {
         }
     
         if (question.trim()) {
+            setIsChatComplete(false);
             const currentQuestion = question;
             const joinedStatePrompt = attachmentStatePrompts.join(". ");
             const newChatHistory = [
-                ...chatHistory,
-                { role: "user", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
+                ...chatHistory.values(),
+                { role: "user", title: "", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
             ];
             setChatHistory(new Map(newChatHistory.map((item, index) => [index.toString(), item])));
             setQuestion("");
@@ -187,11 +196,12 @@ function App() {
     
             try {
                 const currentChatHistory = Array.from(chatHistory.values()).map(chat => {
-                    const { role, content, ...rest } = chat;
+                    let { role, content, ...rest } = chat;
+                    role = role.toString() === "user" ? "user" : "assistant";
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
                 const extensions = [{ id: "aria" }];
-                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions, joinedStatePrompt);
+                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, finishedCallback, sessionId, extensions, joinedStatePrompt);
                 setStatus("Ready to chat! Type your message and press enter!");
             } catch (e) {
                 setStatus(`❌ Error: ${e.message || e}`);
@@ -228,16 +238,17 @@ function App() {
                                 isSending={isSending}
                             />
                         )}
-                        {/* {!isSending && chatHistory.size > 0 && (
+                        {isChatComplete && chatHistory.size > 0 && (
                             <ChatInput
                                 onLogin={handleLogin}
                                 question={question}
                                 setQuestion={setQuestion}
                                 handleSend={handleSend}
                                 svc={svc}
-                                placeholder=""
+                                handleAttachment={handleAttachment}
+                                placeholder="Type what you want to study"
                             />
-                        )} */}
+                        )}
                     </div>
                 </div>
             </div>

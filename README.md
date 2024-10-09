@@ -14,8 +14,6 @@ conda create -n aria-agents python=3.10.13
 conda activate aria-agents
 ```
 
-Make sure you have access to the repo `schema-agents` as it is a dependency of Aria Agents.
-
 ### Install dependencies
 
 ```
@@ -25,7 +23,7 @@ pip install -e .
 
 ### Running Aria Agents
 
-Use the following configuration to start Aria Agents locally. For VSCode, save it as `aria-agents/.vscode/launch.json`. Fill in `<JWT_SECRET>` with your JWT secret and `<API_KEY>` with your OpenAI API key (or get a new one at the [[https://platform.openai.com/account/api-keys][OpenAI API keys dashboard]]). If you do not have a JWT secret, any integer will do. To run the configuration in VSCode, select it as a debug configuration under "Run and debug" and run.
+Use the following configuration to start Aria Agents locally. For VSCode, save it as `aria-agents/.vscode/launch.json`. Fill in `<JWT_SECRET>` with your JWT secret and `<API_KEY>` with your OpenAI API key (or get a new one at the [OpenAI API keys dashboard](https://platform.openai.com/account/api-keys). If you do not have a JWT secret, any integer will do. To run the configuration in VSCode, select it as a debug configuration under "Run and debug" and press run.
 
 ```
 {
