@@ -4,42 +4,87 @@ function ChatHistory({ chatHistory, isSending }) {
 
     // Helper function to determine if the icon is an emoji
     const isEmoji = (icon) => /^[\p{Emoji}]+$/u.test(icon);
+    
+    // Convert chatHistory Map to an array
+    const chatArray = Array.from(chatHistory.values());
+    
+    // State to track collapsible visibility for each message
+    const [expandedMessages, setExpandedMessages] = React.useState(chatArray.map(() => false));
+
+    // Function to toggle collapsible content for a specific message
+    const toggleContent = (index) => {
+        setExpandedMessages((prevState) => {
+            const newState = [...prevState];
+            newState[index] = !newState[index];
+            return newState;
+        });
+    };
+
+    // Helper function to render individual chat messages
+    const renderChatMessage = (chat, index) => (
+        <div key={index} className="mb-4 relative">
+            <div className="text-gray-800 font-semibold flex items-center">
+                {chat.role === "user" ? (
+                    <>
+                        <span className="icon-emoji">👤</span>
+                        <span className="ml-1">You</span>
+                    </>
+                ) : (
+                    <>
+                        {isEmoji(chat.icon) ? (
+                            <span className="icon-emoji">{chat.icon}</span>
+                        ) : (
+                            <img
+                                src={chat.icon}
+                                alt={chat.role}
+                                className="w-7 h-7"
+                            />
+                        )}
+                        <span className="ml-1">{chat.role}</span>
+                    </>
+                )}
+            </div>
+            <div className="bg-gray-100 p-3 rounded mb-2">
+                {chat.role !== "user" && (
+                    <>
+                        <div className="bg-gray-100 markdown-body" dangerouslySetInnerHTML={{ __html: chat.title }}></div>
+                        {chat.role !== "Aria" &&
+                        <div
+                            className="collapsible"
+                            onClick={() => toggleContent(index)}
+                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                        >
+                            <span
+                                className="arrow"
+                                style={{
+                                    marginRight: '10px',
+                                    transition: 'transform 0.3s ease',
+                                    transform: expandedMessages[index] ? 'rotate(90deg)' : 'rotate(0deg)'
+                                }}
+                            >
+                                ▶
+                            </span>
+                            <span>{expandedMessages[index] ? "Hide details" : "Show more details"}</span>
+                        </div>}
+                    </>
+                )}
+                {(expandedMessages[index] || chat.role === "user" || chat.role === "Aria") && (
+                    <div className="bg-gray-100 markdown-body" dangerouslySetInnerHTML={{ __html: chat.content }}></div>
+                )}
+            </div>
+            {isSending && chat.status === 'in_progress' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="spinner"></div>
+                </div>
+            )}
+        </div>
+    );
 
     return (
         <div className="mt-4">
-            {[...chatHistory.values()].map((chat, index, array) => (
-                <div key={index} className="mb-4 relative">
-                    {index === 0 || array[index - 1].role !== chat.role ? (
-                        <div className="text-gray-800 font-semibold flex items-center">
-                            {chat.role === "user" ? (
-                                <>
-                                    <span className="icon-emoji">👤</span>
-                                    <span className="ml-1">You</span>
-                                </>
-                            ) : (
-                                <>
-                                    {isEmoji(chat.icon) ? (
-                                        <span className="icon-emoji">{chat.icon}</span>
-                                    ) : (
-                                        <img 
-                                            src={chat.icon}
-                                            alt={chat.role}
-                                            className="w-7 h-7"
-                                        />
-                                    )}
-                                    <span className="ml-1">{chat.role}</span>
-                                </>
-                            )}
-                        </div>
-                    ) : null}
-                    <div className="bg-gray-100 p-3 rounded mb-2 markdown-body" dangerouslySetInnerHTML={{ __html: chat.content }}></div>
-                    {isSending && chat.status === 'in_progress' && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="spinner"></div>
-                        </div>
-                    )}
-                </div>
-            ))}
+            <div style={{ paddingLeft: '20px', marginTop: '10px' }}>
+                {chatArray.map((chat, index) => renderChatMessage(chat, index))}
+            </div>
         </div>
     );
 }

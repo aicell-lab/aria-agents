@@ -319,6 +319,7 @@ async def register_chat_service(server):
         user_message: QuestionWithHistory,
         status_callback,
         artefact_callback,
+        finished_callback,
         user,
         cross_assistant=False,
     ):
@@ -400,6 +401,7 @@ async def register_chat_service(server):
             chat_log_full_path = os.path.join(chat_logs_path, filename)
             await save_chat_history(chat_log_full_path, chat_his_dict)
             print(f"Chat history saved to {filename}")
+            await finished_callback()
         return response.model_dump()
 
     async def chat(
@@ -408,6 +410,7 @@ async def register_chat_service(server):
         user_profile=None,
         status_callback=None,
         artefact_callback=None,
+        finished_callback=None,
         session_id=None,
         extensions=None,
         assistant_name="Aria",
@@ -454,6 +457,7 @@ async def register_chat_service(server):
             m,
             status_callback,
             artefact_callback,
+            finished_callback,
             context.get("user"),
             cross_assistant,
         )
