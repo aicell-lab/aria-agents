@@ -66,7 +66,7 @@ class QuestionWithHistory(BaseModel):
     )
     state_prompt: Optional[str] = Field(
         None,
-        description="Names and URLs of files uploaded by the user."
+        description="The state of the user's interface, including attachments uploaded by the user."
     )
     context: Optional[Dict[str, Any]] = Field(
         None, description="The context of request."
