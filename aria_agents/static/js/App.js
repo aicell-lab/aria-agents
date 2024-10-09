@@ -43,7 +43,7 @@ function App() {
     const handleAttachment = async (event) => {
         const file = event.target.files[0];
         const fileId = await uploadAttachment(file);
-        const fileUrl = await dataStore.getUrl(fileId);
+        const fileUrl = await dataStore.get_url(fileId);
         setStatus(`📎 Attached file: ${file.name}. ${attachmentStatePrompts.length + 1} files in total.`);
         const fileStatePrompt = `The file ${file.name} is available at the URL ${fileUrl}`
         setAttachmentStatePrompts([...attachmentStatePrompts, fileStatePrompt]);
