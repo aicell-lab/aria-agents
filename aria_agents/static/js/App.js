@@ -41,14 +41,27 @@ function App() {
     };
 
     const handleAttachment = async (event) => {
-        const file = event.target.files[0];
-        const fileId = await uploadAttachment(file);
-        const fileUrl = await dataStore.get_url(fileId);
-        setStatus(`📎 Attached file: ${file.name}. ${attachmentStatePrompts.length + 1} files in total.`);
-        const fileStatePrompt = `The file ${file.name} is available at the URL ${fileUrl}`
-        setAttachmentStatePrompts([...attachmentStatePrompts, fileStatePrompt]);
-    };
-
+        const files = event.target.files || event.dataTransfer.files;
+    
+        const newAttachmentPrompts = [];
+        let attachmentCount = attachmentStatePrompts.length;
+    
+        for (const file of files) {
+            try {
+                const fileId = await uploadAttachment(file);
+                const fileUrl = await dataStore.get_url(fileId);
+                // Format the file info in markdown format
+                newAttachmentPrompts.push(`\n- **${file.name}**, available at: [${fileUrl}](${fileUrl})`);
+                attachmentCount++;
+            } catch (error) {
+                console.error(`Error uploading ${file.name}:`, error);
+            }
+        }
+    
+        setStatus(`📎 Attached ${newAttachmentPrompts.length} new file(s). ${attachmentCount} files in total.`);
+        setAttachmentStatePrompts([...attachmentStatePrompts, ...newAttachmentPrompts]);
+    };    
+    
     const uploadAttachment = async (file) => {
         const fileBytes = await file.arrayBuffer();
         const byteArray = new Uint8Array(fileBytes);

@@ -1,5 +1,30 @@
 function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholder, handleAttachment }) {
 
+    // Function to handle drag-and-drop file selection
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleAttachment(e);
+            e.dataTransfer.clearData();
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDragEnter = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
     return (
         <div className="mb-4 flex flex-col items-center">
             <input
@@ -18,11 +43,24 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                     >
                         Send ✈️
                     </button>
-                    <input
-                        type="file"
-                        onChange={handleAttachment}
-                        className="mt-2"
-                    />
+                    <div
+                        onDrop={handleDrop}
+                        onDragOver={handleDragOver}
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        className="mt-2 p-4 border-2 border-dashed border-gray-300 rounded w-full text-center cursor-pointer hover:border-blue-500"
+                    >
+                        <input
+                            type="file"
+                            onChange={handleAttachment}
+                            className="hidden"
+                            multiple
+                            id="fileUpload"
+                        />
+                        <label htmlFor="fileUpload" className="cursor-pointer">
+                            Drag & drop files here, or <span className="text-blue-500 underline">click to browse</span>
+                        </label>
+                    </div>
                 </>
             ) : (
                 <button
