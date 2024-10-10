@@ -5,6 +5,11 @@ image:
   pullPolicy: Always
   tag: "latest"
 
+hypha:
+  server_url: "https://hypha.aicell.io"
+  workspace: "aria-agents"
+  login: true
+
 service:
   type: ClusterIP
   port: 9520
@@ -22,3 +27,10 @@ env:
       secretKeyRef:
         name: aria-agents-secrets
         key: WORKSPACE_TOKEN
+
+startupCommand:
+  args:
+    - "--server_url=https://hypha.aicell.io"
+    - "--workspace_name=aria-agents"
+    - "--client_id=kubernetes"
+    - "--service_id=aria-agents"
