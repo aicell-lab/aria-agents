@@ -1,6 +1,5 @@
 function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholder, handleAttachment }) {
 
-    // Function to handle drag-and-drop file selection
     const handleDrop = (e) => {
         e.preventDefault();
         e.stopPropagation();

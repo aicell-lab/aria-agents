@@ -50,7 +50,6 @@ function App() {
             try {
                 const fileId = await uploadAttachment(file);
                 const fileUrl = await dataStore.get_url(fileId);
-                // Format the file info in markdown format
                 newAttachmentPrompts.push(`\n- **${file.name}**, available at: [${fileUrl}](${fileUrl})`);
                 attachmentCount++;
             } catch (error) {
