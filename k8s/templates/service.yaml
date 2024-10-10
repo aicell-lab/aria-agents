@@ -3,13 +3,11 @@ kind: Service
 metadata:
   name: {{ include "aria-agents.fullname" . }}
   labels:
-    app: {{ include "aria-agents.name" . }}
+    app: {{ include "aria-agents.fullname" . }}
 spec:
   type: {{ .Values.service.type }}
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: 9520
-      protocol: TCP
-      name: http
+      targetPort: {{ .Values.service.port }}
   selector:
-    app: {{ include "aria-agents.name" . }}
+    app: {{ include "aria-agents.fullname" . }}

@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: your-docker-repo/aria-agents
+  repository: ghcr.io/aicell-lab/aria-agents
   pullPolicy: Always
   tag: "latest"
 
@@ -22,11 +22,14 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
 
 env:
-  - name: WORKSPACE_TOKEN
-    valueFrom:
-      secretKeyRef:
-        name: aria-agents-secrets
-        key: WORKSPACE_TOKEN
+  SERVER_URL: "https://hypha.aicell.io"
+  WORKSPACE_NAME: "aria-agents"
+  CLIENT_ID: "kubernetes"
+  SERVICE_ID: "aria-agents-service"
+  WORKSPACE_TOKEN:
+    secretKeyRef:
+      name: aria-agents-secrets
+      key: WORKSPACE_TOKEN
 
 startupCommand:
   args:
