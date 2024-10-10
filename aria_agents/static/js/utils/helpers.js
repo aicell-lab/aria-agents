@@ -88,7 +88,7 @@ function jsonToMarkdown(jsonStr) {
         const indent = '  '.repeat(indentLevel);
 
         for (const [key, value] of Object.entries(data)) {
-            if (typeof value === 'string' || value === null) {
+            if (['string', 'boolean', 'number'].includes(typeof value) || value === null) {
                 markdown += `${indent}- **${key}**: ${value === null ? 'null' : value}\n`;
             } else if (Array.isArray(value)) {
                 markdown += `${indent}- **${key}**:\n`;
@@ -111,7 +111,7 @@ function jsonToMarkdown(jsonStr) {
 
     for (const [key, value] of Object.entries(json)) {
         markdown += `#### ${key}\n`;
-        if (typeof value === 'string' || value === null) {
+        if (['string', 'boolean', 'number'].includes(typeof value) || value === null) {
             markdown += `- ${value === null ? 'null' : value}\n`;
         } else if (Array.isArray(value)) {
             value.forEach(item => {
