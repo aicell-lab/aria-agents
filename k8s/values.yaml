@@ -10,7 +10,8 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
-imagePullSecrets: []
+imagePullSecrets:
+  - name: ghcr-secret
 nameOverride: ""
 fullnameOverride: ""
 
@@ -87,11 +88,18 @@ env:
         key: HYPHA_ADMIN_TOKEN
 
 # Define command-line arguments here
+# startupCommand:
+#   args:
+#     - "--server_url=https://hypha.aicell.io"
+#     - "--workspace_name=ws-user-google-oauth2|104255278140940970953"
+#     - "--client_id=kubernetes"
+#     - "--service_id=aria-agents-service"
+
 startupCommand:
   args:
-    - "--server_url=https://hypha.aicell.io"
-    - "--workspace_name=ws-user-google-oauth2|104255278140940970953"
-    - "--client_id=kubernetes"
-    - "--service_id=aria-agents-service"
+    - "--server-url" 
+    - "https://hypha.aicell.io/ws-user-google-oauth2|104255278140940970953/services/kubernetes:aria-agents-service"
+    - "--login-required"
+
   
-testUrl: "https://hypha.aicell.io/aria-agents/services/kubernetes:aria-agents-service/hello"
+testUrl: "https://hypha.aicell.io/ws-user-google-oauth2|104255278140940970953/services/kubernetes:aria-agents-service/hello"

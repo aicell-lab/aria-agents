@@ -36,13 +36,22 @@ USER aria_agents
 # Expose the necessary port
 EXPOSE 9520
 
-# Entry point for registering the service to an existing Hypha server
-ENTRYPOINT ["python", "-m", "aria_agents", "register-service", "--server_url", "$SERVER_URL", "--workspace_name", "$WORKSPACE_NAME", "--client_id", "$CLIENT_ID", "--service_id", "$SERVICE_ID", "--ui_path", "/app/ui"]
+# Entry point for the application
+ENTRYPOINT ["python", "-m", "aria_agents", "connect-server"]
 
-# Start a new hypha server
-CMD python -m hypha_rpc.utils.serve main:app \
-     --id=aria-agents-service \
-     --name="Aria Agents Service" \
-     --server-url=https://hypha.aicell.io \
-     --workspace=aria-agents \
-     --login
+# Set default command to run connect-server with default arguments
+# CMD ["connect-server", "--server-url", "${SERVER_URL}", "--login-required"]
+
+# # Entry point for registering the service to an existing Hypha server
+# ENTRYPOINT ["python", "-m", "aria_agents", "connect-server"]
+
+# # Set default command to run, allowing for environment variables
+# CMD ["--server_url", "${SERVER_URL}", "--workspace_name", "${WORKSPACE_NAME}", "--client_id", "${CLIENT_ID}", "--service_id", "${SERVICE_ID}", "--ui_path", "/app/ui"]
+
+# # Start a new hypha server
+# CMD python -m hypha_rpc.utils.serve main:app \
+#      --id=aria-agents-service \
+#      --name="Aria Agents Service" \
+#      --server-url=https://hypha.aicell.io \
+#      --workspace=aria-agents \
+#      --login
