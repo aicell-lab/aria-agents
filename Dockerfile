@@ -17,8 +17,14 @@ RUN pip install --upgrade pip
 # Copy the repository to the image
 COPY . /app/
 
+# Create logs directory and set permissions
+RUN mkdir -p /app/logs && chown -R aria_agents:aria_agents /app
+
 # Set the working directory
 WORKDIR /app/
+
+# Add /app to the list of safe directories for Git
+RUN git config --global --add safe.directory /app
 
 # Remove all files matching .gitignore patterns and .git directory
 RUN git clean -fdX && rm -rf .git
@@ -38,20 +44,3 @@ EXPOSE 9520
 
 # Entry point for the application
 ENTRYPOINT ["python", "-m", "aria_agents", "connect-server"]
-
-# Set default command to run connect-server with default arguments
-# CMD ["connect-server", "--server-url", "${SERVER_URL}", "--login-required"]
-
-# # Entry point for registering the service to an existing Hypha server
-# ENTRYPOINT ["python", "-m", "aria_agents", "connect-server"]
-
-# # Set default command to run, allowing for environment variables
-# CMD ["--server_url", "${SERVER_URL}", "--workspace_name", "${WORKSPACE_NAME}", "--client_id", "${CLIENT_ID}", "--service_id", "${SERVICE_ID}", "--ui_path", "/app/ui"]
-
-# # Start a new hypha server
-# CMD python -m hypha_rpc.utils.serve main:app \
-#      --id=aria-agents-service \
-#      --name="Aria Agents Service" \
-#      --server-url=https://hypha.aicell.io \
-#      --workspace=aria-agents \
-#      --login
