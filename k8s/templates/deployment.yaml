@@ -1,36 +1,64 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: aria-agents
+  name: {{ include "aria-agents.fullname" . }}
+  labels:
+    {{- include "aria-agents.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
-      app: aria-agents
+      {{- include "aria-agents.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
-        app: aria-agents
+        {{- include "aria-agents.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
+      {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
-        - name: ghcr-secret
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aria-agents.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: aria-agents
-          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
-          ports:
-            - containerPort: 9520
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            {{- toYaml .Values.startupCommand.args | nindent 12 }}
           env:
-            - name: SERVER_URL
-              value: "{{ .Values.hypha.server_url }}"          # Correct reference to the server URL
-            - name: WORKSPACE_NAME
-              value: "{{ .Values.hypha.workspace }}"           # Correct reference to workspace name
-            - name: CLIENT_ID
-              value: "{{ .Values.CLIENT_ID }}"                  # Ensure CLIENT_ID is defined in values.yaml
-            - name: SERVICE_ID
-              value: "{{ .Values.SERVICE_ID }}"                 # Ensure SERVICE_ID is defined in values.yaml
-            - name: WORKSPACE_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: aria-agents-secrets                    # Reference to the secret
-                  key: WORKSPACE_TOKEN                          # Ensure the key exists in the secret
-          command: ["python", "-m", "hypha_rpc.utils.serve", "main:app", "--id=aria-agents-service", "--name=Aria Agents Service", "--server-url={{ .Values.hypha.server_url }}", "--workspace={{ .Values.hypha.workspace }}", "--login"]  # Use Helm templating for server-url and workspace
+            {{- toYaml .Values.env | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
