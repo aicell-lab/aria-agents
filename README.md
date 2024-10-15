@@ -38,7 +38,7 @@ Use the following configuration to start Aria Agents locally. For VSCode, save i
             "env": {
                 "JWT_SECRET": "<JWT_SECRET>",
                 "OPENAI_API_KEY": "<API_KEY>",
-                "OPENAI_API_MODEL": "gpt-4o",
+                "OPENAI_API_MODEL": "gpt-4o-2024-08-06",
                 "BIOIMAGEIO_DEBUG": "true",
     
             },
