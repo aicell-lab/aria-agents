@@ -86,6 +86,11 @@ env:
       secretKeyRef:
         name: hypha-secrets
         key: HYPHA_ADMIN_TOKEN
+  - name: OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: hypha-secrets
+        key: OPENAI_API_KEY
 
 # Define command-line arguments here
 # startupCommand:
@@ -98,7 +103,7 @@ env:
 startupCommand:
   args:
     - "--server-url" 
-    - "https://hypha.aicell.io/ws-user-google-oauth2|104255278140940970953/services/kubernetes:aria-agents-service"
+    - "https://hypha.aicell.io"
     - "--login-required"
 
   

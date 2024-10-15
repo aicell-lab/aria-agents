@@ -14,14 +14,16 @@ RUN groupadd -r aria_agents && useradd -r -g aria_agents aria_agents
 # Upgrade pip
 RUN pip install --upgrade pip
 
-# Copy the repository to the image
-COPY . /app/
-
-# Create logs directory and set permissions
-RUN mkdir -p /app/logs && chown -R aria_agents:aria_agents /app
-
 # Set the working directory
 WORKDIR /app/
+
+# Copy the repository to the image
+COPY . .
+
+# Create logs directory and set permissions for /app and /app/logs
+RUN mkdir -p /app/logs && \
+    chmod 777 /app /app/logs && \
+    chown -R aria_agents:aria_agents /app /app/logs
 
 # Add /app to the list of safe directories for Git
 RUN git config --global --add safe.directory /app
@@ -32,9 +34,6 @@ RUN git clean -fdX && rm -rf .git
 # Install the required Python packages
 RUN pip install -r requirements.txt
 RUN pip install fastapi hypha_rpc uvicorn .
-
-# Change ownership of the application directory to the non-root user
-RUN chown -R aria_agents:aria_agents /app/
 
 # Switch to the non-root user
 USER aria_agents
