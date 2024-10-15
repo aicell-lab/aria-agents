@@ -166,7 +166,7 @@ function App() {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
     };
 
-    const finishedCallback = () => {
+    const finishedCallback = async () => {
         setIsChatComplete(true);
     }
 
@@ -195,7 +195,8 @@ function App() {
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
                 const extensions = [{ id: "aria" }];
-                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, finishedCallback, sessionId, extensions);
+                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions);
+                await finishedCallback()
                 setStatus("Ready to chat! Type your message and press enter!");
             } catch (e) {
                 setStatus(`❌ Error: ${e.message || e}`);
