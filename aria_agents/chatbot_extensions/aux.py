@@ -36,7 +36,7 @@ class SummaryWebsite(BaseModel):
 class SuggestedStudy(BaseModel):
     """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge"""
 
-    user_request: str = Field(description="The original user request")
+    user_request: str = Field(description="The original user request. This MUST be included.")
     experiment_name: str = Field(description="The name of the experiment")
     experiment_material: List[str] = Field(
         description="The materials required for the experiment"
