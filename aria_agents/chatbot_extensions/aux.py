@@ -83,7 +83,7 @@ class SuggestedStudy(BaseModel):
 
 class PMCQuery(BaseModel):
     """
-    A plain-text query formatted according to the NCBI search syntax. The query must include:
+    A plain-text query in a single-key dict formatted according to the NCBI search syntax. The query must include:
 
     1. Exact Match Terms: Enclose search terms in double quotes for precise matches. For example, `"lung cancer"` searches for the exact phrase "lung cancer".
 
