@@ -25,7 +25,7 @@ async function getService(token, ping = true) {
 async function getServiceWithId(token, serviceId, ping = false) {
     const serverUrl = getServerUrl();
     console.log("service ID: ", serviceId);
-    const server = await hyphaWebsocketClient.connectToServer({ "server_url": serverUrl, "token": token });
+    const server = await hyphaWebsocketClient.connectToServer({ "server_url": serverUrl, "token": token, "method_timeout": 1000 });
     const svc = await server.getService(serviceId || "public/workspace-manager:aria-agents");
     
     if (ping) {
