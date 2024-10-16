@@ -23,15 +23,16 @@ def start_server(args):
     ]
     subprocess.run(command)
 
-def connect_server(args):
+def connect_to_server(args):
     from aria_agents.chatbot import connect_server
     if args.login_required:
         os.environ["BIOIMAGEIO_LOGIN_REQUIRED"] = "true"
     else:
         os.environ["BIOIMAGEIO_LOGIN_REQUIRED"] = "false"
     server_url = args.server_url
+    client_id = args.client_id
     loop = asyncio.get_event_loop()
-    loop.create_task(connect_server(server_url))
+    loop.create_task(connect_server(server_url, client_id))
     loop.run_forever()
 
 
@@ -52,7 +53,8 @@ def main():
     parser_connect_server = subparsers.add_parser("connect-server")
     parser_connect_server.add_argument("--server-url", default="https://ai.imjoy.io")
     parser_connect_server.add_argument("--login-required", action="store_true")
-    parser_connect_server.set_defaults(func=connect_server)
+    parser_connect_server.add_argument("--client-id", default="aria-agents")
+    parser_connect_server.set_defaults(func=connect_to_server)
 
     
     args = parser.parse_args()
