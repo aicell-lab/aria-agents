@@ -58,6 +58,7 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                     </div>
                 </div>
             )}
+
             {svc ? (
                 <>
                     <div
@@ -65,7 +66,8 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                         onDragOver={handleDragOver}
                         onDragEnter={handleDragEnter}
                         onDragLeave={handleDragLeave}
-                        className="mt-2 p-4 border-2 border-dashed border-gray-300 rounded w-full text-center cursor-pointer hover:border-blue-500"
+                        className="mb-2 p-4 border-2 border-dashed border-gray-300 rounded w-full text-center cursor-pointer hover:border-blue-500"
+                        onClick={() => document.getElementById('fileUpload').click()}
                     >
                         <input
                             type="file"
@@ -75,7 +77,7 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                             id="fileUpload"
                         />
                         <label htmlFor="fileUpload" className="cursor-pointer">
-                            Drag & drop files here, or <span className="text-blue-500 underline">click to browse</span>
+                            Drag & drop files here, or click to browse
                         </label>
                     </div>
                     <button
