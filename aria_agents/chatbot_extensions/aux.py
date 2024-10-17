@@ -36,7 +36,7 @@ class SummaryWebsite(BaseModel):
 class SuggestedStudy(BaseModel):
     """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge"""
 
-    user_request: str = Field(description="The original user request")
+    user_request: str = Field(description="The original user request. This MUST be included.")
     experiment_name: str = Field(description="The name of the experiment")
     experiment_material: List[str] = Field(
         description="The materials required for the experiment"
@@ -83,7 +83,7 @@ class SuggestedStudy(BaseModel):
 
 class PMCQuery(BaseModel):
     """
-    A plain-text query formatted according to the NCBI search syntax. The query must include:
+    A plain-text query in a single-key dict formatted according to the NCBI search syntax. The query must include:
 
     1. Exact Match Terms: Enclose search terms in double quotes for precise matches. For example, `"lung cancer"` searches for the exact phrase "lung cancer".
 
@@ -97,7 +97,7 @@ class PMCQuery(BaseModel):
 
     Example Query: 
     ```
-    "lung cancer"[Title/Abstract] AND ("mouse"[Title/Abstract] OR "monkey"[Title/Abstract]) AND "Bio-protocol"[journal] AND "open access"[filter]
+    {'query': '"lung cancer"[Title/Abstract] AND ("mouse"[Title/Abstract] OR "monkey"[Title/Abstract]) AND "Bio-protocol"[journal] AND "open access"[filter]'}
     ```
     """
 

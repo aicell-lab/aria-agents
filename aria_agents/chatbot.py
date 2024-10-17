@@ -50,7 +50,6 @@ class UserProfile(BaseModel):
     occupation: str = Field(description="The user's occupation.", max_length=128)
     background: str = Field(description="The user's background.", max_length=256)
 
-
 class QuestionWithHistory(BaseModel):
     """The user's question, chat history, and user's profile."""
 
@@ -64,6 +63,10 @@ class QuestionWithHistory(BaseModel):
     )
     chatbot_extensions: Optional[List[Dict[str, Any]]] = Field(
         None, description="Chatbot extensions."
+    )
+    state_prompt: Optional[str] = Field(
+        None,
+        description="The state of the user's interface, including attachments uploaded by the user."
     )
     context: Optional[Dict[str, Any]] = Field(
         None, description="The context of request."
@@ -95,6 +98,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         steps = []
         inputs = (
             [question_with_history.user_profile]
+            + [question_with_history.state_prompt]
             + list(question_with_history.chat_history)
             + [question_with_history.question]
         )
@@ -325,7 +329,6 @@ async def register_chat_service(server):
         user_message: QuestionWithHistory,
         status_callback,
         artefact_callback,
-        finished_callback,
         user,
         cross_assistant=False,
     ):
@@ -407,7 +410,6 @@ async def register_chat_service(server):
             chat_log_full_path = os.path.join(chat_logs_path, filename)
             await save_chat_history(chat_log_full_path, chat_his_dict)
             print(f"Chat history saved to {filename}")
-            await finished_callback()
         return response.model_dump()
 
     async def chat(
@@ -416,9 +418,9 @@ async def register_chat_service(server):
         user_profile=None,
         status_callback=None,
         artefact_callback=None,
-        finished_callback=None,
         session_id=None,
         extensions=None,
+        state_prompt=None,
         assistant_name="Aria",
         context=None,
     ):
@@ -454,6 +456,7 @@ async def register_chat_service(server):
             chat_history=chat_history,
             user_profile=UserProfile.model_validate(user_profile),
             chatbot_extensions=extensions,
+            state_prompt=state_prompt,
             context=context,
         )
 
@@ -463,7 +466,6 @@ async def register_chat_service(server):
             m,
             status_callback,
             artefact_callback,
-            finished_callback,
             context.get("user"),
             cross_assistant,
         )

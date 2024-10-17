@@ -5,6 +5,7 @@ const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, Artefa
 
 function App() {
     const [question, setQuestion] = useState("");
+    const [attachmentStatePrompts, setAttachmentStatePrompts] = useState([]);
     const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
@@ -40,15 +41,31 @@ function App() {
     };
 
     const handleAttachment = async (event) => {
-        const file = event.target.files[0];
-        await uploadAttachment(file);
-    };
-
+        const files = event.target.files || event.dataTransfer.files;
+    
+        const newAttachmentPrompts = [];
+        let attachmentCount = attachmentStatePrompts.length;
+    
+        for (const file of files) {
+            try {
+                const fileId = await uploadAttachment(file);
+                const fileUrl = await dataStore.get_url(fileId);
+                newAttachmentPrompts.push(`- **${file.name}**, available at: [${fileUrl}](${fileUrl})`);
+                attachmentCount++;
+            } catch (error) {
+                console.error(`Error uploading ${file.name}:`, error);
+            }
+        }
+    
+        setStatus(`📎 Attached ${newAttachmentPrompts.length} new file(s). ${attachmentCount} files in total.`);
+        setAttachmentStatePrompts([...attachmentStatePrompts, ...newAttachmentPrompts]);
+    };    
+    
     const uploadAttachment = async (file) => {
         const fileBytes = await file.arrayBuffer();
         const byteArray = new Uint8Array(fileBytes);
         
-        const fileId = await dataStore.put('file', byteArray, 'chat_attachment');
+        const fileId = await dataStore.put('file', byteArray, file.name);
 
         addItemToLocalStorageArr('attachments', {
             'value': file.name,
@@ -166,10 +183,6 @@ function App() {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
     };
 
-    const finishedCallback = () => {
-        setIsChatComplete(true);
-    }
-
     const handleSend = async () => {
         if (!svc) {
             await handleLogin();
@@ -179,6 +192,7 @@ function App() {
         if (question.trim()) {
             setIsChatComplete(false);
             const currentQuestion = question;
+            const joinedStatePrompt = "User attached the following files to the current query:\n" + attachmentStatePrompts.join("\n");
             const newChatHistory = [
                 ...chatHistory.values(),
                 { role: "user", title: "", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
@@ -195,7 +209,8 @@ function App() {
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
                 const extensions = [{ id: "aria" }];
-                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, finishedCallback, sessionId, extensions);
+                await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions, joinedStatePrompt);
+                setIsChatComplete(true);
                 setStatus("Ready to chat! Type your message and press enter!");
             } catch (e) {
                 setStatus(`❌ Error: ${e.message || e}`);

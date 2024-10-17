@@ -25,7 +25,8 @@ async function getService(token, ping = true) {
 async function getServiceWithId(token, serviceId, ping = false) {
     const serverUrl = getServerUrl();
     console.log("service ID: ", serviceId);
-    const server = await hyphaWebsocketClient.connectToServer({ "server_url": serverUrl, "token": token });
+    // method_timeout: 500 (8.3 minutes) is arbitrary number. Must be at least a few minutes due to slow functions
+    const server = await hyphaWebsocketClient.connectToServer({ "server_url": serverUrl, "token": token, "method_timeout": 500 });
     const svc = await server.getService(serviceId || "public/workspace-manager:aria-agents");
     
     if (ping) {
@@ -88,8 +89,8 @@ function jsonToMarkdown(jsonStr) {
         const indent = '  '.repeat(indentLevel);
 
         for (const [key, value] of Object.entries(data)) {
-            if (typeof value === 'string' || value === null) {
-                markdown += `${indent}- **${key}**: ${value === null ? 'null' : value}\n`;
+            if (value === null) {
+                markdown += `${indent}- **${key}**: null\n`;
             } else if (Array.isArray(value)) {
                 markdown += `${indent}- **${key}**:\n`;
                 value.forEach(item => {
@@ -103,6 +104,9 @@ function jsonToMarkdown(jsonStr) {
                 markdown += `${indent}- **${key}**:\n`;
                 markdown += createListMarkdown(value, indentLevel + 1);
             }
+            else {
+                markdown += `${indent}- **${key}**: ${value}\n`;
+            }
         }
         return markdown;
     }
@@ -111,8 +115,8 @@ function jsonToMarkdown(jsonStr) {
 
     for (const [key, value] of Object.entries(json)) {
         markdown += `#### ${key}\n`;
-        if (typeof value === 'string' || value === null) {
-            markdown += `- ${value === null ? 'null' : value}\n`;
+        if (value === null) {
+            markdown += `- null\n`;
         } else if (Array.isArray(value)) {
             value.forEach(item => {
                 if (typeof item === 'object' && item !== null) {
@@ -123,6 +127,9 @@ function jsonToMarkdown(jsonStr) {
             });
         } else if (typeof value === 'object') {
             markdown += createListMarkdown(value, 1);
+        }
+        else {
+            markdown += `- ${value}\n`;
         }
         markdown += '\n';
     }
