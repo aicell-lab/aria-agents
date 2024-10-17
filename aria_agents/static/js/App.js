@@ -209,8 +209,7 @@ function App() {
             ];
 
             setIsChatComplete(false);
-            setAttachmentNames([])
-            setAttachmentStatePrompts([])
+            setAttachmentNames([]);
             setChatHistory(new Map(newChatHistory.map((item, index) => [index.toString(), item])));
             setQuestion("");
             setStatus("🤔 Thinking...");
@@ -218,7 +217,7 @@ function App() {
     
             try {
                 const currentChatHistory = Array.from(chatHistory.values()).map(chat => {
-                    let { role, content, ...rest } = chat;
+                    let { role, content, attachments, ...rest } = chat;
                     role = role.toString() === "user" ? "user" : "assistant";
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
