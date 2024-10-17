@@ -196,7 +196,7 @@ function App() {
         if (question.trim()) {
             setIsChatComplete(false);
             const currentQuestion = question;
-            const joinedStatePrompt = "User attached the following files to the current query:" + attachmentStatePrompts.join(". ");
+            const joinedStatePrompt = "User attached the following files to the current query:\n" + attachmentStatePrompts.join("\n");
             const newChatHistory = [
                 ...chatHistory.values(),
                 { role: "user", title: "", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
