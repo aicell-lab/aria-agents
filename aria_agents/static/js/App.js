@@ -194,13 +194,23 @@ function App() {
         }
     
         if (question.trim()) {
-            setIsChatComplete(false);
             const currentQuestion = question;
             const joinedStatePrompt = "User attached the following files to the current query:\n" + attachmentStatePrompts.join("\n");
             const newChatHistory = [
                 ...chatHistory.values(),
-                { role: "user", title: "", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
+                { 
+                    role: "user", 
+                    title: "", 
+                    content: marked(completeCodeBlocks(currentQuestion)), 
+                    sources: "", 
+                    image: "", 
+                    attachments: attachmentNames
+                }
             ];
+
+            setIsChatComplete(false);
+            setAttachmentNames([])
+            setAttachmentStatePrompts([])
             setChatHistory(new Map(newChatHistory.map((item, index) => [index.toString(), item])));
             setQuestion("");
             setStatus("🤔 Thinking...");
