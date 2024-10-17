@@ -50,7 +50,6 @@ class UserProfile(BaseModel):
     occupation: str = Field(description="The user's occupation.", max_length=128)
     background: str = Field(description="The user's background.", max_length=256)
 
-
 class QuestionWithHistory(BaseModel):
     """The user's question, chat history, and user's profile."""
 
@@ -64,6 +63,10 @@ class QuestionWithHistory(BaseModel):
     )
     chatbot_extensions: Optional[List[Dict[str, Any]]] = Field(
         None, description="Chatbot extensions."
+    )
+    state_prompt: Optional[str] = Field(
+        None,
+        description="The state of the user's interface, including attachments uploaded by the user."
     )
     context: Optional[Dict[str, Any]] = Field(
         None, description="The context of request."
@@ -95,6 +98,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         steps = []
         inputs = (
             [question_with_history.user_profile]
+            + [question_with_history.state_prompt]
             + list(question_with_history.chat_history)
             + [question_with_history.question]
         )
@@ -410,6 +414,7 @@ async def register_chat_service(server):
         artefact_callback=None,
         session_id=None,
         extensions=None,
+        state_prompt=None,
         assistant_name="Aria",
         context=None,
     ):
@@ -445,6 +450,7 @@ async def register_chat_service(server):
             chat_history=chat_history,
             user_profile=UserProfile.model_validate(user_profile),
             chatbot_extensions=extensions,
+            state_prompt=state_prompt,
             context=context,
         )
 
