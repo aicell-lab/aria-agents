@@ -6,6 +6,7 @@ const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, Artefa
 function App() {
     const [question, setQuestion] = useState("");
     const [attachmentStatePrompts, setAttachmentStatePrompts] = useState([]);
+    const [attachmentNames, setAttachmentNames] = useState([]);
     const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
@@ -44,6 +45,7 @@ function App() {
         const files = event.target.files || event.dataTransfer.files;
     
         const newAttachmentPrompts = [];
+        const newAttachmentNames = [];
         let attachmentCount = attachmentStatePrompts.length;
     
         for (const file of files) {
@@ -51,6 +53,7 @@ function App() {
                 const fileId = await uploadAttachment(file);
                 const fileUrl = await dataStore.get_url(fileId);
                 newAttachmentPrompts.push(`- **${file.name}**, available at: [${fileUrl}](${fileUrl})`);
+                newAttachmentNames.push(file.name);
                 attachmentCount++;
             } catch (error) {
                 console.error(`Error uploading ${file.name}:`, error);
@@ -59,6 +62,7 @@ function App() {
     
         setStatus(`📎 Attached ${newAttachmentPrompts.length} new file(s). ${attachmentCount} files in total.`);
         setAttachmentStatePrompts([...attachmentStatePrompts, ...newAttachmentPrompts]);
+        setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
     };    
     
     const uploadAttachment = async (file) => {
@@ -220,6 +224,23 @@ function App() {
         }
     };
 
+    const undoAttach = (index) => {
+        // Create a copy of the current arrays
+        const updatedAttachments = [...attachmentStatePrompts];
+        const updatedAttachmentNames = [...attachmentNames];
+        
+        // Remove the specified file by index
+        updatedAttachments.splice(index, 1);
+        updatedAttachmentNames.splice(index, 1);
+        
+        // Update the state with the modified arrays
+        setAttachmentStatePrompts(updatedAttachments);
+        setAttachmentNames(updatedAttachmentNames);
+        
+        // Update status message to reflect the change
+        setStatus(`📎 Removed 1 file. ${updatedAttachments.length} files remaining.`);
+    };
+
     return (
         <div className="min-h-screen flex flex-col">
             <div className="flex-1 flex">
@@ -235,6 +256,8 @@ function App() {
                                 handleSend={handleSend}
                                 svc={svc}
                                 handleAttachment={handleAttachment}
+                                attachmentNames={attachmentNames}
+                                undoAttach={undoAttach}
                                 placeholder="Type what you want to study"
                             />
                         )}
@@ -255,6 +278,8 @@ function App() {
                                 handleSend={handleSend}
                                 svc={svc}
                                 handleAttachment={handleAttachment}
+                                attachmentNames={attachmentNames}
+                                undoAttach={undoAttach}
                                 placeholder="Type what you want to study"
                             />
                         )}

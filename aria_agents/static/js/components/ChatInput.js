@@ -1,4 +1,4 @@
-function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholder, handleAttachment }) {
+function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholder, handleAttachment, attachmentNames, undoAttach }) {
 
     const handleDrop = (e) => {
         e.preventDefault();
@@ -34,14 +34,32 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                 className="w-full p-3 border border-gray-300 rounded mb-2 text-lg"
                 onKeyPress={(e) => e.key === 'Enter' && handleSend()}
             />
+            {attachmentNames.length > 0 && (
+                <div className="mb-2 w-full">
+                    <div className="flex flex-wrap gap-2">
+                        {attachmentNames.map((fileName, index) => (
+                            <div 
+                                key={index} 
+                                className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md flex items-center cursor-pointer hover:scale-105 transition-transform duration-150 ease-in-out"
+                                onClick={() => undoAttach(index)}
+                            >
+                                <span>{fileName}</span>
+                                <button
+                                    className="text-gray-500 ml-2"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        undoAttach(index);
+                                    }}
+                                >
+                                    x
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
             {svc ? (
                 <>
-                    <button
-                        onClick={handleSend}
-                        className="button w-full"
-                    >
-                        Send ✈️
-                    </button>
                     <div
                         onDrop={handleDrop}
                         onDragOver={handleDragOver}
@@ -60,6 +78,12 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                             Drag & drop files here, or <span className="text-blue-500 underline">click to browse</span>
                         </label>
                     </div>
+                    <button
+                        onClick={handleSend}
+                        className="button w-full"
+                    >
+                        Send ✈️
+                    </button>
                 </>
             ) : (
                 <button
@@ -71,8 +95,8 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                 </button>
             )}
         </div>
-    )
-};
+    );
+}
 
 // Expose ChatInput globally
 window.ChatInput = ChatInput;
