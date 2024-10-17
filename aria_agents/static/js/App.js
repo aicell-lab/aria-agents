@@ -166,10 +166,6 @@ function App() {
         setArtefacts(prevArtefacts => [...prevArtefacts, { artefact, url }]);
     };
 
-    const finishedCallback = async () => {
-        setIsChatComplete(true);
-    }
-
     const handleSend = async () => {
         if (!svc) {
             await handleLogin();
@@ -196,7 +192,7 @@ function App() {
                 });
                 const extensions = [{ id: "aria" }];
                 await svc.chat(currentQuestion, currentChatHistory, userProfile, statusCallback, artefactCallback, sessionId, extensions);
-                await finishedCallback()
+                setIsChatComplete(true);
                 setStatus("Ready to chat! Type your message and press enter!");
             } catch (e) {
                 setStatus(`❌ Error: ${e.message || e}`);
