@@ -223,7 +223,7 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
 async def connect_server(server_url, client_id):
     """Connect to the server and register the chat service."""
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
-    provided_token = os.environ.get("HYPHA_ADMIN_TOKEN")
+    provided_token = os.environ.get("WORKSPACE_TOKEN")
     workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
     
     if login_required:
