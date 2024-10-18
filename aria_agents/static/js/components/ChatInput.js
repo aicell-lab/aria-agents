@@ -17,7 +17,7 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                             <div className="flex flex-wrap gap-2">
                                 {attachmentNames.map((fileName, index) => (
                                     <div 
-                                        key={fileName}
+                                        key={fileName + index}
                                         className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md flex items-center cursor-pointer hover:scale-105 transition-transform duration-300 ease-in-out"
                                         onClick={() => undoAttach(index)}
                                         style={{ transition: 'transform 0.3s, opacity 0.3s' }}
