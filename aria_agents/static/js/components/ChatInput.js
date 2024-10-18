@@ -14,7 +14,7 @@ function ChatInput({ onLogin, question, setQuestion, handleSend, svc, placeholde
                 <>
                     {attachmentNames.length > 0 ? (
                         <div className="mb-2 w-full">
-                            <div className="flex flex-wrap gap-2 transition-all duration-300">
+                            <div className="flex flex-wrap gap-2">
                                 {attachmentNames.map((fileName, index) => (
                                     <div 
                                         key={fileName}
