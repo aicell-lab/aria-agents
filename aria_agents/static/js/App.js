@@ -60,7 +60,6 @@ function App() {
             }
         }
     
-        setStatus(`📎 Attached ${newAttachmentPrompts.length} new file(s). ${attachmentCount} files in total.`);
         setAttachmentStatePrompts([...attachmentStatePrompts, ...newAttachmentPrompts]);
         setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
     };    
@@ -233,28 +232,50 @@ function App() {
         }
     };
 
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleAttachment(e);
+            e.dataTransfer.clearData();
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDragEnter = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
     const undoAttach = (index) => {
-        // Create a copy of the current arrays
         const updatedAttachments = [...attachmentStatePrompts];
         const updatedAttachmentNames = [...attachmentNames];
         
-        // Remove the specified file by index
         updatedAttachments.splice(index, 1);
         updatedAttachmentNames.splice(index, 1);
         
-        // Update the state with the modified arrays
         setAttachmentStatePrompts(updatedAttachments);
-        setAttachmentNames(updatedAttachmentNames);
-        
-        // Update status message to reflect the change
-        setStatus(`📎 Removed 1 file. ${updatedAttachments.length} files remaining.`);
+        setAttachmentNames(updatedAttachmentNames);        
     };
 
     return (
         <div className="min-h-screen flex flex-col">
             <div className="flex-1 flex">
                 <Sidebar onEditProfile={() => setShowProfileDialog(true)} />
-                <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'}`}>
+                <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'}`}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}>
                     <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-3xl">
                         <h1 className="text-3xl font-bold mb-4 text-center">🚀 Great science starts here</h1>
                         {chatHistory.size === 0 && (
