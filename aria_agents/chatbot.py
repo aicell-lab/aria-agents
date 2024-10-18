@@ -501,8 +501,6 @@ async def register_chat_service(server):
         }
     )
 
-    server_info = await server.get_connection_info()
-
     server_url = server.config["public_base_url"]
 
     service_id = hypha_service_info["id"]
