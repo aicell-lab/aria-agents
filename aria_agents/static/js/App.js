@@ -257,6 +257,7 @@ function App() {
     };
 
     const undoAttach = (index) => {
+        const attachmentName = attachmentNames[index];
         const updatedAttachments = [...attachmentStatePrompts];
         const updatedAttachmentNames = [...attachmentNames];
         
@@ -264,7 +265,8 @@ function App() {
         updatedAttachmentNames.splice(index, 1);
         
         setAttachmentStatePrompts(updatedAttachments);
-        setAttachmentNames(updatedAttachmentNames);        
+        setAttachmentNames(updatedAttachmentNames);
+        setStatus(`📎 Removed ${attachmentName}`);       
     };
 
     return (
