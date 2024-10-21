@@ -34,16 +34,20 @@ config_file = os.path.join(this_dir, "config.json")
 with open(config_file, "r") as file:
     CONFIG = json.load(file)
 
-def read_df(file_path : str) -> pd.DataFrame:
+async def read_df(file_path : str) -> pd.DataFrame:
     ext = os.path.splitext(file_path)[1]
     if ext == ".csv":
         return pd.read_csv(file_path)
     elif ext == ".tsv":
         return pd.read_csv(file_path, sep='\t')
     elif ext == ".xlsx":
-        return pd.read_excel(file_path)
+        return pd.read_excel(file_path, engine='python')
     else:
-        raise ValueError(f"Unsupported file format ({ext}): {file_path}")
+        try:
+            # auto-detect the delimiter using Python's built-in csv module sniffer
+            return pd.read_csv(file_path, sep=None)
+        except Exception as e:
+            raise ValueError(f"Unable to open file {file_path} as tabular file")
     
 def is_data_file(file_path : str) -> bool:
     if not os.path.isfile(file_path):
@@ -72,10 +76,10 @@ def get_data_files(data_folder: str) -> List[str]:
     data_listdir = os.listdir(data_folder)
     all_data_paths = [os.path.join(data_folder, data_item) for data_item in data_listdir]    
     data_files = filter(is_data_file, all_data_paths)
-    
     return data_files
 
-def get_pai_agent(data_files: List[str], save_charts_path: str) -> PaiAgent:
+async def get_pai_agent(data_files: List[str], save_charts_path: str) -> PaiAgent:
+    return "I have returned the agent"
     dataframes = [read_df(file_path) for file_path in data_files]
     pai_llm = PaiOpenAI()
     pai_agent_config = {
@@ -88,15 +92,54 @@ def get_pai_agent(data_files: List[str], save_charts_path: str) -> PaiAgent:
     pai_agent = PaiAgent(dataframes, config = pai_agent_config, memory_size = 25)
     return pai_agent
 
-def create_analyzer_function(data_store: HyphaDataStore = None) -> Callable:
 
+from concurrent.futures import ThreadPoolExecutor
+
+def create_explore_data_test(data_store : HyphaDataStore = None) -> Callable:
     @schema_tool
-    async def analyze_data_files(
-        user_request : str = Field(
-            description="A user request to analyze data files generated from a scientific experiment",
+    async def explore_data_test(
+        plot_request : str = Field(
+            description="A request to plot a basic chart",
+        ),
+        data_files : List[str] = Field(
+            description="List of filepaths/urls of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
         ),
         project_name : str = Field(
             description="The name of the project, used to create a folder to store the output files",
+        ),
+    ) -> Dict[str, str]: 
+        """Analyzes or explores data files provided from the user"""
+        project_folder, data_folder, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
+        data_files_dfs = [read_df(file_path) for file_path in data_files]
+        # pai_agent = await get_pai_agent(data_files_dfs, project_folder)
+        response = "The first line of the file is `hello world!`. The files read in are: " + str(data_files)
+        explanation = "Pandasai was used to analyze the data"
+        # response = pai_agent.chat(plot_request)
+        # response = pai_agent.run(plot_request)
+        # explanation = pai_agent.explain()
+
+        return {
+            "response" : response,
+            "explanation" : explanation
+        }
+    return explore_data_test
+
+        
+
+def create_analyzer_function(data_store: HyphaDataStore = None) -> Callable:
+    @schema_tool
+    async def analyze_data_files(
+        # user_request : str = Field(
+        #     description="A user request to analyze data files generated from a scientific experiment",
+        # ),
+        data_request : str = Field(
+            description="A very specific question to ask of the data that can be answered by a series of Python commmands, for example `How many rows are in the first dataframe?`",
+        ),
+        project_name : str = Field(
+            description="The name of the project, used to create a folder to store the output files",
+        ),
+        data_files : List[str] = Field(
+            description="List of filepaths/urls of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
         ),
         constraints : str = Field(
             "",
@@ -104,14 +147,18 @@ def create_analyzer_function(data_store: HyphaDataStore = None) -> Callable:
         ),
     ) -> Dict[str, str]: 
         """Analyzes the data files generated from a scientific experiment using a recruited AI agent that has access to the files.
-        Files must be in tabular (csv, tsv, excel) format. 
+        Files must be in tabular (csv, tsv, excel, txt) format. 
         Returns the response and explanation from the agent."""
         
         project_folder, data_folder, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
-        data_files = get_data_files(data_folder)
-        pai_agent = get_pai_agent(data_files, project_folder)
+        
+        # data_files = get_data_files(data_folder)
+        # print('heres the data files') # gkreder
+        # print([x for x in data_files]) # gkreder
 
-        response = pai_agent.chat(user_request)
+        pai_agent = get_pai_agent(data_files, project_folder)
+        # response = pai_agent.chat(user_request)
+        response = pai_agent.chat(data_request)
         explanation = pai_agent.explain()
 
         return {
