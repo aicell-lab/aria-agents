@@ -154,3 +154,6 @@ bioimageio-knowledge-base/
 chat_logs
 authorized_users.json
 .pypirc
+# pixi environments
+.pixi
+*.egg-info
