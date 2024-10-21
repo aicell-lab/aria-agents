@@ -6,6 +6,7 @@ const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, Artefa
 function App() {
     const [question, setQuestion] = useState("");
     const [attachmentStatePrompts, setAttachmentStatePrompts] = useState([]);
+    const [attachmentNames, setAttachmentNames] = useState([]);
     const [chatHistory, setChatHistory] = useState(new Map());
     const [svc, setSvc] = useState(null);
     const [sessionId, setSessionId] = useState(null);
@@ -44,6 +45,7 @@ function App() {
         const files = event.target.files || event.dataTransfer.files;
     
         const newAttachmentPrompts = [];
+        const newAttachmentNames = [];
         let attachmentCount = attachmentStatePrompts.length;
     
         for (const file of files) {
@@ -51,14 +53,15 @@ function App() {
                 const fileId = await uploadAttachment(file);
                 const fileUrl = await dataStore.get_url(fileId);
                 newAttachmentPrompts.push(`- **${file.name}**, available at: [${fileUrl}](${fileUrl})`);
+                newAttachmentNames.push(file.name);
                 attachmentCount++;
             } catch (error) {
                 console.error(`Error uploading ${file.name}:`, error);
             }
         }
     
-        setStatus(`📎 Attached ${newAttachmentPrompts.length} new file(s). ${attachmentCount} files in total.`);
         setAttachmentStatePrompts([...attachmentStatePrompts, ...newAttachmentPrompts]);
+        setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
     };    
     
     const uploadAttachment = async (file) => {
@@ -190,13 +193,22 @@ function App() {
         }
     
         if (question.trim()) {
-            setIsChatComplete(false);
             const currentQuestion = question;
             const joinedStatePrompt = "User attached the following files to the current query:\n" + attachmentStatePrompts.join("\n");
             const newChatHistory = [
                 ...chatHistory.values(),
-                { role: "user", title: "", content: marked(completeCodeBlocks(currentQuestion)), sources: "", image: "" }
+                { 
+                    role: "user", 
+                    title: "", 
+                    content: marked(completeCodeBlocks(currentQuestion)), 
+                    sources: "", 
+                    image: "", 
+                    attachments: attachmentNames
+                }
             ];
+
+            setIsChatComplete(false);
+            setAttachmentNames([]);
             setChatHistory(new Map(newChatHistory.map((item, index) => [index.toString(), item])));
             setQuestion("");
             setStatus("🤔 Thinking...");
@@ -204,7 +216,7 @@ function App() {
     
             try {
                 const currentChatHistory = Array.from(chatHistory.values()).map(chat => {
-                    let { role, content, ...rest } = chat;
+                    let { role, content, attachments, ...rest } = chat;
                     role = role.toString() === "user" ? "user" : "assistant";
                     return { ...rest, role: role.toString(), content: content.toString() };
                 });
@@ -220,11 +232,52 @@ function App() {
         }
     };
 
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleAttachment(e);
+            e.dataTransfer.clearData();
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDragEnter = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const undoAttach = (index) => {
+        const attachmentName = attachmentNames[index];
+        const updatedAttachments = [...attachmentStatePrompts];
+        const updatedAttachmentNames = [...attachmentNames];
+        
+        updatedAttachments.splice(index, 1);
+        updatedAttachmentNames.splice(index, 1);
+        
+        setAttachmentStatePrompts(updatedAttachments);
+        setAttachmentNames(updatedAttachmentNames);
+        setStatus(`📎 Removed ${attachmentName}`);       
+    };
+
     return (
         <div className="min-h-screen flex flex-col">
             <div className="flex-1 flex">
                 <Sidebar onEditProfile={() => setShowProfileDialog(true)} />
-                <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'}`}>
+                <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'}`}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragEnter={handleDragEnter}
+                    onDragLeave={handleDragLeave}>
                     <div className="bg-white shadow-md rounded-lg p-6 w-full max-w-3xl">
                         <h1 className="text-3xl font-bold mb-4 text-center">🚀 Great science starts here</h1>
                         {chatHistory.size === 0 && (
@@ -235,6 +288,8 @@ function App() {
                                 handleSend={handleSend}
                                 svc={svc}
                                 handleAttachment={handleAttachment}
+                                attachmentNames={attachmentNames}
+                                undoAttach={undoAttach}
                                 placeholder="Type what you want to study"
                             />
                         )}
@@ -255,6 +310,8 @@ function App() {
                                 handleSend={handleSend}
                                 svc={svc}
                                 handleAttachment={handleAttachment}
+                                attachmentNames={attachmentNames}
+                                undoAttach={undoAttach}
                                 placeholder="Type what you want to study"
                             />
                         )}

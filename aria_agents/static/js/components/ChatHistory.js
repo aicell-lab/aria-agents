@@ -2,16 +2,11 @@ function ChatHistory({ chatHistory, isSending }) {
     const { marked } = window;
     const { completeCodeBlocks } = window.helpers;
 
-    // Helper function to determine if the icon is an emoji
     const isEmoji = (icon) => /^[\p{Emoji}]+$/u.test(icon);
     
-    // Convert chatHistory Map to an array
     const chatArray = Array.from(chatHistory.values());
-    
-    // State to track collapsible visibility for each message
     const [expandedMessages, setExpandedMessages] = React.useState(chatArray.map(() => false));
 
-    // Function to toggle collapsible content for a specific message
     const toggleContent = (index) => {
         setExpandedMessages((prevState) => {
             const newState = [...prevState];
@@ -20,7 +15,6 @@ function ChatHistory({ chatHistory, isSending }) {
         });
     };
 
-    // Helper function to render individual chat messages
     const renderChatMessage = (chat, index) => (
         <div key={index} className="mb-4 relative">
             <div className="text-gray-800 font-semibold flex items-center">
@@ -70,6 +64,15 @@ function ChatHistory({ chatHistory, isSending }) {
                 )}
                 {(expandedMessages[index] || chat.role === "user" || chat.role === "Aria") && (
                     <div className="bg-gray-100 markdown-body" dangerouslySetInnerHTML={{ __html: chat.content }}></div>
+                )}
+                {chat.role === "user" && chat.attachments && chat.attachments.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        {chat.attachments.map((fileName, fileIndex) => (
+                            <div key={fileIndex} className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md">
+                                <span>{fileName}</span>
+                            </div>
+                        ))}
+                    </div>
                 )}
             </div>
             {isSending && chat.status === 'in_progress' && (
