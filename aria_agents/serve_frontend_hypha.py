@@ -29,9 +29,10 @@ async def serve_fastapi(args, context=None):
 
 async def main():
     workspace_token = os.environ.get("WORKSPACE_TOKEN")
+    server_url = "https://hypha.aicell.io"
 
     server = await connect_to_server({
-        "server_url": "https://hypha.aicell.io",
+        "server_url": server_url,
         "workspace": "aria-agents",
         "client_id": "frontend",
         "token": workspace_token
@@ -45,6 +46,9 @@ async def main():
         "config": {"visibility": "public"}
     })
 
-    print(f"Access your app at: {server.config.workspace}/apps/{svc_info['id'].split(':')[1]}")
+    print(f"Access your app at: {server_url}/{server.config.workspace}/apps/{svc_info['id'].split(':')[1]}")
     
     await server.serve()
+    
+if __name__ == "__main__":
+    asyncio.run(main())
