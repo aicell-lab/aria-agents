@@ -258,8 +258,6 @@ async def serve_frontend(server, service_id):
         "serve": serve_fastapi,
         "config": {"visibility": "public"}
     })
-    
-    await server.serve()
 
 async def register_chat_service(server):
     """Hypha startup function."""
@@ -521,9 +519,7 @@ async def register_chat_service(server):
     )
     
     frontend_service_id = "aria-agents-chat"
-    print("Before serving")
     await serve_frontend(server, frontend_service_id)
-    print("After serving")
 
     server_url = server.config["public_base_url"]
     
@@ -533,7 +529,7 @@ async def register_chat_service(server):
     ):
         print(f"To test the Aria Assistant locally, visit: {server_url}/chat")
     else:
-        print(f"Access your app at: {server_url}/{server.config.workspace}/apps/{frontend_service_id.split(':')[1]}")
+        print(f"Access your app at: {server_url}/{server.config.workspace}/apps/{frontend_service_id}")
     print("\n=============================\n")
 
 
