@@ -1,6 +1,3 @@
-import dotenv
-
-dotenv.load_dotenv()
 import asyncio
 import datetime
 import json
@@ -11,25 +8,25 @@ import secrets
 from typing import Any, Dict, List, Optional
 
 import aiofiles
+import dotenv
 import pkg_resources
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from hypha_rpc import connect_to_server, login
 from pydantic import BaseModel, Field
 from schema_agents import Message, Role
 from schema_agents.utils.common import EventBus
 
-from aria_agents.chatbot_extensions import (
-    convert_to_dict,
-    create_tool_name,
-    extension_to_tools,
-    get_builtin_extensions,
-)
+from aria_agents.chatbot_extensions import (convert_to_dict, create_tool_name,
+                                            extension_to_tools,
+                                            get_builtin_extensions)
 from aria_agents.hypha_store import HyphaDataStore
 from aria_agents.quota import QuotaManager
-from aria_agents.utils import (
-    ChatbotExtension,
-    LegacyChatbotExtension,
-    legacy_extension_to_tool,
-)
+from aria_agents.utils import (ChatbotExtension, LegacyChatbotExtension,
+                               legacy_extension_to_tool)
+
+dotenv.load_dotenv()
 
 logger = logging.getLogger("bioimageio-chatbot")
 # set logger level
@@ -242,6 +239,27 @@ async def connect_server(server_url, client_id):
     )
     await register_chat_service(server)
 
+async def serve_frontend(server, service_id):
+    app = FastAPI(root_path=f"/aria-agents/apps/{service_id}")
+    static_dir = os.path.join(os.path.dirname(__file__), 'static')
+    app.mount("/chat", StaticFiles(directory=static_dir), name="chat")
+
+    async def serve_fastapi(args):
+        await app(args["scope"], args["receive"], args["send"])
+
+    @app.get("/", response_class=HTMLResponse)
+    async def root():
+        return FileResponse(os.path.join(static_dir, "index.html"))
+
+    await server.register_service({
+        "id": service_id,
+        "name": "Aria Agents UI",
+        "type": "asgi",
+        "serve": serve_fastapi,
+        "config": {"visibility": "public"}
+    })
+    
+    await server.serve()
 
 async def register_chat_service(server):
     """Hypha startup function."""
@@ -499,20 +517,22 @@ async def register_chat_service(server):
                 a["name"]: {k: a[k] for k in assistant_keys} for a in assistants
             },
         }
+    
     )
+    
+    frontend_service_id = "aria-agents-chat"
+    asyncio.run(serve_frontend(server, frontend_service_id))
 
     server_url = server.config["public_base_url"]
-
-    service_id = hypha_service_info["id"]
+    
     print("=============================\n")
     if server_url.startswith("http://localhost") or server_url.startswith(
         "http://127.0.0.1"
     ):
         print(f"To test the Aria Assistant locally, visit: {server_url}/chat")
-    print(
-        # f"\nThe chat client are available publicly at: https://bioimage.io/chat?server={server_url}&service_id={service_id}\n"
-        "\n=============================\n"
-    )
+    else:
+        print(f"Access your app at: {server_url}/{server.config.workspace}/apps/{frontend_service_id.split(':')[1]}")
+    print("\n=============================\n")
 
 
 if __name__ == "__main__":

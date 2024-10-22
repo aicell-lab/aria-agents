@@ -38,8 +38,5 @@ RUN pip install fastapi hypha_rpc uvicorn .
 # Switch to the non-root user
 USER aria_agents
 
-# Expose the necessary port
-EXPOSE 9520
-
 # Entry point for the application
 ENTRYPOINT ["python", "-m", "aria_agents", "connect-server"]
