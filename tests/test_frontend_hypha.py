@@ -11,7 +11,7 @@ async def main():
 
     app = FastAPI(root_path="/aria-agents/apps/aria-agents-ui")
 
-    static_dir = os.path.join(os.path.dirname(__file__), 'static')
+    static_dir = os.path.join(os.path.dirname(__file__), '../aria_agents/static')
 
     app.mount("/chat", StaticFiles(directory=static_dir), name="chat")
 

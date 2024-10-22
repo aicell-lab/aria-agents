@@ -244,7 +244,7 @@ async def serve_frontend(server, service_id):
     static_dir = os.path.join(os.path.dirname(__file__), 'static')
     app.mount("/chat", StaticFiles(directory=static_dir), name="chat")
 
-    async def serve_fastapi(args):
+    async def serve_fastapi(args, context=None):
         await app(args["scope"], args["receive"], args["send"])
 
     @app.get("/", response_class=HTMLResponse)
@@ -521,7 +521,9 @@ async def register_chat_service(server):
     )
     
     frontend_service_id = "aria-agents-chat"
+    print("Before serving")
     await serve_frontend(server, frontend_service_id)
+    print("After serving")
 
     server_url = server.config["public_base_url"]
     
