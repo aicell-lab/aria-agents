@@ -27,6 +27,8 @@ from schema_agents.utils.common import current_session
 import uuid
 from pandasai.llm import OpenAI as PaiOpenAI
 from pandasai import Agent as PaiAgent
+from pandasai.helpers.cache import Cache
+import duckdb
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -34,21 +36,27 @@ config_file = os.path.join(this_dir, "config.json")
 with open(config_file, "r") as file:
     CONFIG = json.load(file)
 
-async def read_df(file_path : str) -> pd.DataFrame:
-    ext = os.path.splitext(file_path)[1]
-    if ext == ".csv":
-        return pd.read_csv(file_path)
-    elif ext == ".tsv":
-        return pd.read_csv(file_path, sep='\t')
-    elif ext == ".xlsx":
-        return pd.read_excel(file_path, engine='python')
-    else:
+async def read_df(file_path: str) -> pd.DataFrame:
+    def _read_file(path):
+        ext = os.path.splitext(path)[1].lower()
         try:
-            # auto-detect the delimiter using Python's built-in csv module sniffer
-            return pd.read_csv(file_path, sep=None)
+            if ext == ".csv":
+                return pd.read_csv(path)
+            elif ext == ".tsv":
+                return pd.read_csv(path, sep='\t')
+            elif ext == ".xlsx":
+                return pd.read_excel(path, engine='openpyxl')
+            else:
+                return pd.read_csv(path, sep=None, engine='python')
+        except EmptyDataError:
+            print(f"Warning: The file {path} is empty or contains no data.")
+            return pd.DataFrame()
         except Exception as e:
-            raise ValueError(f"Unable to open file {file_path} as tabular file")
-    
+            print(f"Error reading file {path}: {str(e)}")
+            raise ValueError(f"Unable to open file {path} as tabular file: {str(e)}")
+
+    return await asyncio.get_event_loop().run_in_executor(None, _read_file, file_path)
+
 def is_data_file(file_path : str) -> bool:
     if not os.path.isfile(file_path):
         return False
@@ -78,53 +86,127 @@ def get_data_files(data_folder: str) -> List[str]:
     data_files = filter(is_data_file, all_data_paths)
     return data_files
 
-async def get_pai_agent(data_files: List[str], save_charts_path: str) -> PaiAgent:
-    return "I have returned the agent"
-    dataframes = [read_df(file_path) for file_path in data_files]
-    pai_llm = PaiOpenAI()
-    pai_agent_config = {
-        'llm' : pai_llm,
-        'save_chargs' : True,
-        'save_charts_path' : save_charts_path,
-        'open_charts' : True,
-        'max_retries' : 10 # default is 3
-    }
-    pai_agent = PaiAgent(dataframes, config = pai_agent_config, memory_size = 25)
-    return pai_agent
+import os
+import fcntl
+import time
+from pandasai.helpers.cache import Cache
+from pandasai import Agent as PaiAgent
+from pandasai.llm import OpenAI as PaiOpenAI
+import duckdb
 
+class CustomLockingCache(Cache):
+    def __init__(self, filepath=None):
+        super().__init__(filepath)
+        self.lock_file = f"{self.filepath}.lock"
+        self.connection = None
+
+    def acquire_lock(self, timeout=10):
+        start_time = time.time()
+        while True:
+            try:
+                self.lock_fd = open(self.lock_file, 'w')
+                fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return True
+            except IOError:
+                if time.time() - start_time > timeout:
+                    return False
+                time.sleep(0.1)
+
+    def release_lock(self):
+        if hasattr(self, 'lock_fd'):
+            fcntl.flock(self.lock_fd, fcntl.LOCK_UN)
+            self.lock_fd.close()
+            try:
+                os.remove(self.lock_file)
+            except FileNotFoundError:
+                pass
+
+    def __enter__(self):
+        if not self.acquire_lock():
+            raise TimeoutError("Could not acquire lock")
+        if self.connection is None:
+            self.connection = duckdb.connect(self.filepath)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.connection:
+            self.connection.close()
+            self.connection = None
+        self.release_lock()
+
+    def get(self, key):
+        with self:
+            return super().get(key)
+
+    def set(self, key, value):
+        with self:
+            return super().set(key, value)
+
+    def delete(self, key):
+        with self:
+            return super().delete(key)
+
+# async def get_pai_agent(data_files_dfs: List[pd.DataFrame], save_charts_path: str) -> PaiAgent:
+#     pai_llm = PaiOpenAI()
+    
+#     pai_agent_config = {
+#         'llm': pai_llm,
+#         'save_charts': True,
+#         'save_charts_path': save_charts_path,
+#         'open_charts': True,
+#         'max_retries': 10,
+#         'enable_cache': False  # Disable caching
+#     }
+#     pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
+#     return pai_agent
 
 from concurrent.futures import ThreadPoolExecutor
 
-def create_explore_data_test(data_store : HyphaDataStore = None) -> Callable:
+def create_explore_data_test(data_store: HyphaDataStore = None) -> Callable:
     @schema_tool
     async def explore_data_test(
-        plot_request : str = Field(
-            description="A request to plot a basic chart",
+        explore_request: str = Field(
+            description="A request to explore the data files",
         ),
-        data_files : List[str] = Field(
+        data_files: List[str] = Field(
             description="List of filepaths/urls of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
         ),
-        project_name : str = Field(
+        project_name: str = Field(
             description="The name of the project, used to create a folder to store the output files",
         ),
     ) -> Dict[str, str]: 
         """Analyzes or explores data files provided from the user"""
         project_folder, data_folder, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
-        data_files_dfs = [read_df(file_path) for file_path in data_files]
+        
+        print(f"Reading data files: {data_files}")  # Debugging
+        
+        # Use asyncio.gather to read files concurrently
+        data_files_dfs = await asyncio.gather(*[read_df(file_path) for file_path in data_files])
+        
+        print(f"Finished reading {len(data_files_dfs)} dataframes")  # Debugging
+        
+        # Create PandasAI agent
         # pai_agent = await get_pai_agent(data_files_dfs, project_folder)
-        response = "The first line of the file is `hello world!`. The files read in are: " + str(data_files)
-        explanation = "Pandasai was used to analyze the data"
-        # response = pai_agent.chat(plot_request)
-        # response = pai_agent.run(plot_request)
-        # explanation = pai_agent.explain()
+        pai_llm = PaiOpenAI()
+    
+        pai_agent_config = {
+            'llm': pai_llm,
+            'save_charts': True,
+            'save_charts_path': project_folder,
+            'open_charts': True,
+            'max_retries': 10,
+            'enable_cache': False  # Disable caching
+        }
+        pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
+        print(pai_agent) # Debugging
+        response = pai_agent.chat(explore_request)
+        explanation = pai_agent.explain()
 
         return {
-            "response" : response,
-            "explanation" : explanation
+            "response": response,
+            "explanation": explanation
         }
     return explore_data_test
-
-        
 
 def create_analyzer_function(data_store: HyphaDataStore = None) -> Callable:
     @schema_tool
