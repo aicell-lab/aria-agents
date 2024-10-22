@@ -11,14 +11,8 @@ dotenv.load_dotenv()
 app = FastAPI(root_path="/aria-agents/apps/aria-agents-ui")
 
 static_dir = os.path.join(os.path.dirname(__file__), 'static')
-js_dir = os.path.join(os.path.dirname(__file__), 'static/js')
-css_dir = os.path.join(os.path.dirname(__file__), 'static/css')
-img_dir = os.path.join(os.path.dirname(__file__), 'static/img')
 
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
-app.mount("/js", StaticFiles(directory=js_dir), name="js")
-app.mount("/css", StaticFiles(directory=css_dir), name="css")
-app.mount("/img", StaticFiles(directory=img_dir), name="img")
+app.mount("/chat", StaticFiles(directory=static_dir), name="chat")
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
