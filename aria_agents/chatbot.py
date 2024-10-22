@@ -521,7 +521,7 @@ async def register_chat_service(server):
     )
     
     frontend_service_id = "aria-agents-chat"
-    asyncio.run(serve_frontend(server, frontend_service_id))
+    await serve_frontend(server, frontend_service_id)
 
     server_url = server.config["public_base_url"]
     
