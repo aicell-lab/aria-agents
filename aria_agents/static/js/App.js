@@ -34,7 +34,7 @@ function App() {
         setIsLoading(true);
         const token = await login();
         const service = await getService(token);
-        const dataStore = await getServiceWithId(token, 'aria-agents/kubernetes:data-store');
+        const dataStore = await getServiceWithId(token, 'public/workspace-manager:data-store');
         setDataStore(dataStore);
         setSvc(service);
         setStatus("Ready to chat! Type your message and press enter!");

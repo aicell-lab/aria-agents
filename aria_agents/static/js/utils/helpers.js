@@ -27,7 +27,7 @@ async function getServiceWithId(token, serviceId, ping = false) {
     console.log("service ID: ", serviceId);
     // method_timeout: 500 (8.3 minutes) is arbitrary number. Must be at least a few minutes due to slow functions
     const server = await hyphaWebsocketClient.connectToServer({ "server_url": serverUrl, "token": token, "method_timeout": 500 });
-    const svc = await server.getService(serviceId || "aria-agents/kubernetes:aria-agents");
+    const svc = await server.getService(serviceId || "public/workspace-manager:aria-agents");
     
     if (ping) {
         await svc.ping();
