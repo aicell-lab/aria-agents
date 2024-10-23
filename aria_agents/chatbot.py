@@ -518,18 +518,14 @@ async def register_chat_service(server):
         }
     )
     
-    frontend_service_id = "aria-agents-chat"
-    await serve_frontend(server, frontend_service_id)
+    await serve_frontend(server, "aria-agents-chat")
 
-    server_url = server.config["public_base_url"]
-    
+    server_url = server.config["public_base_url"] 
     print("=============================\n")
     if server_url.startswith("http://localhost") or server_url.startswith(
         "http://127.0.0.1"
     ):
         print(f"To test the Aria Assistant locally, visit: {server_url}/chat")
-    else:
-        print(f"Access your app at: {server_url}/{server.config.workspace}/apps/{frontend_service_id}")
     print("\n=============================\n")
 
 
