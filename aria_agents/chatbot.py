@@ -236,6 +236,8 @@ async def connect_server(server_url):
     )
     await register_chat_service(server)
 
+def alert_user(message):
+    print("<ALERT>" + message)
 
 async def register_chat_service(server):
     """Hypha startup function."""
@@ -298,7 +300,7 @@ async def register_chat_service(server):
         if login_required and context and context.get("user"):
             assert check_permission(
                 context.get("user")
-            ), "You don't have permission to report the chat history."
+            ), alert_user("You don't have permission to report the chat history.")
         # get the chatbot version
         version = pkg_resources.get_distribution("aria_agents").version
         chat_his_dict = {
@@ -422,7 +424,7 @@ async def register_chat_service(server):
             logger.info(f"User: {context.get('user')}, Message: {text}")
             assert check_permission(
                 context.get("user")
-            ), "You don't have permission to use the chatbot, please sign up and wait for approval"
+            ), alert_user("You don't have permission to use the chatbot, please sign up and wait for approval")
 
         text = text.strip()
 
@@ -468,7 +470,7 @@ async def register_chat_service(server):
         if login_required and context and context.get("user"):
             assert check_permission(
                 context.get("user")
-            ), "You don't have permission to use the chatbot, please sign up and wait for approval"
+            ), alert_user("You don't have permission to use the chatbot, please sign up and wait for approval")
         return "pong"
 
     assistant_keys = [
