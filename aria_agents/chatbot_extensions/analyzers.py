@@ -97,6 +97,76 @@ import duckdb
 from concurrent.futures import ThreadPoolExecutor
 
 def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
+    # @schema_tool
+    # async def get_pai_agent(
+    #     data_files: List[str] = Field(
+    #         description="List of filepaths/urls of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
+    #     ),
+    #     project_name: str = Field(
+    #         description="The name of the project, used to create a folder to store the output files",
+    #     ),) -> PaiAgent:
+    #     """Analyzes or explores data files provided from the user"""
+    #     data_files_dfs = await asyncio.gather(*[read_df(file_path) for file_path in data_files])
+    #     project_folder, data_folder, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
+    #     pai_llm = PaiOpenAI()
+    #     pai_agent_config = {
+    #         'llm': pai_llm,
+    #         'save_charts': True,
+    #         'save_charts_path': project_folder,
+    #         'open_charts': True,
+    #     }
+    #     pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
+    #     return pai_agent
+    # return get_pai_agent
+        
+    # @schema_tool
+    # async def explore_data(
+    #     explore_request: str = Field(
+    #         description="A request to explore the data files",
+    #     ),
+    #     data_files: List[str] = Field(
+    #         description="List of filepaths/urls of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
+    #     ),
+    #     project_name: str = Field(
+    #         description="The name of the project, used to create a folder to store the output files",
+    #     ),
+    # ) -> Dict[str, str]: 
+    #     """Analyzes or explores data files provided from the user"""
+    #     project_folder, data_folder, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
+    #     print(f"Reading data files: {data_files}")  # Debugging
+        
+    #     # Use asyncio.gather to read files concurrently
+    #     data_files_dfs = await asyncio.gather(*[read_df(file_path) for file_path in data_files])
+    #     print(f"Finished reading {len(data_files_dfs)} dataframes")  # Debugging
+        
+    #     # Create PandasAI agent
+    #     pai_llm = PaiOpenAI()
+    #     # cache_dir = os.path.join(os.path.dirname(__file__), "cache")
+    #     # os.makedirs(cache_dir, exist_ok=True)
+    #     # cache_file = os.path.join(cache_dir, "cache_db.db")
+    
+    #     pai_agent_config = {
+    #         'llm': pai_llm,
+    #         'save_charts': True,
+    #         'save_charts_path': project_folder,
+    #         'open_charts': True,
+    #         'max_retries': 10,
+    #         # 'enable_cache': False  # Disable caching
+    #         # 'cache': CustomLockingCache(cache_file)
+    #     }
+    #     pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
+    #     print(pai_agent) # Debugging
+    #     response = pai_agent.chat(explore_request)
+    #     explanation = pai_agent.explain()
+
+    #     return {
+    #         "response": response,
+    #         "explanation": explanation
+    #     }
+    # return explore_data
+
+    pai_agents = {}
+
     @schema_tool
     async def explore_data(
         explore_request: str = Field(
@@ -108,32 +178,27 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
         project_name: str = Field(
             description="The name of the project, used to create a folder to store the output files",
         ),
-    ) -> Dict[str, str]: 
-        """Analyzes or explores data files provided from the user"""
-        project_folder, data_folder, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
-        print(f"Reading data files: {data_files}")  # Debugging
+    ) -> Dict[str, str]:
+        """Analyzes or explores data files using a PandasAI agent, initializing it if necessary."""
+        # session = current_session.get()
+        # pai_agent = getattr(session, 'pai_agent', None)
+        session_id = get_session_id()
+        pai_agent = pai_agents.get(session_id)
         
-        # Use asyncio.gather to read files concurrently
-        data_files_dfs = await asyncio.gather(*[read_df(file_path) for file_path in data_files])
-        print(f"Finished reading {len(data_files_dfs)} dataframes")  # Debugging
+        if pai_agent is None:
+            # Initialize the PandasAI agent
+            data_files_dfs = await asyncio.gather(*[read_df(file_path) for file_path in data_files])
+            project_folder, _, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
+            pai_llm = PaiOpenAI()
+            pai_agent_config = {
+                'llm': pai_llm,
+                'save_charts': True,
+                'save_charts_path': project_folder,
+                'open_charts': True,
+            }
+            pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
+            pai_agents[session_id] = pai_agent
         
-        # Create PandasAI agent
-        pai_llm = PaiOpenAI()
-        # cache_dir = os.path.join(os.path.dirname(__file__), "cache")
-        # os.makedirs(cache_dir, exist_ok=True)
-        # cache_file = os.path.join(cache_dir, "cache_db.db")
-    
-        pai_agent_config = {
-            'llm': pai_llm,
-            'save_charts': True,
-            'save_charts_path': project_folder,
-            'open_charts': True,
-            'max_retries': 10,
-            # 'enable_cache': False  # Disable caching
-            # 'cache': CustomLockingCache(cache_file)
-        }
-        pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
-        print(pai_agent) # Debugging
         response = pai_agent.chat(explore_request)
         explanation = pai_agent.explain()
 
