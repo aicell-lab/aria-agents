@@ -28,7 +28,6 @@ async def main():
     server = await connect_to_server({
         "server_url": server_url,
         "workspace": "aria-agents",
-        "client_id": "frontend",
         "token": workspace_token
     })
 

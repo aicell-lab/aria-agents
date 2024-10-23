@@ -221,7 +221,7 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
         await f.write(chat_history_json)
 
 
-async def connect_server(server_url, client_id):
+async def connect_server(server_url, client_id=None):
     """Connect to the server and register the chat service."""
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     provided_token = os.environ.get("WORKSPACE_TOKEN")

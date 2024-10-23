@@ -53,7 +53,7 @@ def main():
     parser_connect_server = subparsers.add_parser("connect-server")
     parser_connect_server.add_argument("--server-url", default="https://ai.imjoy.io")
     parser_connect_server.add_argument("--login-required", action="store_true")
-    parser_connect_server.add_argument("--client-id", default="aria-agents")
+    parser_connect_server.add_argument("--client-id")
     parser_connect_server.set_defaults(func=connect_to_server)
 
     
