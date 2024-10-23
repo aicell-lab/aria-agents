@@ -221,7 +221,7 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
         await f.write(chat_history_json)
 
 
-async def connect_server(server_url, client_id=None):
+async def connect_server(server_url):
     """Connect to the server and register the chat service."""
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     provided_token = os.environ.get("WORKSPACE_TOKEN")
@@ -235,7 +235,7 @@ async def connect_server(server_url, client_id=None):
     else:
         token = None
     server = await connect_to_server(
-        {"server_url": server_url, "token": token, "client_id": client_id, "method_timeout": 500, "workspace": workspace_name}
+        {"server_url": server_url, "token": token, "method_timeout": 500, "workspace": workspace_name}
     )
     await register_chat_service(server)
 
@@ -536,5 +536,5 @@ async def register_chat_service(server):
 if __name__ == "__main__":
     server_url = """https://ai.imjoy.io"""
     loop = asyncio.get_event_loop()
-    loop.create_task(connect_server(server_url, "aria_agents_test_client"))
+    loop.create_task(connect_server(server_url))
     loop.run_forever()

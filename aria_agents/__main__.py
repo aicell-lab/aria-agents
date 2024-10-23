@@ -30,9 +30,8 @@ def connect_to_server(args):
     else:
         os.environ["BIOIMAGEIO_LOGIN_REQUIRED"] = "false"
     server_url = args.server_url
-    client_id = args.client_id
     loop = asyncio.get_event_loop()
-    loop.create_task(connect_server(server_url, client_id))
+    loop.create_task(connect_server(server_url))
     loop.run_forever()
 
 
@@ -53,7 +52,6 @@ def main():
     parser_connect_server = subparsers.add_parser("connect-server")
     parser_connect_server.add_argument("--server-url", default="https://ai.imjoy.io")
     parser_connect_server.add_argument("--login-required", action="store_true")
-    parser_connect_server.add_argument("--client-id")
     parser_connect_server.set_defaults(func=connect_to_server)
 
     
