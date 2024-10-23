@@ -257,7 +257,7 @@ async def serve_frontend(server, service_id):
         "type": "asgi",
         "serve": serve_fastapi,
         "config": {"visibility": "public"}
-    }, {"overwrite": True})
+    })
 
 async def register_chat_service(server):
     """Hypha startup function."""
@@ -290,7 +290,7 @@ async def register_chat_service(server):
 
     def load_authorized_emails():
         if login_required:
-            authorized_users_path = os.environ.get("ARIA_AGENTS_AUTHORIZED_USERS_PATH")
+            authorized_users_path = os.path.join(this_dir, os.environ.get("ARIA_AGENTS_AUTHORIZED_USERS_PATH"))
             if authorized_users_path:
                 assert os.path.exists(
                     authorized_users_path
@@ -514,7 +514,7 @@ async def register_chat_service(server):
             "assistants": {
                 a["name"]: {k: a[k] for k in assistant_keys} for a in assistants
             },
-        }, {"overwrite": True}
+        }
     )
     
     frontend_service_id = "aria-agents-chat"
