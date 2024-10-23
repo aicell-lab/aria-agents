@@ -144,7 +144,7 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
             "response": response,
             "explanation": explanation,
             "plot_url": plot_url,
-            "plot_content_base64": plot_content_base64
+            # "plot_content_base64": plot_content_base64 # Takes up too many tokens
         }
     return explore_data
 
