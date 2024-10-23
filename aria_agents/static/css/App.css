@@ -1,6 +1,18 @@
 :root {
+    --width-sidebar: 0;
+    --width-artefacts-panel: 100%;
+}
+
+.sidebar.open {
     --width-sidebar: 12em;
-    --width-artefacts-panel: 30%;
+    display: block;
+}
+
+@media (min-width: 768px) {
+    :root{
+        --width-sidebar: 12em;
+        --width-artefacts-panel: 30%;
+    }
 }
 
 @keyframes fadeIn {

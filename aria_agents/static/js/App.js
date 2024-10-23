@@ -19,6 +19,7 @@ function App() {
         background: ""
     });
     const [isArtefactsPanelOpen, setIsArtefactsPanelOpen] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [artefacts, setArtefacts] = useState([]);
     const [currentArtefactIndex, setCurrentArtefactIndex] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
@@ -271,8 +272,14 @@ function App() {
 
     return (
         <div className="min-h-screen flex flex-col">
+            <button
+                className={`${isSidebarOpen? 'open' : ''} md:hidden text-4xl p-2 fixed top-0 left-0 mt-4 ml-4`}
+                onClick={() => setIsSidebarOpen(true)}
+            >
+                ☰
+            </button>
             <div className="flex-1 flex">
-                <Sidebar onEditProfile={() => setShowProfileDialog(true)} />
+                <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} onEditProfile={() => setShowProfileDialog(true)} />
                 <div className={`main-panel ${isArtefactsPanelOpen ? 'main-panel-artefacts' : 'main-panel-full'}`}
                     onDrop={handleDrop}
                     onDragOver={handleDragOver}
