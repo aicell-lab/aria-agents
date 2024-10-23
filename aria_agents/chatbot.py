@@ -290,7 +290,8 @@ async def register_chat_service(server):
 
     def load_authorized_emails():
         if login_required:
-            authorized_users_path = os.path.join(this_dir, os.environ.get("ARIA_AGENTS_AUTHORIZED_USERS_PATH"))
+            authorized_users_file_name = os.environ.get("ARIA_AGENTS_AUTHORIZED_USERS_PATH", "aria_agents_authorized_users.json")
+            authorized_users_path = os.path.join(this_dir, authorized_users_file_name)
             if authorized_users_path:
                 assert os.path.exists(
                     authorized_users_path
