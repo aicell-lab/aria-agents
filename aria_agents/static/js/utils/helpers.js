@@ -4,7 +4,7 @@ function generateSessionID() {
 
 function getServerUrl() {
     const urlParams = new URLSearchParams(window.location.search);
-    let serverUrl = urlParams.get('server') || window.location.origin;
+    let serverUrl = urlParams.get('server') || "https://hypha.aicell.io";
     if (serverUrl.includes('localhost')) {
         serverUrl = "http://localhost:9000";
     }
@@ -52,7 +52,7 @@ async function login() {
     }
     token = await hyphaWebsocketClient.login({
         "server_url": serverUrl,
-        "login_callback": login_callback,
+        "login_callback": login_callback
     });
     localStorage.setItem('token', token);
     localStorage.setItem('tokenExpiry', new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
