@@ -17,17 +17,12 @@ function getServiceId() {
     return urlParams.get('service_id');
 }
 
-async function getService(token, ping = true) {
-    const serviceId = getServiceId();
-    return await getServiceWithId(token, serviceId, ping);
-}
-
-async function getServiceWithId(token, serviceId, ping = false) {
+async function getService(token, serviceId, ping) {
     const serverUrl = getServerUrl();
     console.log("service ID: ", serviceId);
     // method_timeout: 500 (8.3 minutes) is arbitrary number. Must be at least a few minutes due to slow functions
     const server = await hyphaWebsocketClient.connectToServer({ "server_url": serverUrl, "token": token, "method_timeout": 500 });
-    const svc = await server.getService(serviceId || "aria-agents/*:aria-agents");
+    const svc = await server.getService(serviceId);
     
     if (ping) {
         await svc.ping();
@@ -155,5 +150,5 @@ window.helpers = {
     completeCodeBlocks: completeCodeBlocks,
     jsonToMarkdown: jsonToMarkdown,
     modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
-    getServiceWithId: getServiceWithId,
+    getServiceId: getServiceId
 };

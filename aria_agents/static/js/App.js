@@ -1,6 +1,6 @@
 const { useState, useEffect } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
-const { generateSessionID, getService, login, completeCodeBlocks, jsonToMarkdown, modifyLinksToOpenInNewTab, getServiceWithId } = window.helpers;
+const { generateSessionID, getService, login, completeCodeBlocks, jsonToMarkdown, modifyLinksToOpenInNewTab, getServiceId } = window.helpers;
 const { Sidebar, ProfileDialog, ChatInput, SuggestedStudies, ChatHistory, ArtefactsPanel } = window;
 
 function App() {
@@ -30,13 +30,27 @@ function App() {
         setSessionId(generateSessionID());
     }, []);
 
+    const getServices = async (token, ariaAgentsServiceId, dataStoreServiceId) => {
+        let ariaAgentsService = null;
+        let dataStoreService = null;
+        try {
+            ariaAgentsService = await getService(token, ariaAgentsServiceId, true);
+            dataStoreService = await getService(token, dataStoreServiceId, true);
+        }
+        catch (error) {
+            alert("You don't have permission to use the chatbot, please sign up and wait for approval");
+            console.error(error);
+        }
+        return { ariaAgentsService, dataStoreService };
+    }
+
     const handleLogin = async () => {
         setIsLoading(true);
         const token = await login();
-        const service = await getService(token);
-        const dataStore = await getServiceWithId(token, 'aria-agents/*:data-store');
-        setDataStore(dataStore);
-        setSvc(service);
+        const ariaAgentsServiceId = getServiceId() || 'aria-agents/*:aria-agents';
+        const { ariaAgentsService, dataStoreService } = getServices(token, ariaAgentsServiceId, 'aria-agents/*:data-store');
+        setDataStore(dataStoreService);
+        setSvc(ariaAgentsService);
         setStatus("Ready to chat! Type your message and press enter!");
         setIsLoading(false);
     };
