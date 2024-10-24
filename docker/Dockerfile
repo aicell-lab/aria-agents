@@ -1,8 +1,12 @@
 # Use an image with Python 3.11
 FROM python:3.11-slim
 
-# Install git
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# Install git and other system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user
 RUN groupadd -r aria_agents && useradd -r -g aria_agents aria_agents
@@ -10,30 +14,29 @@ RUN groupadd -r aria_agents && useradd -r -g aria_agents aria_agents
 # Upgrade pip
 RUN pip install --upgrade pip
 
-# Copy the repository to the image
-COPY . /app/aria-agents/
-
 # Set the working directory
-WORKDIR /app/aria-agents
+WORKDIR /app/
 
-# Remove all files matching .gitignore patterns
-RUN git clean -fdX
+# Copy the repository to the image
+COPY . .
 
-# Remove the .git directory
-RUN rm -rf .git
+# Create logs directory and set permissions for /app and /app/logs
+RUN mkdir -p /app/logs && \
+    chmod 777 /app /app/logs && \
+    chown -R aria_agents:aria_agents /app /app/logs
+
+# Add /app to the list of safe directories for Git
+RUN git config --global --add safe.directory /app
+
+# Remove all files matching .gitignore patterns and .git directory
+RUN git clean -fdX && rm -rf .git
 
 # Install the required Python packages
 RUN pip install -r requirements.txt
-RUN pip install .
-
-# Change ownership of the application directory to the non-root user
-RUN chown -R aria_agents:aria_agents /app/
+RUN pip install fastapi hypha_rpc uvicorn .
 
 # Switch to the non-root user
 USER aria_agents
 
-# Expose port
-EXPOSE 9520
-
-# Start a new hypha server
-ENTRYPOINT ["python", "-m", "aria_agents", "start-server", "--port", "9520"]
+# Entry point for the application
+ENTRYPOINT ["python", "-m", "aria_agents", "connect-server"]

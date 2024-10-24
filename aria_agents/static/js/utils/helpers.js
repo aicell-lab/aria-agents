@@ -4,7 +4,7 @@ function generateSessionID() {
 
 function getServerUrl() {
     const urlParams = new URLSearchParams(window.location.search);
-    let serverUrl = urlParams.get('server') || window.location.origin;
+    let serverUrl = urlParams.get('server') || "https://hypha.aicell.io";
     if (serverUrl.includes('localhost')) {
         serverUrl = "http://localhost:9000";
     }
@@ -17,17 +17,12 @@ function getServiceId() {
     return urlParams.get('service_id');
 }
 
-async function getService(token, ping = true) {
-    const serviceId = getServiceId();
-    return await getServiceWithId(token, serviceId, ping);
-}
-
-async function getServiceWithId(token, serviceId, ping = false) {
+async function getService(token, serviceId, ping) {
     const serverUrl = getServerUrl();
     console.log("service ID: ", serviceId);
     // method_timeout: 500 (8.3 minutes) is arbitrary number. Must be at least a few minutes due to slow functions
     const server = await hyphaWebsocketClient.connectToServer({ "server_url": serverUrl, "token": token, "method_timeout": 500 });
-    const svc = await server.getService(serviceId || "public/workspace-manager:aria-agents");
+    const svc = await server.getService(serviceId);
     
     if (ping) {
         await svc.ping();
@@ -52,7 +47,7 @@ async function login() {
     }
     token = await hyphaWebsocketClient.login({
         "server_url": serverUrl,
-        "login_callback": login_callback,
+        "login_callback": login_callback
     });
     localStorage.setItem('token', token);
     localStorage.setItem('tokenExpiry', new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString());
@@ -155,5 +150,5 @@ window.helpers = {
     completeCodeBlocks: completeCodeBlocks,
     jsonToMarkdown: jsonToMarkdown,
     modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
-    getServiceWithId: getServiceWithId,
+    getServiceId: getServiceId
 };
