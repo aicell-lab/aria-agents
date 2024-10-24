@@ -5,7 +5,7 @@ function ArtefactsPanel({ onClose, artefacts, currentArtefactIndex, onPrev, onNe
         <div className="artefacts-panel">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">Artefacts</h2>
-                <button onClick={onClose} className="text-gray-600 hover:text-gray-900">X</button>
+                <button onClick={onClose} className="text-2xl text-gray-600 hover:text-gray-900">X</button>
             </div>
             <div className="flex-1 overflow-y-auto mb-4">
                 {artefact && (
