@@ -1,6 +1,3 @@
-import dotenv
-
-dotenv.load_dotenv()
 import asyncio
 import datetime
 import json
@@ -11,25 +8,25 @@ import secrets
 from typing import Any, Dict, List, Optional
 
 import aiofiles
+import dotenv
 import pkg_resources
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from hypha_rpc import connect_to_server, login
 from pydantic import BaseModel, Field
 from schema_agents import Message, Role
 from schema_agents.utils.common import EventBus
 
-from aria_agents.chatbot_extensions import (
-    convert_to_dict,
-    create_tool_name,
-    extension_to_tools,
-    get_builtin_extensions,
-)
+from aria_agents.chatbot_extensions import (convert_to_dict, create_tool_name,
+                                            extension_to_tools,
+                                            get_builtin_extensions)
 from aria_agents.hypha_store import HyphaDataStore
 from aria_agents.quota import QuotaManager
-from aria_agents.utils import (
-    ChatbotExtension,
-    LegacyChatbotExtension,
-    legacy_extension_to_tool,
-)
+from aria_agents.utils import (ChatbotExtension, LegacyChatbotExtension,
+                               legacy_extension_to_tool)
+
+dotenv.load_dotenv()
 
 logger = logging.getLogger("bioimageio-chatbot")
 # set logger level
@@ -189,7 +186,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
     aria = Role(
         name="Aria",
         instructions=aria_instructions,
-        icon="./img/favicon-32x32.png",
+        icon="./chat/img/favicon-32x32.png",
         actions=[respond_to_user],
         event_bus=event_bus,
         register_default_events=True,
@@ -227,17 +224,40 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
 async def connect_server(server_url):
     """Connect to the server and register the chat service."""
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
+    provided_token = os.environ.get("WORKSPACE_TOKEN")
+    workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
+    
     if login_required:
-        token = await login({"server_url": server_url})
+        if provided_token is None:
+            token = await login({"server_url": server_url})
+        else:
+            token = provided_token
     else:
         token = None
     server = await connect_to_server(
-        {"server_url": server_url, "token": token, "method_timeout": 100}
+        {"server_url": server_url, "token": token, "method_timeout": 500, "workspace": workspace_name}
     )
     await register_chat_service(server)
 
-def alert_user(message):
-    print("<ALERT>" + message)
+async def serve_frontend(server, service_id):
+    app = FastAPI(root_path=f"/aria-agents/apps/{service_id}")
+    static_dir = os.path.join(os.path.dirname(__file__), 'static')
+    app.mount("/chat", StaticFiles(directory=static_dir), name="chat")
+
+    async def serve_fastapi(args, context=None):
+        await app(args["scope"], args["receive"], args["send"])
+
+    @app.get("/", response_class=HTMLResponse)
+    async def root():
+        return FileResponse(os.path.join(static_dir, "index.html"))
+
+    await server.register_service({
+        "id": service_id,
+        "name": "Aria Agents UI",
+        "type": "asgi",
+        "serve": serve_fastapi,
+        "config": {"visibility": "public"}
+    })
 
 async def register_chat_service(server):
     """Hypha startup function."""
@@ -270,7 +290,8 @@ async def register_chat_service(server):
 
     def load_authorized_emails():
         if login_required:
-            authorized_users_path = os.environ.get("BIOIMAGEIO_AUTHORIZED_USERS_PATH")
+            authorized_users_file_name = os.environ.get("ARIA_AGENTS_AUTHORIZED_USERS_PATH", "aria_agents_authorized_users.json")
+            authorized_users_path = os.path.join(this_dir, authorized_users_file_name)
             if authorized_users_path:
                 assert os.path.exists(
                     authorized_users_path
@@ -300,7 +321,7 @@ async def register_chat_service(server):
         if login_required and context and context.get("user"):
             assert check_permission(
                 context.get("user")
-            ), alert_user("You don't have permission to report the chat history.")
+            ), "You don't have permission to report the chat history."
         # get the chatbot version
         version = pkg_resources.get_distribution("aria_agents").version
         chat_his_dict = {
@@ -424,7 +445,7 @@ async def register_chat_service(server):
             logger.info(f"User: {context.get('user')}, Message: {text}")
             assert check_permission(
                 context.get("user")
-            ), alert_user("You don't have permission to use the chatbot, please sign up and wait for approval")
+            ), "You don't have permission to use the chatbot, please sign up and wait for approval"
 
         text = text.strip()
 
@@ -470,7 +491,7 @@ async def register_chat_service(server):
         if login_required and context and context.get("user"):
             assert check_permission(
                 context.get("user")
-            ), alert_user("You don't have permission to use the chatbot, please sign up and wait for approval")
+            ), "You don't have permission to use the chatbot, please sign up and wait for approval"
         return "pong"
 
     assistant_keys = [
@@ -496,21 +517,16 @@ async def register_chat_service(server):
             },
         }
     )
+    
+    await serve_frontend(server, "aria-agents-chat")
 
-    server_info = await server.get_connection_info()
-
-    server_url = server.config["public_base_url"]
-
-    service_id = hypha_service_info["id"]
+    server_url = server.config["public_base_url"] 
     print("=============================\n")
     if server_url.startswith("http://localhost") or server_url.startswith(
         "http://127.0.0.1"
     ):
         print(f"To test the Aria Assistant locally, visit: {server_url}/chat")
-    print(
-        # f"\nThe chat client are available publicly at: https://bioimage.io/chat?server={server_url}&service_id={service_id}\n"
-        "\n=============================\n"
-    )
+    print("\n=============================\n")
 
 
 if __name__ == "__main__":
