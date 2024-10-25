@@ -1,7 +1,4 @@
 function ChatHistory({ chatHistory, isSending }) {
-	const { marked } = window;
-	const { completeCodeBlocks } = window.helpers;
-
 	const isEmoji = (icon) => /^[\p{Emoji}]+$/u.test(icon);
 
 	const chatArray = Array.from(chatHistory.values());
