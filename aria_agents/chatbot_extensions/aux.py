@@ -26,17 +26,27 @@ with open(config_file, "r", encoding="utf-8") as file:
 
 
 class SummaryWebsite(BaseModel):
-    """A summary single-page webpage written in html that neatly presents the suggested study or experimental protocol for user review"""
+    """A summary single-page webpage written in html that neatly presents the suggested
+ study or experimental protocol for user review"""
 
     html_code: str = Field(
-        description="The html code for a single page website summarizing the information in the suggested study or experimental protocol appropriately including any diagrams. Make sure to include the original user request as well if available. References should appear as links (e.g. a url `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11129507/` can appear as a link with the name `PMC11129507` referencing the PMCID)"
+        description=(
+            "The html code for a single page website summarizing the information in the"
+            " suggested study or experimental protocol appropriately including any"
+            " diagrams. Make sure to include the original user request as well if"
+            " available. References should appear as links"
+            " (e.g. a url`https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11129507/` can"
+            " appear as a link with the name `PMC11129507` referencing the PMCID)"
+        )
     )
 
 
 class SuggestedStudy(BaseModel):
     """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge"""
 
-    user_request: str = Field(description="The original user request. This MUST be included.")
+    user_request: str = Field(
+        description="The original user request. This MUST be included."
+    )
     experiment_name: str = Field(description="The name of the experiment")
     experiment_material: List[str] = Field(
         description="The materials required for the experiment"
@@ -58,6 +68,7 @@ class SuggestedStudy(BaseModel):
         description="Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design."
     )
 
+
 class PMCQuery(BaseModel):
     """
     A plain-text query in a single-key dict formatted according to the NCBI search syntax. The query must include:
@@ -72,7 +83,7 @@ class PMCQuery(BaseModel):
 
     5. Open Access Filter: To filter results to only include open-access articles, add `"open access"[filter]` to the query.
 
-    Example Query: 
+    Example Query:
     ```
     {'query': '"lung cancer"[Title/Abstract] AND ("mouse"[Title/Abstract] OR "monkey"[Title/Abstract]) AND "Bio-protocol"[journal] AND "open access"[filter]'}
     ```
@@ -86,9 +97,9 @@ class PMCQuery(BaseModel):
 @schema_tool
 def test_pmc_query_hits(
     pmc_query: PMCQuery = Field(
-            ..., description="The query to search the NCBI PubMed Central Database."
-        )
-    ) -> str:
+        ..., description="The query to search the NCBI PubMed Central Database."
+    )
+) -> str:
     """Tests the `PMCQuery` to see how many hits it returns in the PubMed Central database."""
 
     parameters = {
@@ -96,12 +107,12 @@ def test_pmc_query_hits(
         "email": "email",
         "db": "pmc",
         "term": pmc_query.query,
-        "retmax": CONFIG["aux"]["paper_limit"]
+        "retmax": CONFIG["aux"]["paper_limit"],
     }
     resp = requests.get(
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
         params=parameters,
-        timeout=500
+        timeout=500,
     )
 
     # Parse the XML response
@@ -128,8 +139,7 @@ def create_corpus_function(
         print(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}")
         # print(test_pmc_query_hits(pmc_query))
         documents = loader.load_data(
-            search_query=pmc_query.query,
-            max_results=CONFIG["aux"]["paper_limit"]
+            search_query=pmc_query.query, max_results=CONFIG["aux"]["paper_limit"]
         )
         if len(documents) == 0:
             return "No papers were found in the PubMed Central database for the given query. Please try different terms for the query."
@@ -177,12 +187,18 @@ def create_query_function(query_engine: CitationQueryEngine) -> Callable:
 
     return query_corpus
 
+
 def load_template(template_file):
     with open(template_file, "r", encoding="utf-8") as file:
         return file.read()
 
+
 async def write_website(
-    input_model: BaseModel, event_bus, data_store, website_type: str, project_folder: str
+    input_model: BaseModel,
+    event_bus,
+    data_store,
+    website_type: str,
+    project_folder: str,
 ) -> SummaryWebsite:
     """Writes a summary website for the suggested study or experimental protocol"""
     website_writer = Role(
@@ -195,15 +211,19 @@ async def write_website(
         model=CONFIG["llm_model"],
     )
 
-    suggested_study_template = load_template("html_templates/suggested_study_template.html")
-    exp_protocol_template = load_template("html_templates/experimental_protocol_template.html")
+    suggested_study_template = load_template(
+        "html_templates/suggested_study_template.html"
+    )
+    exp_protocol_template = load_template(
+        "html_templates/experimental_protocol_template.html"
+    )
     website_prompt = None
     if website_type == "suggested_study":
         website_prompt = (
-            "Create a single-page website summarizing the information in the" 
+            "Create a single-page website summarizing the information in the"
             " suggested study using the following template:"
             f"\n{suggested_study_template}"
-            " Where the appropriate fields are filled in with the information from"
+            "\nWhere the appropriate fields are filled in with the information from"
             " the suggested study."
         )
     elif website_type == "experimental_protocol":
@@ -211,7 +231,7 @@ async def write_website(
             "Create a single-page website summarizing the information in the experimental protocol"
             "website_prompt using the following template:"
             f"\n{exp_protocol_template}"
-            "Where the appropriate fields are filled in with the information from the experimental"
+            "\nWhere the appropriate fields are filled in with the information from the experimental"
             "protocol."
         )
 
@@ -229,7 +249,7 @@ async def write_website(
     if data_store is None:
         # Save the summary website to a HTML file
         summary_website_file = os.path.join(project_folder, f"{website_type}.html")
-        with open(summary_website_file, "w") as f:
+        with open(summary_website_file, "w", encoding="utf-8") as f:
             f.write(summary_website.html_code)
         summary_website_url = "file://" + summary_website_file
     else:
@@ -241,5 +261,5 @@ async def write_website(
             name=f"{project_name}:{website_type}.html",
         )
         summary_website_url = data_store.get_url(summary_website_id)
-        
+
     return summary_website_url
