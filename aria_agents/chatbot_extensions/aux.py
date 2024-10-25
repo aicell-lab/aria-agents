@@ -395,7 +395,7 @@ Where the appropriate fields are filled in with the information from the suggest
     session_id = pre_session.id if pre_session else str(uuid.uuid4())
 
     async with create_session_context(
-        id=session_id, role_setting=website_writer._setting
+        id=session_id, role_setting=website_writer.role_setting
     ):
         summary_website = await website_writer.aask(
             [website_prompt, input_model],

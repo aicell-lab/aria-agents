@@ -101,7 +101,7 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
 
         corpus_context = {}
         async with create_session_context(
-            id=session_id, role_setting=ncbi_querier._setting
+            id=session_id, role_setting=ncbi_querier.role_setting
         ):
             response = await ncbi_querier.acall(
                 [
@@ -128,7 +128,7 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         )
         query_function = create_query_function(corpus_context["query_engine"])
         async with create_session_context(
-            id=session_id, role_setting=study_suggester._setting
+            id=session_id, role_setting=study_suggester.role_setting
         ):
             suggested_study = await study_suggester.acall(
                 [
@@ -163,7 +163,7 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
             model=CONFIG["llm_model"],
         )
         async with create_session_context(
-            id=session_id, role_setting=study_suggester._setting
+            id=session_id, role_setting=study_suggester.role_setting
         ):
             study_diagram = await diagrammer.aask(
                 [
