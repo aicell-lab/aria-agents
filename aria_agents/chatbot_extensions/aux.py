@@ -61,7 +61,10 @@ class SuggestedStudy(BaseModel):
         description="The hypothesis to be tested by the experiment"
     )
     experiment_reasoning: str = Field(
-        description="The reasoning behind the choice of this experiment including the relevant background and pointers to references."
+        description=(
+            "The reasoning behind the choice of this experiment including the"
+            " relevant background and pointers to references."
+        )
     )
     references: List[str] = Field(
         description="Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design."
@@ -194,8 +197,8 @@ def create_query_function(query_engine: CitationQueryEngine) -> Callable:
 
 
 def load_template(template_file):
-    with open(template_file, "r", encoding="utf-8") as file:
-        return file.read()
+    with open(template_file, "r", encoding="utf-8") as t_file:
+        return t_file.read()
 
 
 async def write_website(

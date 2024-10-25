@@ -5,6 +5,7 @@ import re
 from pydantic import BaseModel
 from schema_agents import schema_tool
 
+from hypha_rpc import connect_to_server
 from aria_agents.hypha_store import HyphaDataStore
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 from aria_agents.utils import ChatbotExtension
@@ -80,8 +81,6 @@ async def extension_to_tools(extension: ChatbotExtension):
 
 
 async def main():
-    from hypha_rpc import connect_to_server
-
     server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
     data_store = HyphaDataStore()
     await data_store.setup(server)
