@@ -49,7 +49,7 @@ function App() {
         setIsLoading(true);
         const token = await login();
         const ariaAgentsServiceId = getServiceId() || 'aria-agents/*:aria-agents';
-        const { ariaAgentsService, dataStoreService } = getServices(token, ariaAgentsServiceId, 'aria-agents/*:data-store');
+        const { ariaAgentsService, dataStoreService } = await getServices(token, ariaAgentsServiceId, 'aria-agents/*:data-store');
         setDataStore(dataStoreService);
         setSvc(ariaAgentsService);
         setStatus("Ready to chat! Type your message and press enter!");
