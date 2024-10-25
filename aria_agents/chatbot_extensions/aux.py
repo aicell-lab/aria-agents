@@ -26,8 +26,7 @@ with open(config_file, "r", encoding="utf-8") as file:
 
 
 class SummaryWebsite(BaseModel):
-    """A summary single-page webpage written in html that neatly presents the suggested
- study or experimental protocol for user review"""
+    """A summary single-page webpage written in html that neatly presents the suggested study or experimental protocol for user review"""
 
     html_code: str = Field(
         description=(
@@ -130,21 +129,27 @@ def create_corpus_function(
     @schema_tool
     def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
-            ..., description="The query to search the NCBI PubMed Central Database."
+            ...,
+            description="The query to search the NCBI PubMed Central Database.",
         )
     ) -> str:
         """Searches PubMed Central using `PMCQuery` and creates a citation query engine."""
         loader = PubmedReader()
         terms = urllib.parse.urlencode({"term": pmc_query.query, "db": "pmc"})
-        print(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}")
+        print(
+            f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}"
+        )
         # print(test_pmc_query_hits(pmc_query))
         documents = loader.load_data(
-            search_query=pmc_query.query, max_results=CONFIG["aux"]["paper_limit"]
+            search_query=pmc_query.query,
+            max_results=CONFIG["aux"]["paper_limit"],
         )
         if len(documents) == 0:
             return "No papers were found in the PubMed Central database for the given query. Please try different terms for the query."
         Settings.llm = OpenAI(model=CONFIG["llm_model"])
-        Settings.embed_model = OpenAIEmbedding(model=CONFIG["aux"]["embedding_model"])
+        Settings.embed_model = OpenAIEmbedding(
+            model=CONFIG["aux"]["embedding_model"]
+        )
         query_index = VectorStoreIndex.from_documents(documents)
 
         # Save the query index to disk
@@ -248,7 +253,9 @@ async def write_website(
 
     if data_store is None:
         # Save the summary website to a HTML file
-        summary_website_file = os.path.join(project_folder, f"{website_type}.html")
+        summary_website_file = os.path.join(
+            project_folder, f"{website_type}.html"
+        )
         with open(summary_website_file, "w", encoding="utf-8") as f:
             f.write(summary_website.html_code)
         summary_website_url = "file://" + summary_website_file
