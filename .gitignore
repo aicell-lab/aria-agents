@@ -146,6 +146,9 @@ cython_debug/
 # Visual Studio Code
 .vscode/
 
+# Node
+node_modules/
+
 # others
 *.bin
 logs/
