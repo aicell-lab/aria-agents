@@ -90,7 +90,7 @@ async def get_protocol_feedback(
     else:
         pf = existing_feedback
     async with create_session_context(
-        id=session_id, role_setting=protocol_manager._setting
+        id=session_id, role_setting=protocol_manager.role_setting
     ):
         res = await protocol_manager.aask(
             [
@@ -143,7 +143,7 @@ async def write_protocol(
     role: Role,
     session_id: str = None,
 ) -> ExperimentalProtocol:
-    async with create_session_context(id=session_id, role_setting=role._setting):
+    async with create_session_context(id=session_id, role_setting=role.role_setting):
         if isinstance(protocol, SuggestedStudy):
             prompt = f"""Take the following suggested study and use it to produce a detailed protocol telling a student exactly what steps they should follow in the lab to collect data. Do not include any data analysis or conclusion-drawing steps, only data collection."""
             messages = [prompt, protocol]
