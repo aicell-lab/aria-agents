@@ -36,7 +36,7 @@ function App() {
         let dataStoreService = null;
         try {
             ariaAgentsService = await getService(token, ariaAgentsServiceId, true);
-            dataStoreService = await getService(token, dataStoreServiceId, true);
+            dataStoreService = await getService(token, dataStoreServiceId, false);
         }
         catch (error) {
             alert("You don't have permission to use the chatbot, please sign up and wait for approval");
