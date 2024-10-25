@@ -48,8 +48,8 @@ def create_tool_name(ext_id, tool_id=""):
     return "".join(word if word.istitle() else word.capitalize() for word in words)
 
 
-def tool_factory(ext_id, tool_id, ext_tool, schema):
-    input_model = json_schema_to_pydantic_model(schema)
+def tool_factory(ext_id, tool_id, ext_tool, tool_schema):
+    input_model = json_schema_to_pydantic_model(tool_schema)
     ext_tool.__name__ = create_tool_name(ext_id, tool_id)
     ext_tool.__doc__ = input_model.__doc__
     return schema_tool(ext_tool, input_model=input_model)
