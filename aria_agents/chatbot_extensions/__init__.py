@@ -14,9 +14,9 @@ def get_builtin_extensions(data_store: HyphaDataStore):
     extensions = []
     for module in pkgutil.walk_packages(__path__, __name__ + "."):
         if module.name.endswith("_extension"):
-            ext_module = module.module_finder.find_module(module.name).load_module(
+            ext_module = module.module_finder.find_module(
                 module.name
-            )
+            ).load_module(module.name)
             exts = ext_module.get_extension(data_store) or []
             if isinstance(exts, ChatbotExtension):
                 exts = [exts]
@@ -45,7 +45,9 @@ def create_tool_name(ext_id, tool_id=""):
     text = f"{ext_id}_{tool_id}"
     text = text.replace("-", " ").replace("_", " ").replace(".", " ")
     words = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+", text)
-    return "".join(word if word.istitle() else word.capitalize() for word in words)
+    return "".join(
+        word if word.istitle() else word.capitalize() for word in words
+    )
 
 
 def tool_factory(ext_id, tool_id, ext_tool, tool_schema):
@@ -93,8 +95,6 @@ async def main():
 
 
 if __name__ == "__main__":
-    import json
-
     schema = {
         "type": "object",
         "title": "RunScript",
