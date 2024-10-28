@@ -26,6 +26,7 @@ function App() {
 	const [svc, setSvc] = useState(null);
 	const [sessionId, setSessionId] = useState(null);
 	const [dataStore, setDataStore] = useState(null);
+	const [artefactManager, setArtefactManager] = useState(null);
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
 	);
@@ -50,12 +51,7 @@ function App() {
 	}, []);
 
 	const fetchChatObjects = async () => {
-		// const fileNames = ["chatlogs-session-0pbfwllwa.json", "chatlogs-session-r67tykwtr.json"]
-		// const promises = fileNames.map((fileName) =>
-		// 	fetch(`/chat/chat_logs/${fileName}`).then((response) => response.json())
-		// );
-		// return await Promise.all(promises);
-		// TODO: Fetch from DataStore
+		artefactManager
 	};
 
 	const loadPrevChatObjects = async () => {
@@ -74,46 +70,29 @@ function App() {
 		}
 	};
 
-	const getServices = async (
-		token,
-		ariaAgentsServiceId,
-		dataStoreServiceId
-	) => {
-		let ariaAgentsService = null;
-		let dataStoreService = null;
+	const setServices = async (token) => {
 		try {
-			ariaAgentsService = await getService(
-				token,
-				ariaAgentsServiceId,
-				true
-			);
-			dataStoreService = await getService(
-				token,
-				dataStoreServiceId,
-				false
-			);
+			const dataStoreService = await getService(
+				token, getServiceId() || "aria-agents/*:aria-agents", true);
+			const ariaAgentsService = await getService(
+				token, "aria-agents/*:data-store", false);
+			const artefactManagerService = await getService(
+				token, "aria-agents/*:artifact-manager", false);
+			setDataStore(dataStoreService);
+			setSvc(ariaAgentsService);
+			setArtefactManager(artefactManagerService);
 		} catch (error) {
 			alert(
-				"You don't have permission to use the chatbot, please sign up and wait for approval"
+				`You don't have permission to use the chatbot, please sign up and wait for approval`
 			);
 			console.error(error);
 		}
-		return { ariaAgentsService, dataStoreService };
 	};
 
 	const handleLogin = async () => {
-		setIsLoading(true);
 		const token = await login();
-		const ariaAgentsServiceId =
-			getServiceId() || "aria-agents/*:aria-agents";
-		const { ariaAgentsService, dataStoreService } = await getServices(
-			token,
-			ariaAgentsServiceId,
-			"aria-agents/*:data-store"
-		);
-		const prevChatObjects = await loadPrevChatObjects();
-		setDataStore(dataStoreService);
-		setSvc(ariaAgentsService);
+		setIsLoading(true);
+		await setServices(token);
 		setStatus("Ready to chat! Type your message and press enter!");
 		setIsLoading(false);
 		setPrevChatObjects(prevChatObjects);
@@ -307,6 +286,12 @@ function App() {
 		}
 	}
 
+	const saveChatHistory = async () => {
+		const historyDict = dict(chatHistory);
+		const history_json = json.dumps(historyDict);
+		// TODO: save as artefact
+	}
+
 	const handleSend = async () => {
 		if (!svc) {
 			await handleLogin();
@@ -317,9 +302,6 @@ function App() {
 			const currentQuestion = question;
 			const joinedStatePrompt =
 				getAttachmentStatePrompt(attachmentStatePrompts);
-			
-			console.log(chatHistory);
-			console.log(newChatHistory);
 
 			const newChatHistory = [
 				...chatHistory.values(),
@@ -333,11 +315,8 @@ function App() {
 				},
 			];
 
-			
 			const newChatMap = makeChatHistoryMap(newChatHistory);
-			console.log(chatHistory);
-			console.log(newChatMap);
-
+			
 			setIsChatComplete(false);
 			setAttachmentNames([]);
 			setChatHistory(newChatMap);
@@ -372,6 +351,7 @@ function App() {
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
+				saveChatHistory();
 				awaitUserResponse();
 			}
 		}
