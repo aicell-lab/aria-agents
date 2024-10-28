@@ -42,11 +42,37 @@ function App() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSending, setIsSending] = useState(false);
 	const [isChatComplete, setIsChatComplete] = useState(false);
+	const [prevChatObjects, setPrevChatObjects] = useState([]);
 
 	useEffect(() => {
 		// Automatically generate a session ID
 		setSessionId(generateSessionID());
 	}, []);
+
+	const fetchChatObjects = async () => {
+		// const fileNames = ["chatlogs-session-0pbfwllwa.json", "chatlogs-session-r67tykwtr.json"]
+		// const promises = fileNames.map((fileName) =>
+		// 	fetch(`/chat/chat_logs/${fileName}`).then((response) => response.json())
+		// );
+		// return await Promise.all(promises);
+		// TODO: Fetch from DataStore
+	};
+
+	const loadPrevChatObjects = async () => {
+		try {
+			const chatObjects = await fetchChatObjects();
+			const sortedChatObjects = chatObjects
+				.map((chatObject, index) => ({
+					...chatObject,
+					id: index.toString(),
+				}))
+				.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+			return sortedChatObjects;
+		} catch (error) {
+			console.error('Error loading past chats:', error);
+			return [];
+		}
+	};
 
 	const getServices = async (
 		token,
@@ -85,10 +111,12 @@ function App() {
 			ariaAgentsServiceId,
 			"aria-agents/*:data-store"
 		);
+		const prevChatObjects = await loadPrevChatObjects();
 		setDataStore(dataStoreService);
 		setSvc(ariaAgentsService);
 		setStatus("Ready to chat! Type your message and press enter!");
 		setIsLoading(false);
+		setPrevChatObjects(prevChatObjects);
 	};
 
 	const handleAttachment = async (event) => {
@@ -263,6 +291,22 @@ function App() {
 		setArtefacts((prevArtefacts) => [...prevArtefacts, { artefact, url }]);
 	};
 
+	const awaitUserResponse = () => {
+		setIsChatComplete(true);
+		setStatus("Ready to chat! Type your message and press enter!");
+		setIsSending(false);
+	}
+
+	const getAttachmentStatePrompt = (attachmentStatePrompts) => {
+		if (attachmentStatePrompts.size > 0) {
+			return "User attached the following files to the current query:\n" +
+				attachmentStatePrompts.join("\n");
+		}
+		else {
+			return "User did not attach any files."
+		}
+	}
+
 	const handleSend = async () => {
 		if (!svc) {
 			await handleLogin();
@@ -272,8 +316,11 @@ function App() {
 		if (question.trim()) {
 			const currentQuestion = question;
 			const joinedStatePrompt =
-				"User attached the following files to the current query:\n" +
-				attachmentStatePrompts.join("\n");
+				getAttachmentStatePrompt(attachmentStatePrompts);
+			
+			console.log(chatHistory);
+			console.log(newChatHistory);
+
 			const newChatHistory = [
 				...chatHistory.values(),
 				{
@@ -286,16 +333,14 @@ function App() {
 				},
 			];
 
+			
+			const newChatMap = makeChatHistoryMap(newChatHistory);
+			console.log(chatHistory);
+			console.log(newChatMap);
+
 			setIsChatComplete(false);
 			setAttachmentNames([]);
-			setChatHistory(
-				new Map(
-					newChatHistory.map((item, index) => [
-						index.toString(),
-						item,
-					])
-				)
-			);
+			setChatHistory(newChatMap);
 			setQuestion("");
 			setStatus("🤔 Thinking...");
 			setIsSending(true);
@@ -324,12 +369,10 @@ function App() {
 					extensions,
 					joinedStatePrompt
 				);
-				setIsChatComplete(true);
-				setStatus("Ready to chat! Type your message and press enter!");
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
-				setIsSending(false);
+				awaitUserResponse();
 			}
 		}
 	};
@@ -371,6 +414,21 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
+	const makeChatHistoryMap = (chatHistory) => {
+		return new Map(
+			chatHistory.map((item, index) => [
+				index.toString(),
+				item,
+			])
+		)
+	}
+
+	const onSelectChat = (chatObject) => {
+		const chatHistoryMap = makeChatHistoryMap(chatObject.conversations);
+		setChatHistory((chatHistoryMap));
+		awaitUserResponse();
+	}
+
 	return (
 		<div className="min-h-screen flex flex-col">
 			<button
@@ -385,7 +443,9 @@ function App() {
 				<Sidebar
 					isOpen={isSidebarOpen}
 					onClose={() => setIsSidebarOpen(false)}
-					onEditProfile={() => setShowProfileDialog(true)}
+					prevChats={prevChatObjects}
+					onSelectChat={onSelectChat}
+					isLoggedIn={svc != null}
 				/>
 				<div
 					className={`main-panel ${

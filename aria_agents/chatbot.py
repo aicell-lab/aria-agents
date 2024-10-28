@@ -480,6 +480,8 @@ async def register_chat_service(server):
             chat_log_full_path = os.path.join(chat_logs_path, filename)
             await save_chat_history(chat_log_full_path, chat_his_dict)
             print(f"Chat history saved to {filename}")
+            # TODO: Save to DataStore
+            # TODO: Generate title for datastore object
         return response.model_dump()
 
     async def chat(
