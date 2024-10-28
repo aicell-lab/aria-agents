@@ -5,6 +5,7 @@ import re
 from pydantic import BaseModel
 from schema_agents import schema_tool
 
+from hypha_rpc import connect_to_server
 from aria_agents.hypha_store import HyphaDataStore
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 from aria_agents.utils import ChatbotExtension
@@ -14,9 +15,9 @@ def get_builtin_extensions(data_store: HyphaDataStore):
     extensions = []
     for module in pkgutil.walk_packages(__path__, __name__ + "."):
         if module.name.endswith("_extension"):
-            ext_module = module.module_finder.find_module(module.name).load_module(
+            ext_module = module.module_finder.find_module(
                 module.name
-            )
+            ).load_module(module.name)
             exts = ext_module.get_extension(data_store) or []
             if isinstance(exts, ChatbotExtension):
                 exts = [exts]
@@ -45,11 +46,13 @@ def create_tool_name(ext_id, tool_id=""):
     text = f"{ext_id}_{tool_id}"
     text = text.replace("-", " ").replace("_", " ").replace(".", " ")
     words = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|\d+", text)
-    return "".join(word if word.istitle() else word.capitalize() for word in words)
+    return "".join(
+        word if word.istitle() else word.capitalize() for word in words
+    )
 
 
-def tool_factory(ext_id, tool_id, ext_tool, schema):
-    input_model = json_schema_to_pydantic_model(schema)
+def tool_factory(ext_id, tool_id, ext_tool, tool_schema):
+    input_model = json_schema_to_pydantic_model(tool_schema)
     ext_tool.__name__ = create_tool_name(ext_id, tool_id)
     ext_tool.__doc__ = input_model.__doc__
     return schema_tool(ext_tool, input_model=input_model)
@@ -78,8 +81,6 @@ async def extension_to_tools(extension: ChatbotExtension):
 
 
 async def main():
-    from hypha_rpc import connect_to_server
-
     server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
     data_store = HyphaDataStore()
     await data_store.setup(server)
@@ -93,8 +94,6 @@ async def main():
 
 
 if __name__ == "__main__":
-    import json
-
     schema = {
         "type": "object",
         "title": "RunScript",

@@ -12,7 +12,10 @@ def get_extension(data_store: HyphaDataStore = None) -> ChatbotExtension:
     return ChatbotExtension(
         id="aria",
         name="Aria",
-        description="Utility tools for suggesting studies, compiling experiments, and analyzing data.",
+        description=(
+            "Utility tools for suggesting studies, compiling experiments, and"
+            " analyzing data."
+        ),
         tools=dict(
             study_suggester=create_study_suggester_function(data_store),
             experiment_compiler=create_experiment_compiler_function(data_store),
@@ -27,7 +30,10 @@ if __name__ == "__main__":
         extension = get_extension()
         print(
             await extension.tools["study_suggester"](
-                user_request="I'm interested in designing a study about the metabolomics of U2OS cells",
+                user_request=(
+                    "I'm interested in designing a study about the metabolomics"
+                    " of U2OS cells"
+                ),
                 project_name="test",
                 constraints="",
             )
