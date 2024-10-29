@@ -17,20 +17,19 @@ function getServiceId() {
 	return urlParams.get("service_id");
 }
 
-async function getService(token, serviceId, ping) {
+async function getServer(token) {
 	const serverUrl = getServerUrl();
-	console.log("service ID: ", serviceId);
 	// method_timeout: 500 (8.3 minutes) is arbitrary number. Must be at least a few minutes due to slow functions
-	const server = await hyphaWebsocketClient.connectToServer({
+	return await hyphaWebsocketClient.connectToServer({
 		server_url: serverUrl,
 		token: token,
 		method_timeout: 500,
 	});
-	const svc = await server.getService(serviceId);
+}
 
-	if (ping) {
-		await svc.ping();
-	}
+async function getService(server, serviceId) {
+	console.log("service ID: ", serviceId);
+	const svc = await server.getService(serviceId, {"case_conversion": "camel"});
 	console.log("service connected: ", svc);
 	return svc;
 }
@@ -156,4 +155,5 @@ window.helpers = {
 	jsonToMarkdown: jsonToMarkdown,
 	modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
 	getServiceId: getServiceId,
+	serviceId: serviceId
 };
