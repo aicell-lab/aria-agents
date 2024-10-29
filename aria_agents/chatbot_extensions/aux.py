@@ -16,7 +16,7 @@ from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
 
-from aria_agents.hypha_store import HyphaDataStore
+from hypha import HyphaDataStore
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
