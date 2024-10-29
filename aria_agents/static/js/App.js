@@ -15,7 +15,7 @@ const {
 	ChatInput,
 	SuggestedStudies,
 	ChatHistory,
-	ArtefactsPanel,
+	ArtifactsPanel,
 } = window;
 
 function App() {
@@ -26,7 +26,7 @@ function App() {
 	const [svc, setSvc] = useState(null);
 	const [sessionId, setSessionId] = useState(null);
 	const [dataStore, setDataStore] = useState(null);
-	const [artefactManager, setArtefactManager] = useState(null);
+	const [artifactManager, setArtifactManager] = useState(null);
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
 	);
@@ -36,10 +36,10 @@ function App() {
 		occupation: "",
 		background: "",
 	});
-	const [isArtefactsPanelOpen, setIsArtefactsPanelOpen] = useState(false);
+	const [isArtifactsPanelOpen, setIsArtifactsPanelOpen] = useState(false);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-	const [artefacts, setArtefacts] = useState([]);
-	const [currentArtefactIndex, setCurrentArtefactIndex] = useState(0);
+	const [artifacts, setArtifacts] = useState([]);
+	const [currentArtifactIndex, setCurrentArtifactIndex] = useState(0);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSending, setIsSending] = useState(false);
 	const [isChatComplete, setIsChatComplete] = useState(false);
@@ -51,7 +51,7 @@ function App() {
 	}, []);
 
 	const fetchChatObjects = async () => {
-		artefactManager
+		artifactManager
 	};
 
 	const loadPrevChatObjects = async () => {
@@ -76,11 +76,11 @@ function App() {
 				token, getServiceId() || "aria-agents/*:aria-agents", true);
 			const ariaAgentsService = await getService(
 				token, "aria-agents/*:data-store", false);
-			const artefactManagerService = await getService(
+			const artifactManagerService = await getService(
 				token, "aria-agents/*:artifact-manager", false);
 			setDataStore(dataStoreService);
 			setSvc(ariaAgentsService);
-			setArtefactManager(artefactManagerService);
+			setArtifactManager(artifactManagerService);
 		} catch (error) {
 			alert(
 				`You don't have permission to use the chatbot, please sign up and wait for approval`
@@ -227,19 +227,19 @@ function App() {
 				const lastMessage = updatedHistory.get(query_id);
 				if (lastMessage) {
 					if (name === "SummaryWebsite") {
-						// Get the latest artefacts length using a functional update
-						setArtefacts((prevArtefacts) => {
-							const artefactIndex = prevArtefacts.length;
+						// Get the latest artifacts length using a functional update
+						setArtifacts((prevArtifacts) => {
+							const artifactIndex = prevArtifacts.length;
 
 							lastMessage.content = `
                                 <button 
                                     class="button" 
-                                    onclick="openSummaryWebsite(${artefactIndex})"
+                                    onclick="openSummaryWebsite(${artifactIndex})"
                                 >
                                     View Summary Website
                                 </button>`;
 
-							return prevArtefacts; // Return unchanged artefacts
+							return prevArtifacts; // Return unchanged artifacts
 						});
 					} else {
 						let finalContent =
@@ -260,14 +260,14 @@ function App() {
 
 	// Define the global function to open the summary website
 	window.openSummaryWebsite = (index) => {
-		if (index <= artefacts.length) {
-			setIsArtefactsPanelOpen(true);
-			setCurrentArtefactIndex(index);
+		if (index <= artifacts.length) {
+			setIsArtifactsPanelOpen(true);
+			setCurrentArtifactIndex(index);
 		}
 	};
 
-	const artefactCallback = (artefact, url) => {
-		setArtefacts((prevArtefacts) => [...prevArtefacts, { artefact, url }]);
+	const artifactCallback = (artifact, url) => {
+		setArtifacts((prevArtifacts) => [...prevArtifacts, { artifact, url }]);
 	};
 
 	const awaitUserResponse = () => {
@@ -289,7 +289,7 @@ function App() {
 	const saveChatHistory = async () => {
 		const historyDict = dict(chatHistory);
 		const history_json = json.dumps(historyDict);
-		// TODO: save as artefact
+		// TODO: save as artifact
 	}
 
 	const handleSend = async () => {
@@ -343,7 +343,7 @@ function App() {
 					currentChatHistory,
 					userProfile,
 					statusCallback,
-					artefactCallback,
+					artifactCallback,
 					sessionId,
 					extensions,
 					joinedStatePrompt
@@ -429,8 +429,8 @@ function App() {
 				/>
 				<div
 					className={`main-panel ${
-						isArtefactsPanelOpen
-							? "main-panel-artefacts"
+						isArtifactsPanelOpen
+							? "main-panel-artifacts"
 							: "main-panel-full"
 					}`}
 					onDrop={handleDrop}
@@ -493,38 +493,38 @@ function App() {
 					}}
 				/>
 			)}
-			{isArtefactsPanelOpen ? (
-				<ArtefactsPanel
+			{isArtifactsPanelOpen ? (
+				<ArtifactsPanel
 					onClose={() =>
-						setIsArtefactsPanelOpen(!isArtefactsPanelOpen)
+						setIsArtifactsPanelOpen(!isArtifactsPanelOpen)
 					}
-					artefacts={artefacts}
-					currentArtefactIndex={currentArtefactIndex}
+					artifacts={artifacts}
+					currentArtifactIndex={currentArtifactIndex}
 					onPrev={() => {
-						if (currentArtefactIndex > 0) {
-							setCurrentArtefactIndex(currentArtefactIndex - 1);
+						if (currentArtifactIndex > 0) {
+							setCurrentArtifactIndex(currentArtifactIndex - 1);
 						}
 					}}
 					onNext={() => {
-						if (currentArtefactIndex < artefacts.length - 1) {
-							setCurrentArtefactIndex(currentArtefactIndex + 1);
+						if (currentArtifactIndex < artifacts.length - 1) {
+							setCurrentArtifactIndex(currentArtifactIndex + 1);
 						}
 					}}
 				/>
 			) : (
 				<button
 					onClick={() =>
-						setIsArtefactsPanelOpen(!isArtefactsPanelOpen)
+						setIsArtifactsPanelOpen(!isArtifactsPanelOpen)
 					}
 					className="button fixed top-0 right-0 mt-4 mr-4"
 				>
-					Artefacts
+					Artifacts
 				</button>
 			)}
 			{isLoading && (
 				<div
 					className={`spinner-container ${
-						isArtefactsPanelOpen ? "margin-right-artefacts" : ""
+						isArtifactsPanelOpen ? "margin-right-artifacts" : ""
 					}`}
 				>
 					<div className="spinner"></div>
