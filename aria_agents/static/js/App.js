@@ -1,4 +1,4 @@
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
 const {
 	generateSessionID,
@@ -42,11 +42,24 @@ function App() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSending, setIsSending] = useState(false);
 	const [isChatComplete, setIsChatComplete] = useState(false);
+	const chatContainerRef = useRef(null);
+	const [isAtBottom, setIsAtBottom] = useState(true);
 
 	useEffect(() => {
 		// Automatically generate a session ID
 		setSessionId(generateSessionID());
 	}, []);
+
+	const handleScroll = () => {
+		const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+		setIsAtBottom(scrollHeight - scrollTop <= clientHeight + 1);
+	};
+
+	useEffect(() => {
+		if (chatContainerRef.current && isAtBottom) {
+			chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+		}
+	}, [chatHistory, isAtBottom]);
 
 	const getServices = async (
 		token,
@@ -422,10 +435,13 @@ function App() {
 						{chatHistory.size === 0 ? (
 							<SuggestedStudies setQuestion={setQuestion} />
 						) : (
-							<ChatHistory
-								chatHistory={chatHistory}
-								isSending={isSending}
-							/>
+							<div
+								ref={chatContainerRef}
+								onScroll={handleScroll}
+								style={{ maxHeight: '400px', overflowY: 'auto'}}
+							>
+								<ChatHistory chatHistory={chatHistory} isSending={isSending} />
+							</div>
 						)}
 						{isChatComplete && chatHistory.size > 0 && (
 							<ChatInput
