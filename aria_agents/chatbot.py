@@ -24,7 +24,7 @@ from aria_agents.chatbot_extensions import (
     extension_to_tools,
     get_builtin_extensions,
 )
-from hypha import HyphaDataStore
+from aria_agents.hypha_store import HyphaDataStore
 from aria_agents.quota import QuotaManager
 from aria_agents.utils import (
     ChatbotExtension,
