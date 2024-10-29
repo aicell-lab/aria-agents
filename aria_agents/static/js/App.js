@@ -50,13 +50,18 @@ function App() {
 		setSessionId(generateSessionID());
 	}, []);
 
-	const fetchChatObjects = async () => {
-		artifactManager
+	const listArtifactFiles = async (userId, filename) => {
+		const files = await artifactManager.putFile({
+			prefix: `collections/aria-agents-chats/${userId}-chats`,
+			path: filename,
+		});
+	
+		return files;
 	};
 
 	const loadPrevChatObjects = async () => {
 		try {
-			const chatObjects = await fetchChatObjects();
+			const chatObjects = await listArtifactFiles();
 			const sortedChatObjects = chatObjects
 				.map((chatObject, index) => ({
 					...chatObject,
@@ -77,7 +82,7 @@ function App() {
 			const ariaAgentsService = await getService(
 				token, "aria-agents/*:data-store", false);
 			const artifactManagerService = await getService(
-				token, "aria-agents/*:artifact-manager", false);
+				token, "public/artifact-manager", false);
 			setDataStore(dataStoreService);
 			setSvc(ariaAgentsService);
 			setArtifactManager(artifactManagerService);
@@ -88,10 +93,63 @@ function App() {
 			console.error(error);
 		}
 	};
+	
+	const createArtifactDataset = async (userId) => {
+		const datasetManifest = {
+			"id": `${userId}-chats`,
+			"name": `${userId} Chat History`,
+			"description": `The Aria Agents chat history of ${userId}`,
+			"type": "dataset"
+		};
+	
+		await artifactManager.create({
+			prefix: `collections/aria-agents-chats/${userId}-chats`,
+			manifest: datasetManifest,
+			permissions: { [userId]: "rw+" }
+		});
+	}
+
+	const putArtifactFile = async (userId, fileContent, filename) => {
+		const putUrl = await artifactManager.putFile({
+			prefix: `collections/aria-agents-chats/${userId}-chats`,
+			filePath: filename,
+		});
+	
+		const response = await fetch(putUrl, {
+			method: 'PUT',
+			body: fileContent
+		});
+	
+		if (!response.ok) {
+			throw new Error("File upload failed");
+		}
+	
+		await artifactManager.commit(`collections/aria-agents-chats/${userId}-chats`);
+	};
+	
+	const getArtifactFile = async (userId, filename) => {
+		const getUrl = await artifactManager.putFile({
+			prefix: `collections/aria-agents-chats/${userId}-chats`,
+			path: filename,
+		});
+	
+		const response = await fetch(getUrl);
+	
+		if (!response.ok) {
+			throw new Error("File download failed");
+		}
+	
+		await artifactManager.commit(`collections/aria-agents-chats/${userId}-chats`);
+	
+		return response;
+	};
 
 	const handleLogin = async () => {
 		const token = await login();
 		setIsLoading(true);
+		await createArtifactDataset(token); // TODO: or use existing
+		prevChatObjects = await loadPrevChatObjects();
+		setPrevChatObjects(prevChatObjects);
 		await setServices(token);
 		setStatus("Ready to chat! Type your message and press enter!");
 		setIsLoading(false);
@@ -289,7 +347,7 @@ function App() {
 	const saveChatHistory = async () => {
 		const historyDict = dict(chatHistory);
 		const history_json = json.dumps(historyDict);
-		// TODO: save as artifact
+		putArtifactFile("userId", history_json, `${sessionId}.json`);
 	}
 
 	const handleSend = async () => {
