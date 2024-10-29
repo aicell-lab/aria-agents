@@ -196,7 +196,8 @@ def create_query_function(query_engine: CitationQueryEngine) -> Callable:
     return query_corpus
 
 
-def load_template(template_file):
+def load_template(template_filename):
+    template_file = os.path.join(this_dir, f"html_templates/{template_filename}")
     with open(template_file, "r", encoding="utf-8") as t_file:
         return t_file.read()
 
@@ -218,15 +219,13 @@ async def write_website(
         register_default_events=True,
         model=CONFIG["llm_model"],
     )
-
-    suggested_study_template = load_template(
-        "html_templates/suggested_study_template.html"
-    )
-    exp_protocol_template = load_template(
-        "html_templates/experimental_protocol_template.html"
-    )
+    
     website_prompt = None
     if website_type == "suggested_study":
+        suggested_study_template = load_template(
+            "suggested_study_template.html"
+        )
+        
         website_prompt = (
             "Create a single-page website summarizing the information in the"
             " suggested study using the following template:"
@@ -235,6 +234,9 @@ async def write_website(
             " the suggested study."
         )
     elif website_type == "experimental_protocol":
+        exp_protocol_template = load_template(
+            "experimental_protocol_template.html"
+        )
         website_prompt = (
             "Create a single-page website summarizing the information in the experimental protocol"
             "website_prompt using the following template:"
