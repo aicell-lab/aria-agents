@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from schema_agents import schema_tool
 
 from hypha_rpc import connect_to_server
-from hypha import HyphaDataStore
+from aria_agents.hypha_store import HyphaDataStore
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 from aria_agents.utils import ChatbotExtension
 

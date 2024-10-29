@@ -18,7 +18,7 @@ from aria_agents.chatbot_extensions.aux import (
     create_query_function,
     write_website,
 )
-from hypha import HyphaDataStore
+from aria_agents.hypha_store import HyphaDataStore
 
 dotenv.load_dotenv()
 

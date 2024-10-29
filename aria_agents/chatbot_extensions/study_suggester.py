@@ -17,7 +17,7 @@ from aria_agents.chatbot_extensions.aux import (
     write_website,
     # TODO: add PMCQuery
 )
-from hypha import HyphaDataStore
+from aria_agents.hypha_store import HyphaDataStore
 
 dotenv.load_dotenv()
 
