@@ -1,4 +1,5 @@
-const { useState, useEffect } = React;
+// App.js
+const { useState, useEffect, useRef } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
 const {
 	generateSessionID,
@@ -42,11 +43,53 @@ function App() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSending, setIsSending] = useState(false);
 	const [isChatComplete, setIsChatComplete] = useState(false);
+	const chatContainerRef = useRef(null);
+	const [isNearBottom, setIsNearBottom] = useState(true);
 
 	useEffect(() => {
 		// Automatically generate a session ID
 		setSessionId(generateSessionID());
 	}, []);
+
+	useEffect(() => {
+		// Add scroll listener to window
+		window.addEventListener('scroll', handleScroll);
+		return () => window.removeEventListener('scroll', handleScroll);
+	}, []);
+
+	const handleScroll = () => {
+		if (chatContainerRef.current) {
+			const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+			const buffer = 100; // Pixels from bottom to consider "at bottom"
+			setIsNearBottom(scrollHeight - scrollTop - clientHeight <= buffer);
+		}
+	};
+
+	const scrollToBottom = () => {
+		if (isNearBottom) {
+			requestAnimationFrame(() => {
+				window.scrollTo({
+					top: document.documentElement.scrollHeight,
+					behavior: 'smooth'
+				});
+			});
+		}
+	};
+
+	useEffect(() => {
+		// Observe chat container for content changes
+		const observer = new MutationObserver(scrollToBottom);
+		
+		if (chatContainerRef.current) {
+			observer.observe(chatContainerRef.current, {
+				childList: true,
+				subtree: true,
+				characterData: true
+			});
+		}
+
+		return () => observer.disconnect();
+	}, [chatHistory, isNearBottom]);
 
 	const getServices = async (
 		token,
@@ -422,10 +465,9 @@ function App() {
 						{chatHistory.size === 0 ? (
 							<SuggestedStudies setQuestion={setQuestion} />
 						) : (
-							<ChatHistory
-								chatHistory={chatHistory}
-								isSending={isSending}
-							/>
+							<div ref={chatContainerRef}>
+								<ChatHistory chatHistory={chatHistory} isSending={isSending} />
+							</div>
 						)}
 						{isChatComplete && chatHistory.size > 0 && (
 							<ChatInput
