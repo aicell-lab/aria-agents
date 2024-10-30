@@ -1,3 +1,4 @@
+// App.js
 const { useState, useEffect, useRef } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
 const {
@@ -50,15 +51,46 @@ function App() {
 		setSessionId(generateSessionID());
 	}, []);
 
+	useEffect(() => {
+		// Add scroll listener to window
+		window.addEventListener('scroll', handleScroll);
+		return () => window.removeEventListener('scroll', handleScroll);
+	}, []);
+
 	const handleScroll = () => {
-		const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-		setIsAtBottom(scrollHeight - scrollTop <= clientHeight + 1);
+		if (chatContainerRef.current) {
+			const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+			const buffer = 100; // Pixels from bottom to consider "at bottom"
+			setIsAtBottom(scrollHeight - scrollTop - clientHeight <= buffer);
+		}
 	};
 
 	useEffect(() => {
-		if (chatContainerRef.current && isAtBottom) {
-			chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+		const scrollToBottom = () => {
+			if (isAtBottom) {
+				requestAnimationFrame(() => {
+					window.scrollTo({
+						top: document.documentElement.scrollHeight,
+						behavior: 'smooth'
+					});
+				});
+			}
+		};
+
+		scrollToBottom();
+
+		// Observe chat container for content changes
+		const observer = new MutationObserver(scrollToBottom);
+		
+		if (chatContainerRef.current) {
+			observer.observe(chatContainerRef.current, {
+				childList: true,
+				subtree: true,
+				characterData: true
+			});
 		}
+
+		return () => observer.disconnect();
 	}, [chatHistory, isAtBottom]);
 
 	const getServices = async (
@@ -435,13 +467,7 @@ function App() {
 						{chatHistory.size === 0 ? (
 							<SuggestedStudies setQuestion={setQuestion} />
 						) : (
-							<div
-								ref={chatContainerRef}
-								onScroll={handleScroll}
-								style={{ maxHeight: '400px', overflowY: 'auto'}}
-							>
-								<ChatHistory chatHistory={chatHistory} isSending={isSending} />
-							</div>
+							<ChatHistory ref={chatContainerRef} chatHistory={chatHistory} isSending={isSending} />
 						)}
 						{isChatComplete && chatHistory.size > 0 && (
 							<ChatInput
