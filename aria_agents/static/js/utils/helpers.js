@@ -155,5 +155,5 @@ window.helpers = {
 	jsonToMarkdown: jsonToMarkdown,
 	modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
 	getServiceId: getServiceId,
-	serviceId: serviceId
+	getServer: getServer
 };

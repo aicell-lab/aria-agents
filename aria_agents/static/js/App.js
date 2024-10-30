@@ -50,8 +50,24 @@ function App() {
 		// Automatically generate a session ID
 		setSessionId(generateSessionID());
 	}, []);
+
+	useEffect(async () => {
+		if (artifactManager) {
+			await createChatCollection(artifactManager);
+		}
+	}, [artifactManager]);
+
+	const loadChatObjects = async() => {
+		try {
+			const prevChatObjects = await artifactManager.list("aria-agents-chats");
+			setPrevChatObjects(prevChatObjects);
+		}
+		catch {
+			console.log("No previous chats.");
+		}
+	}
 	
-	const createArtifactGallery = async (artifactService) => {
+	const createChatCollection = async () => {
 		const galleryManifest = {
 			id: "aria-agents-chats",
 			name: "Aria Agents Chat History",
@@ -60,18 +76,18 @@ function App() {
 		};
 	
 		try {
-			await artifactService.create({
+			await artifactManager.create({
 				prefix: "aria-agents-chats",
 				manifest: galleryManifest,
 				orphan: true
 			});
 		}
-		catch (error) {
+		catch {
 			console.log("User chat collection already exists.");
 		}
-	};	
+	};
 
-	const createArtifactDataset = async (chatHistory, artifacts) => {
+	const saveChatHistory = async (chatHistory, artifacts) => {
 		const datasetManifest = {
 			"id": `${sessionId}`,
 			"name": `${sessionId} Chat`,
@@ -79,6 +95,7 @@ function App() {
 			"type": "chat",
 			"conversations": [chatHistory],
 			"artifacts": [artifacts],
+			"timestamp": new Date().toISOString(),
 		};
 	
 		try {
@@ -86,39 +103,16 @@ function App() {
 				prefix: `aria-agents-chats/${sessionId}`,
 				manifest: datasetManifest,
 			});
-		} catch (error) {
+		} catch {
 			await artifactManager.edit({
 				prefix: `aria-agents-chats/${sessionId}`,
 				manifest: datasetManifest,
 			})
 
-			await artifactManager.commit(`aria-agents-chats/${userId}-chats`);
+			await artifactManager.commit(`aria-agents-chats/${sessionId}`);
 		}
-	}
 
-	const listArtifactFiles = async (userId, filename) => {
-		const files = await artifactManager.putFile({
-			prefix: `aria-agents-chats/${userId}-chats`,
-			path: filename,
-		});
-	
-		return files;
-	};
-
-	const loadPrevChatObjects = async () => {
-		try {
-			const chatObjects = await listArtifactFiles();
-			const sortedChatObjects = chatObjects
-				.map((chatObject, index) => ({
-					...chatObject,
-					id: index.toString(),
-				}))
-				.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-			return sortedChatObjects;
-		} catch (error) {
-			console.error('Error loading past chats:', error);
-			return [];
-		}
+		await loadChatObjects();
 	};
 
 	const setServices = async (server) => {
@@ -143,45 +137,9 @@ function App() {
 		setArtifactManager(artifactManagerService);
 	};
 
-	const putArtifactFile = async (fileContent, filename) => {
-		const putUrl = await artifactManager.putFile({
-			prefix: `aria-agents-chats/${sessionId}`,
-			filePath: filename,
-		});
-	
-		const response = await fetch(putUrl, {
-			method: 'PUT',
-			body: fileContent
-		});
-	
-		if (!response.ok) {
-			throw new Error("File upload failed");
-		}
-	
-		await artifactManager.commit(`aria-agents-chats/${sessionId}`);
-	};
-	
-	const getArtifactFile = async (filename) => {
-		const getUrl = await artifactManager.getFile({
-			prefix: `aria-agents-chats/${sessionId}`,
-			path: filename,
-		});
-	
-		const response = await fetch(getUrl);
-	
-		if (!response.ok) {
-			throw new Error("File download failed");
-		}
-
-		return response;
-	};
-
 	const handleLogin = async () => {
 		const token = await login();
 		setIsLoading(true);
-		await createArtifactGallery();
-		const prevChatObjects = await loadPrevChatObjects();
-		setPrevChatObjects(prevChatObjects);
 		const server = await getServer(token);
 		await setServices(server);
 		setStatus("Ready to chat! Type your message and press enter!");
@@ -193,7 +151,6 @@ function App() {
 
 		const newAttachmentPrompts = [];
 		const newAttachmentNames = [];
-		let attachmentCount = attachmentStatePrompts.length;
 
 		for (const file of files) {
 			try {
@@ -203,7 +160,6 @@ function App() {
 					`- **${file.name}**, available at: [${fileUrl}](${fileUrl})`
 				);
 				newAttachmentNames.push(file.name);
-				attachmentCount++;
 			} catch (error) {
 				console.error(`Error uploading ${file.name}:`, error);
 			}
@@ -258,7 +214,7 @@ function App() {
 		);
 	};
 
-	const statusCallback = (message) => {
+	const statusCallback = async (message) => {
 		const {
 			type,
 			session: { id, role_setting: roleSetting },
@@ -345,6 +301,8 @@ function App() {
 				}
 				return updatedHistory;
 			});
+
+			await saveChatHistory();
 		}
 	};
 
@@ -376,19 +334,11 @@ function App() {
 		}
 	}
 
-	const saveChatHistory = async () => {
-		const historyDict = dict(chatHistory);
-		const history_json = json.dumps(historyDict);
-		putArtifactFile(history_json, `${sessionId}.json`);
-	}
-
 	const handleSend = async () => {
 		if (!svc) {
 			await handleLogin();
 			return;
 		}
-
-		await createArtifactDataset();
 
 		if (question.trim()) {
 			const currentQuestion = question;
@@ -407,7 +357,12 @@ function App() {
 				},
 			];
 
-			const newChatMap = makeChatHistoryMap(newChatHistory);
+			const newChatMap = new Map(
+				newChatHistory.map((item, index) => [
+					index.toString(),
+					item,
+				])
+			);
 			
 			setIsChatComplete(false);
 			setAttachmentNames([]);
@@ -443,7 +398,7 @@ function App() {
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
-				saveChatHistory();
+				await saveChatHistory();
 				awaitUserResponse();
 			}
 		}
@@ -486,18 +441,9 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
-	const makeChatHistoryMap = (chatHistory) => {
-		return new Map(
-			chatHistory.map((item, index) => [
-				index.toString(),
-				item,
-			])
-		)
-	}
-
 	const onSelectChat = (chatObject) => {
-		const chatHistoryMap = makeChatHistoryMap(chatObject.conversations);
-		setChatHistory((chatHistoryMap));
+		const chatHistoryMap = chatObject.conversations;
+		setChatHistory(chatHistoryMap);
 		awaitUserResponse();
 	}
 

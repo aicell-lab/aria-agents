@@ -23,7 +23,7 @@ function Sidebar({ isOpen, onClose, prevChats, onSelectChat, isLoggedIn }) {
 						className="block w-full text-left p-2 text-gray-700 hover:bg-gray-200 rounded"
 						onClick={() => onSelectChat(chatObject)}
 					>
-						{chatObject.timestamp}
+						{chatObject.name}
 					</button>
 				))}
 			</div>
