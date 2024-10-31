@@ -44,7 +44,7 @@ function App() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSending, setIsSending] = useState(false);
 	const [isChatComplete, setIsChatComplete] = useState(false);
-	const [prevChatObjects, setPrevChatObjects] = useState([]);
+	const [prevChats, setPrevChats] = useState([]);
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -54,14 +54,14 @@ function App() {
 	useEffect(async () => {
 		if (artifactManager) {
 			await createChatCollection();
-			await loadChatObjects();
+			await loadChats();
 		}
 	}, [artifactManager]);
 
-	const loadChatObjects = async() => {
+	const loadChats = async() => {
 		try {
 			const prevChatObjects = await artifactManager.list("aria-agents-chats");
-			setPrevChatObjects(prevChatObjects);
+			setPrevChats(prevChatObjects);
 		}
 		catch {
 			console.log("No previous chats.");
@@ -89,7 +89,7 @@ function App() {
 		}
 	};
 
-	const saveChatHistory = async (chatHistory, artifacts) => {
+	const saveChat = async (chatHistory, artifacts) => {
 		const datasetManifest = {
 			"id": `${sessionId}`,
 			"name": `${question}`,
@@ -116,8 +116,18 @@ function App() {
 			await artifactManager.commit(`aria-agents-chats/${sessionId}`);
 		}
 
-		await loadChatObjects();
+		await loadChats();
 	};
+
+	const deleteChat = async (chat) => {
+		await artifactManager.delete({
+			prefix: `aria-agents-chats/${chat.id}`,
+			delete_files: true,
+			recursive: true,
+			_rkwargs: true
+		});
+		await loadChats();
+	}
 
 	const setServices = async (server) => {
 		const ariaAgentsService = await getService(
@@ -306,7 +316,7 @@ function App() {
 				return updatedHistory;
 			});
 
-			await saveChatHistory();
+			await saveChat();
 		}
 	};
 
@@ -444,8 +454,8 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
-	const onSelectChat = (chatObject) => {
-		setChatHistory(chatObject["conversations"]);
+	const displayChat = (chat) => {
+		setChatHistory(chat.conversations);
 		awaitUserResponse();
 	}
 
@@ -463,8 +473,9 @@ function App() {
 				<Sidebar
 					isOpen={isSidebarOpen}
 					onClose={() => setIsSidebarOpen(false)}
-					prevChats={prevChatObjects}
-					onSelectChat={onSelectChat}
+					prevChats={prevChats}
+					onSelectChat={displayChat}
+					onDeleteChat={deleteChat}
 					isLoggedIn={svc != null}
 				/>
 				<div
