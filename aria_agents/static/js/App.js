@@ -7,7 +7,6 @@ const {
 	completeCodeBlocks,
 	jsonToMarkdown,
 	modifyLinksToOpenInNewTab,
-	getServiceId,
 	getServer,
 } = window.helpers;
 const {
@@ -45,6 +44,7 @@ function App() {
 	const [isSending, setIsSending] = useState(false);
 	const [isChatComplete, setIsChatComplete] = useState(false);
 	const [prevChats, setPrevChats] = useState([]);
+	const [chatTitle, setChatTitle] = useState("");
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -58,9 +58,19 @@ function App() {
 		}
 	}, [artifactManager]);
 
+	useEffect(async () => {
+		if (artifactManager && chatTitle.length !== 0) {
+			await saveChat();
+		}
+	}, [chatHistory, artifacts, chatTitle]);
+
 	const loadChats = async() => {
 		try {
-			const prevChatObjects = await artifactManager.list("aria-agents-chats");
+			const prevChatObjects = await artifactManager.list({
+				prefix: "aria-agents-chats",
+				summary_fields: ["*"],
+				_rkwargs: true,
+			});
 			setPrevChats(prevChatObjects);
 		}
 		catch {
@@ -89,18 +99,17 @@ function App() {
 		}
 	};
 
-	const saveChat = async (chatHistory, artifacts) => {
+	const saveChat = async () => {
 		const datasetManifest = {
 			"id": `${sessionId}`,
-			"name": `${question}`,
+			"name": `${chatTitle}`,
 			"description": `The Aria Agents chat history of ${sessionId}`,
 			"type": "chat",
-			"testprop": "this is a test",
 			"conversations": chatHistory,
 			"artifacts": artifacts,
 			"timestamp": new Date().toISOString(),
 		};
-	
+
 		try {
 			await artifactManager.create({
 				prefix: `aria-agents-chats/${sessionId}`,
@@ -115,8 +124,6 @@ function App() {
 			})
 			await artifactManager.commit(`aria-agents-chats/${sessionId}`);
 		}
-
-		await loadChats();
 	};
 
 	const deleteChat = async (chat) => {
@@ -131,9 +138,9 @@ function App() {
 
 	const setServices = async (server) => {
 		const ariaAgentsService = await getService(
-			server, getServiceId() || "aria-agents/aria-agents");
+			server, "public/aria-agents", "aria-agents/aria-agents");
 		const dataStoreService = await getService(
-			server, "aria-agents/data-store");
+			server, "public/data-store", "aria-agents/data-store");
 		const artifactManagerService = await getService(
 			server, "public/artifact-manager");
 
@@ -315,8 +322,6 @@ function App() {
 				}
 				return updatedHistory;
 			});
-
-			await saveChat();
 		}
 	};
 
@@ -354,10 +359,16 @@ function App() {
 			return;
 		}
 
+		await loadChats();
+
 		if (question.trim()) {
 			const currentQuestion = question;
 			const joinedStatePrompt =
 				getAttachmentStatePrompt(attachmentStatePrompts);
+
+			if (chatTitle.length === 0) {
+				setChatTitle(question);
+			}
 
 			const newChatHistory = [
 				...chatHistory.values(),
@@ -415,6 +426,8 @@ function App() {
 				awaitUserResponse();
 			}
 		}
+
+		await saveChat();
 	};
 
 	const handleDrop = (e) => {
@@ -455,7 +468,9 @@ function App() {
 	};
 
 	const displayChat = (chat) => {
-		setChatHistory(chat.conversations);
+		console.log(chat);
+		const chatMap = new Map(Object.entries(chat.conversations));
+		setChatHistory(chatMap);
 		awaitUserResponse();
 	}
 

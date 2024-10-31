@@ -3,8 +3,7 @@ function generateSessionID() {
 }
 
 function getServerUrl() {
-	const urlParams = new URLSearchParams(window.location.search);
-	let serverUrl = urlParams.get("server") || "https://hypha.aicell.io";
+	let serverUrl = getURLParam("server") || window.location.origin;
 	if (serverUrl.includes("localhost")) {
 		serverUrl = "http://localhost:9000";
 	}
@@ -12,9 +11,9 @@ function getServerUrl() {
 	return serverUrl;
 }
 
-function getServiceId() {
+function getURLParam(param_name) {
 	const urlParams = new URLSearchParams(window.location.search);
-	return urlParams.get("service_id");
+	return urlParams.get(param_name);
 }
 
 async function getServer(token) {
@@ -27,7 +26,8 @@ async function getServer(token) {
 	});
 }
 
-async function getService(server, serviceId) {
+async function getService(server, localId, remoteId = null) {
+	const serviceId = remoteId && getURLParam("server")? remoteId : localId;
 	console.log("service ID: ", serviceId);
 	const svc = await server.getService(serviceId, {"case_conversion": "camel"});
 	console.log("service connected: ", svc);
@@ -154,6 +154,5 @@ window.helpers = {
 	completeCodeBlocks: completeCodeBlocks,
 	jsonToMarkdown: jsonToMarkdown,
 	modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
-	getServiceId: getServiceId,
 	getServer: getServer
 };
