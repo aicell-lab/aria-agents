@@ -17,15 +17,17 @@ function Sidebar({ isOpen, onClose, prevChats, onSelectChat, isLoggedIn }) {
 						+
 					</button>
 				}
-				{prevChats.map((chatObject) => (
-					<button
-						key={chatObject.id}
-						className="block w-full text-left p-2 text-gray-700 hover:bg-gray-200 rounded"
-						onClick={() => onSelectChat(chatObject)}
-					>
-						{chatObject.name}
-					</button>
-				))}
+				<div className="max-h-[calc(100vh-8rem)] overflow-y-auto">
+					{prevChats.map((chatObject) => (
+						<button
+							key={chatObject.id}
+							className="block w-full text-left p-2 text-gray-700 hover:bg-gray-200 rounded"
+							onClick={() => onSelectChat(chatObject)}
+						>
+							{chatObject.name}
+						</button>
+					))}
+				</div>
 			</div>
 		</div>
 	);

@@ -70,7 +70,6 @@ function App() {
 	
 	const createChatCollection = async () => {
 		const galleryManifest = {
-			// "id": "aria-agents-chats",
 			"name": "Aria Agents Chat History",
 			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
 			"type": "collection",
@@ -93,11 +92,12 @@ function App() {
 	const saveChatHistory = async (chatHistory, artifacts) => {
 		const datasetManifest = {
 			"id": `${sessionId}`,
-			"name": `${sessionId} Chat`,
+			"name": `${question}`,
 			"description": `The Aria Agents chat history of ${sessionId}`,
 			"type": "chat",
-			"conversations": [chatHistory],
-			"artifacts": [artifacts],
+			"testprop": "this is a test",
+			"conversations": chatHistory,
+			"artifacts": artifacts,
 			"timestamp": new Date().toISOString(),
 		};
 	
@@ -445,8 +445,7 @@ function App() {
 	};
 
 	const onSelectChat = (chatObject) => {
-		const chatHistoryMap = chatObject.conversations;
-		setChatHistory(chatHistoryMap);
+		setChatHistory(chatObject["conversations"]);
 		awaitUserResponse();
 	}
 
