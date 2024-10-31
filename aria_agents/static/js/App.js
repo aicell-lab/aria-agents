@@ -53,7 +53,8 @@ function App() {
 
 	useEffect(async () => {
 		if (artifactManager) {
-			await createChatCollection(artifactManager);
+			await createChatCollection();
+			await loadChatObjects();
 		}
 	}, [artifactManager]);
 
@@ -69,17 +70,19 @@ function App() {
 	
 	const createChatCollection = async () => {
 		const galleryManifest = {
-			id: "aria-agents-chats",
-			name: "Aria Agents Chat History",
-			description: "A collection used to store previous chat sessions with the Aria Agents chatbot",
-			type: "collection",
+			// "id": "aria-agents-chats",
+			"name": "Aria Agents Chat History",
+			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
+			"type": "collection",
+			"collection": [],
 		};
 	
 		try {
 			await artifactManager.create({
 				prefix: "aria-agents-chats",
 				manifest: galleryManifest,
-				orphan: true
+				orphan: true,
+				_rkwargs: true
 			});
 		}
 		catch {
@@ -102,13 +105,14 @@ function App() {
 			await artifactManager.create({
 				prefix: `aria-agents-chats/${sessionId}`,
 				manifest: datasetManifest,
+				_rkwargs: true
 			});
 		} catch {
 			await artifactManager.edit({
 				prefix: `aria-agents-chats/${sessionId}`,
 				manifest: datasetManifest,
+				_rkwargs: true
 			})
-
 			await artifactManager.commit(`aria-agents-chats/${sessionId}`);
 		}
 
@@ -398,7 +402,6 @@ function App() {
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
-				await saveChatHistory();
 				awaitUserResponse();
 			}
 		}
