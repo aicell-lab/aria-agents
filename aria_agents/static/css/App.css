@@ -4,13 +4,13 @@
 }
 
 .sidebar.open {
-    --width-sidebar: 12em;
+    --width-sidebar: 14em;
     display: block;
 }
 
 @media (min-width: 768px) {
     :root{
-        --width-sidebar: 12em;
+        --width-sidebar: 14em;
         --width-artifacts-panel: 30%;
     }
 }

@@ -11,7 +11,7 @@ function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLog
 			<div className="mb-4">
 				{isLoggedIn &&
 					<button
-						className="block w-full text-left p-2 text-gray-700 hover:bg-gray-200 rounded"
+						className="text-sm block w-full text-left p-2 text-gray-700 hover:bg-gray-200 rounded"
 						onClick={() => onSelectChat({})}
 					>
 						New chat 🪶
@@ -21,7 +21,7 @@ function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLog
 					{prevChats.map((chatObject) => (
 						<div key={chatObject.id} className="flex w-full items-center hover:bg-gray-200 rounded">
 							<button
-								className="flex-1 text-left p-2 text-gray-700 overflow-hidden whitespace-nowrap text-ellipsis"
+								className="text-sm flex-1 text-left p-2 text-gray-700 overflow-hidden whitespace-nowrap text-ellipsis"
 								onClick={() => onSelectChat(chatObject)}
 							>
 								{chatObject.name}

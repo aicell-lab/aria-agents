@@ -45,7 +45,7 @@ function App() {
 	const [isChatComplete, setIsChatComplete] = useState(false);
 	const [prevChats, setPrevChats] = useState([]);
 	const [chatTitle, setChatTitle] = useState("");
-	const [messageIsComplete, setMessageIsComplete] = useState(true);
+	const [messageIsComplete, setMessageIsComplete] = useState(false);
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -64,7 +64,7 @@ function App() {
 			await saveChat();
 			await loadChats();
 		}
-	}, [messageIsComplete]);
+	}, [messageIsComplete, chatTitle]);
 
 	const loadChats = async() => {
 		try {
@@ -359,6 +359,13 @@ function App() {
 		}
 	}
 
+	const titleCallback = async (message) => {
+		if (message.status === "finished") {
+			const newTitle = JSON.parse(message.arguments).response.trim();
+			setChatTitle(newTitle);
+		}
+	}
+
 	const handleSend = async () => {
 		if (!svc) {
 			await handleLogin();
@@ -369,10 +376,6 @@ function App() {
 			const currentQuestion = question;
 			const joinedStatePrompt =
 				getAttachmentStatePrompt(attachmentStatePrompts);
-
-			if (chatTitle === "") {
-				setChatTitle(question);
-			}
 
 			const newChatHistory = [
 				...chatHistory.values(),
@@ -424,6 +427,22 @@ function App() {
 					extensions,
 					joinedStatePrompt
 				);
+				if (chatTitle === "") {
+					const summaryQuestion = `Give a succinct title to this chat
+					session summarizing this prompt written by
+					the user: "${currentQuestion}". Respond ONLY with words,
+					maximum six words.`
+					await svc.chat(
+						summaryQuestion,
+						currentChatHistory,
+						userProfile,
+						titleCallback,
+						() => {},
+						sessionId,
+						extensions,
+						joinedStatePrompt
+					);
+				}
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
@@ -473,6 +492,8 @@ function App() {
 		const chatMap = new Map(Object.entries(chat.conversations || {}));
 		setChatTitle(chat.name || "");
 		setChatHistory(chatMap);
+		setSessionId(chatMap.id || generateSessionID());
+		setMessageIsComplete(false);
 		awaitUserResponse();
 	}
 
