@@ -45,6 +45,7 @@ function App() {
 	const [isChatComplete, setIsChatComplete] = useState(false);
 	const [prevChats, setPrevChats] = useState([]);
 	const [chatTitle, setChatTitle] = useState("");
+	const [messageIsComplete, setMessageIsComplete] = useState(true);
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -59,10 +60,11 @@ function App() {
 	}, [artifactManager]);
 
 	useEffect(async () => {
-		if (artifactManager && chatTitle.length !== 0) {
+		if (chatTitle !== "" && messageIsComplete) {
 			await saveChat();
+			await loadChats();
 		}
-	}, [chatHistory, artifacts, chatTitle]);
+	}, [messageIsComplete]);
 
 	const loadChats = async() => {
 		try {
@@ -255,6 +257,7 @@ function App() {
 		const headerFinished = marked(`### Tool 🛠️ \`${name}\``);
 
 		if (status === "start") {
+			setMessageIsComplete(false);
 			// Initialize new message entry in chat history
 			setChatHistory((prevHistory) => {
 				const updatedHistory = new Map(prevHistory);
@@ -324,6 +327,7 @@ function App() {
 				}
 				return updatedHistory;
 			});
+			setMessageIsComplete(true);
 		}
 	};
 
@@ -361,14 +365,12 @@ function App() {
 			return;
 		}
 
-		await loadChats();
-
 		if (question.trim()) {
 			const currentQuestion = question;
 			const joinedStatePrompt =
 				getAttachmentStatePrompt(attachmentStatePrompts);
 
-			if (chatTitle.length === 0) {
+			if (chatTitle === "") {
 				setChatTitle(question);
 			}
 
@@ -428,8 +430,6 @@ function App() {
 				awaitUserResponse();
 			}
 		}
-
-		await saveChat();
 	};
 
 	const handleDrop = (e) => {
@@ -470,8 +470,8 @@ function App() {
 	};
 
 	const displayChat = (chat) => {
-		console.log(chat);
-		const chatMap = new Map(Object.entries(chat.conversations));
+		const chatMap = new Map(Object.entries(chat.conversations || {}));
+		setChatTitle(chat.name || "");
 		setChatHistory(chatMap);
 		awaitUserResponse();
 	}
