@@ -1,4 +1,5 @@
-const { useState, useEffect } = React;
+// App.js
+const { useState, useEffect, useRef } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
 const {
 	generateSessionID,
@@ -46,12 +47,40 @@ function App() {
 	const [prevChats, setPrevChats] = useState([]);
 	const [chatTitle, setChatTitle] = useState("");
 	const [messageIsComplete, setMessageIsComplete] = useState(false);
+	const chatContainerRef = useRef(null);
+	const [isNearBottom, setIsNearBottom] = useState(true);
 
 	useEffect(() => {
 		// Automatically generate a session ID
 		setSessionId(generateSessionID());
 	}, []);
 
+	useEffect(() => {
+		// Add scroll listener to window
+		window.addEventListener('scroll', handleScroll);
+		return () => window.removeEventListener('scroll', handleScroll);
+	}, []);
+
+	
+	useEffect(() => {
+		if (chatContainerRef.current && isNearBottom) {
+			requestAnimationFrame(() => {
+				window.scrollTo({
+					top: document.documentElement.scrollHeight,
+					behavior: 'smooth'
+				});
+			});
+		}
+	}, [chatHistory, isNearBottom]);
+	
+	const handleScroll = () => {
+		if (chatContainerRef.current) {
+			const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+			const buffer = 100; // Pixels from bottom to consider "at bottom"
+			setIsNearBottom(scrollHeight - scrollTop - clientHeight <= buffer);
+		}
+	};
+	
 	useEffect(async () => {
 		if (artifactManager) {
 			await createChatCollection();
@@ -551,10 +580,9 @@ function App() {
 						{chatHistory.size === 0 ? (
 							<SuggestedStudies setQuestion={setQuestion} />
 						) : (
-							<ChatHistory
-								chatHistory={chatHistory}
-								isSending={isSending}
-							/>
+							<div ref={chatContainerRef}>
+								<ChatHistory chatHistory={chatHistory} isSending={isSending} />
+							</div>
 						)}
 						{isChatComplete && chatHistory.size > 0 && (
 							<ChatInput

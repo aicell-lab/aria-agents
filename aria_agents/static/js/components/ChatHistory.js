@@ -14,8 +14,23 @@ function ChatHistory({ chatHistory, isSending }) {
 		});
 	};
 
+	React.useEffect(() => {
+		expandedMessages.forEach((isExpanded, index) => {
+			if (isExpanded) {
+				document.getElementById(`message-${index}`)?.scrollIntoView({
+					behavior: "smooth",
+					block: "start",
+				});
+			}
+		});
+	}, [expandedMessages]);
+
 	const renderChatMessage = (chat, index) => (
-		<div key={index} className="mb-4 relative">
+		<div
+			key={index}
+			id={`message-${index}`}
+			className="mb-4 relative"
+		>
 			<div className="text-gray-800 font-semibold flex items-center">
 				{chat.role === "user" ? (
 					<>
