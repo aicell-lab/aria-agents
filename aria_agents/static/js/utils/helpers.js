@@ -2,22 +2,17 @@ function generateSessionID() {
 	return "session-" + Math.random().toString(36).substr(2, 9);
 }
 
-function getServerUrl() {
-	let serverUrl = getURLParam("server") || window.location.origin;
-	if (serverUrl.includes("localhost")) {
-		serverUrl = "http://localhost:9000";
-	}
-
-	return serverUrl;
-}
-
 function getURLParam(param_name) {
 	const urlParams = new URLSearchParams(window.location.search);
 	return urlParams.get(param_name);
 }
 
-async function getServer(token) {
-	const serverUrl = getServerUrl();
+function getServerUrl() {
+	return getURLParam("server") || window.location.origin;
+}
+
+async function getServer(token, serverUrl = null) {
+	const serverUrl = serverUrl || getServerUrl();
 	// method_timeout: 500 (8.3 minutes) is arbitrary number. Must be at least a few minutes due to slow functions
 	return await hyphaWebsocketClient.connectToServer({
 		server_url: serverUrl,
@@ -26,8 +21,13 @@ async function getServer(token) {
 	});
 }
 
-async function getService(server, localId, remoteId = null) {
-	const serviceId = remoteId && getURLParam("server")? remoteId : localId;
+function isLocal() {
+	const serverUrl = getServerUrl();
+	return serverUrl.startsWith("127.0.0.1") || serverUrl.startsWith("localhost");
+}
+
+async function getService(server, remoteId, localId = null) {
+	const serviceId = localId && isLocal()? localId : remoteId;
 	console.log("service ID: ", serviceId);
 	const svc = await server.getService(serviceId, {"case_conversion": "camel"});
 	console.log("service connected: ", svc);

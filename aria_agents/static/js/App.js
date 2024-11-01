@@ -136,13 +136,16 @@ function App() {
 		await loadChats();
 	}
 
-	const setServices = async (server) => {
+	const setServices = async (token) => {
+		const server = await getServer(token);
+		const artifactServer = await getServer(token, "https://hypha.aicell.io");
+
 		const ariaAgentsService = await getService(
-			server, "public/aria-agents", "aria-agents/aria-agents");
+			server, "aria-agents/aria-agents", "public/aria-agents");
 		const dataStoreService = await getService(
-			server, "public/data-store", "aria-agents/data-store");
+			server, "aria-agents/data-store", "public/data-store");
 		const artifactManagerService = await getService(
-			server, "public/artifact-manager");
+			artifactServer, "public/artifact-manager");
 
 		try {
 			await ariaAgentsService.ping();
@@ -161,8 +164,7 @@ function App() {
 	const handleLogin = async () => {
 		const token = await login();
 		setIsLoading(true);
-		const server = await getServer(token);
-		await setServices(server);
+		await setServices(token);
 		setStatus("Ready to chat! Type your message and press enter!");
 		setIsLoading(false);
 	};
