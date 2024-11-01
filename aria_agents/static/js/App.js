@@ -57,16 +57,9 @@ function App() {
 		return () => window.removeEventListener('scroll', handleScroll);
 	}, []);
 
-	const handleScroll = () => {
-		if (chatContainerRef.current) {
-			const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
-			const buffer = 100; // Pixels from bottom to consider "at bottom"
-			setIsNearBottom(scrollHeight - scrollTop - clientHeight <= buffer);
-		}
-	};
-
-	const scrollToBottom = () => {
-		if (isNearBottom) {
+	
+	useEffect(() => {
+		if (chatContainerRef.current && isNearBottom) {
 			requestAnimationFrame(() => {
 				window.scrollTo({
 					top: document.documentElement.scrollHeight,
@@ -74,23 +67,16 @@ function App() {
 				});
 			});
 		}
-	};
-
-	useEffect(() => {
-		// Observe chat container for content changes
-		const observer = new MutationObserver(scrollToBottom);
-		
-		if (chatContainerRef.current) {
-			observer.observe(chatContainerRef.current, {
-				childList: true,
-				subtree: true,
-				characterData: true
-			});
-		}
-
-		return () => observer.disconnect();
 	}, [chatHistory, isNearBottom]);
-
+	
+	const handleScroll = () => {
+		if (chatContainerRef.current) {
+			const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+			const buffer = 100; // Pixels from bottom to consider "at bottom"
+			setIsNearBottom(scrollHeight - scrollTop - clientHeight <= buffer);
+		}
+	};
+	
 	const getServices = async (
 		token,
 		ariaAgentsServiceId,
