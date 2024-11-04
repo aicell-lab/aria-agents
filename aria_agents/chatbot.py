@@ -389,7 +389,7 @@ async def register_chat_service(server):
         session_id,
         user_message: QuestionWithHistory,
         status_callback,
-        artefact_callback,
+        artifact_callback,
         user,
         cross_assistant=False,
     ):
@@ -424,7 +424,7 @@ async def register_chat_service(server):
             ):
                 summary_website = store_obj["value"]
                 url = data_store.get_url(store_obj["id"])
-                await artefact_callback(summary_website, url)
+                await artifact_callback(summary_website, url)
 
         event_bus.on("store_put", store_put_callback)
 
@@ -487,7 +487,7 @@ async def register_chat_service(server):
         chat_history,
         user_profile=None,
         status_callback=None,
-        artefact_callback=None,
+        artifact_callback=None,
         session_id=None,
         extensions=None,
         state_prompt=None,
@@ -537,7 +537,7 @@ async def register_chat_service(server):
             session_id,
             m,
             status_callback,
-            artefact_callback,
+            artifact_callback,
             context.get("user"),
             cross_assistant,
         )

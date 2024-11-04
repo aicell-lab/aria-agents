@@ -2,35 +2,34 @@ function generateSessionID() {
 	return "session-" + Math.random().toString(36).substr(2, 9);
 }
 
+function getURLParam(param_name) {
+	const urlParams = new URLSearchParams(window.location.search);
+	return urlParams.get(param_name);
+}
+
 function getServerUrl() {
-	const urlParams = new URLSearchParams(window.location.search);
-	let serverUrl = urlParams.get("server") || "https://hypha.aicell.io";
-	if (serverUrl.includes("localhost")) {
-		serverUrl = "http://localhost:9000";
-	}
-
-	return serverUrl;
+	return getURLParam("server") || window.location.origin;
 }
 
-function getServiceId() {
-	const urlParams = new URLSearchParams(window.location.search);
-	return urlParams.get("service_id");
-}
-
-async function getService(token, serviceId, ping) {
-	const serverUrl = getServerUrl();
-	console.log("service ID: ", serviceId);
+async function getServer(token, providedUrl = null) {
+	const serverUrl = providedUrl || getServerUrl();
 	// method_timeout: 500 (8.3 minutes) is arbitrary number. Must be at least a few minutes due to slow functions
-	const server = await hyphaWebsocketClient.connectToServer({
+	return await hyphaWebsocketClient.connectToServer({
 		server_url: serverUrl,
 		token: token,
 		method_timeout: 500,
 	});
-	const svc = await server.getService(serviceId);
+}
 
-	if (ping) {
-		await svc.ping();
-	}
+function isLocal() {
+	const serverUrl = getServerUrl();
+	return serverUrl.includes("127.0.0.1") || serverUrl.includes("localhost");
+}
+
+async function getService(server, remoteId, localId = null) {
+	const serviceId = localId && isLocal()? localId : remoteId;
+	console.log("service ID: ", serviceId);
+	const svc = await server.getService(serviceId, {"case_conversion": "camel"});
 	console.log("service connected: ", svc);
 	return svc;
 }
@@ -155,5 +154,5 @@ window.helpers = {
 	completeCodeBlocks: completeCodeBlocks,
 	jsonToMarkdown: jsonToMarkdown,
 	modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
-	getServiceId: getServiceId,
+	getServer: getServer
 };

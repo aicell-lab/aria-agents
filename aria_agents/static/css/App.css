@@ -1,17 +1,17 @@
 :root {
     --width-sidebar: 0;
-    --width-artefacts-panel: 100%;
+    --width-artifacts-panel: 100%;
 }
 
 .sidebar.open {
-    --width-sidebar: 12em;
+    --width-sidebar: 14em;
     display: block;
 }
 
 @media (min-width: 768px) {
     :root{
-        --width-sidebar: 12em;
-        --width-artefacts-panel: 30%;
+        --width-sidebar: 14em;
+        --width-artifacts-panel: 30%;
     }
 }
 
@@ -46,8 +46,8 @@
     background: none; /* Ensure background is fully transparent */
 }
 
-.margin-right-artefacts {
-    margin-right: var(--width-artefacts-panel);
+.margin-right-artifacts {
+    margin-right: var(--width-artifacts-panel);
 }
 
 .spinner {
@@ -84,8 +84,8 @@
     min-height: 100vh;
 }
 
-.artefacts-panel {
-    width: var(--width-artefacts-panel);
+.artifacts-panel {
+    width: var(--width-artifacts-panel);
     background-color: white;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     padding: 1rem;
@@ -113,9 +113,9 @@
     max-width: calc(100% - var(--width-sidebar));
 }
 
-.main-panel-artefacts {
-    margin-right: var(--width-artefacts-panel);
-    max-width: calc(100% - var(--width-sidebar) - var(--width-artefacts-panel));
+.main-panel-artifacts {
+    margin-right: var(--width-artifacts-panel);
+    max-width: calc(100% - var(--width-sidebar) - var(--width-artifacts-panel));
 }
 
 .icon-emoji {

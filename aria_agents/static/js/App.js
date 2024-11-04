@@ -8,7 +8,7 @@ const {
 	completeCodeBlocks,
 	jsonToMarkdown,
 	modifyLinksToOpenInNewTab,
-	getServiceId,
+	getServer,
 } = window.helpers;
 const {
 	Sidebar,
@@ -16,7 +16,7 @@ const {
 	ChatInput,
 	SuggestedStudies,
 	ChatHistory,
-	ArtefactsPanel,
+	ArtifactsPanel,
 } = window;
 
 function App() {
@@ -27,6 +27,7 @@ function App() {
 	const [svc, setSvc] = useState(null);
 	const [sessionId, setSessionId] = useState(null);
 	const [dataStore, setDataStore] = useState(null);
+	const [artifactManager, setArtifactManager] = useState(null);
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
 	);
@@ -36,13 +37,16 @@ function App() {
 		occupation: "",
 		background: "",
 	});
-	const [isArtefactsPanelOpen, setIsArtefactsPanelOpen] = useState(false);
+	const [isArtifactsPanelOpen, setIsArtifactsPanelOpen] = useState(false);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-	const [artefacts, setArtefacts] = useState([]);
-	const [currentArtefactIndex, setCurrentArtefactIndex] = useState(0);
+	const [artifacts, setArtifacts] = useState([]);
+	const [currentArtifactIndex, setCurrentArtifactIndex] = useState(0);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isSending, setIsSending] = useState(false);
 	const [isChatComplete, setIsChatComplete] = useState(false);
+	const [prevChats, setPrevChats] = useState([]);
+	const [chatTitle, setChatTitle] = useState("");
+	const [messageIsComplete, setMessageIsComplete] = useState(false);
 	const chatContainerRef = useRef(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
 
@@ -77,45 +81,126 @@ function App() {
 		}
 	};
 	
-	const getServices = async (
-		token,
-		ariaAgentsServiceId,
-		dataStoreServiceId
-	) => {
-		let ariaAgentsService = null;
-		let dataStoreService = null;
+	useEffect(async () => {
+		if (artifactManager) {
+			await createChatCollection();
+			await loadChats();
+		}
+	}, [artifactManager]);
+
+	useEffect(async () => {
+		if (chatTitle !== "" && messageIsComplete) {
+			await saveChat();
+			await loadChats();
+		}
+	}, [messageIsComplete, chatTitle]);
+
+	const loadChats = async() => {
 		try {
-			ariaAgentsService = await getService(
-				token,
-				ariaAgentsServiceId,
-				true
-			);
-			dataStoreService = await getService(
-				token,
-				dataStoreServiceId,
-				false
-			);
+			const prevChatObjects = await artifactManager.list({
+				prefix: "aria-agents-chats",
+				summary_fields: ["*"],
+				_rkwargs: true,
+			});
+			setPrevChats(prevChatObjects);
+		}
+		catch {
+			console.log("No previous chats.");
+		}
+	}
+	
+	const createChatCollection = async () => {
+		const galleryManifest = {
+			"name": "Aria Agents Chat History",
+			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
+			"type": "collection",
+			"collection": [],
+		};
+	
+		try {
+			await artifactManager.create({
+				prefix: "aria-agents-chats",
+				manifest: galleryManifest,
+				orphan: true,
+				_rkwargs: true
+			});
+		}
+		catch {
+			console.log("User chat collection already exists.");
+		}
+	};
+
+	const saveChat = async () => {
+		const datasetManifest = {
+			"id": `${sessionId}`,
+			"name": `${chatTitle}`,
+			"description": `The Aria Agents chat history of ${sessionId}`,
+			"type": "chat",
+			"conversations": chatHistory,
+			"artifacts": artifacts,
+			"timestamp": new Date().toISOString(),
+		};
+
+		try {
+			await artifactManager.create({
+				prefix: `aria-agents-chats/${sessionId}`,
+				manifest: datasetManifest,
+				_rkwargs: true
+			});
+		} catch {
+			await artifactManager.edit({
+				prefix: `aria-agents-chats/${sessionId}`,
+				manifest: datasetManifest,
+				_rkwargs: true
+			})
+			await artifactManager.commit(`aria-agents-chats/${sessionId}`);
+		}
+	};
+
+	const deleteChat = async (chat) => {
+		try {
+			await artifactManager.delete({
+				prefix: `aria-agents-chats/${chat.id}`,
+				delete_files: true,
+				recursive: true,
+				_rkwargs: true
+			});
+			await loadChats();
+		}
+		catch {
+			console.log(`Chat ${chat.id} is already deleted.`);
+		}
+	}
+
+	const setServices = async (token) => {
+		const server = await getServer(token);
+		const artifactServer = await getServer(token, "https://hypha.aicell.io");
+
+		const ariaAgentsService = await getService(
+			server, "aria-agents/aria-agents", "public/aria-agents");
+		const dataStoreService = await getService(
+			server, "aria-agents/data-store", "public/data-store");
+		const artifactManagerService = await getService(
+			artifactServer, "public/artifact-manager");
+
+		try {
+			await ariaAgentsService.ping();
 		} catch (error) {
 			alert(
-				"You don't have permission to use the chatbot, please sign up and wait for approval"
+				`You don't have permission to use the chatbot, please sign up and wait for approval`
 			);
 			console.error(error);
 		}
-		return { ariaAgentsService, dataStoreService };
+
+		setDataStore(dataStoreService);
+		setSvc(ariaAgentsService);
+		setArtifactManager(artifactManagerService);
 	};
 
 	const handleLogin = async () => {
-		setIsLoading(true);
 		const token = await login();
-		const ariaAgentsServiceId =
-			getServiceId() || "aria-agents/*:aria-agents";
-		const { ariaAgentsService, dataStoreService } = await getServices(
-			token,
-			ariaAgentsServiceId,
-			"aria-agents/*:data-store"
-		);
-		setDataStore(dataStoreService);
-		setSvc(ariaAgentsService);
+		setIsLoading(true);
+		await setServices(token);
 		setStatus("Ready to chat! Type your message and press enter!");
 		setIsLoading(false);
 	};
@@ -125,17 +210,15 @@ function App() {
 
 		const newAttachmentPrompts = [];
 		const newAttachmentNames = [];
-		let attachmentCount = attachmentStatePrompts.length;
 
 		for (const file of files) {
 			try {
 				const fileId = await uploadAttachment(file);
-				const fileUrl = await dataStore.get_url(fileId);
+				const fileUrl = await dataStore.getUrl(fileId);
 				newAttachmentPrompts.push(
 					`- **${file.name}**, available at: [${fileUrl}](${fileUrl})`
 				);
 				newAttachmentNames.push(file.name);
-				attachmentCount++;
 			} catch (error) {
 				console.error(`Error uploading ${file.name}:`, error);
 			}
@@ -190,7 +273,7 @@ function App() {
 		);
 	};
 
-	const statusCallback = (message) => {
+	const statusCallback = async (message) => {
 		const {
 			type,
 			session: { id, role_setting: roleSetting },
@@ -208,6 +291,7 @@ function App() {
 		const headerFinished = marked(`### Tool 🛠️ \`${name}\``);
 
 		if (status === "start") {
+			setMessageIsComplete(false);
 			// Initialize new message entry in chat history
 			setChatHistory((prevHistory) => {
 				const updatedHistory = new Map(prevHistory);
@@ -249,19 +333,19 @@ function App() {
 				const lastMessage = updatedHistory.get(query_id);
 				if (lastMessage) {
 					if (name === "SummaryWebsite") {
-						// Get the latest artefacts length using a functional update
-						setArtefacts((prevArtefacts) => {
-							const artefactIndex = prevArtefacts.length;
+						// Get the latest artifacts length using a functional update
+						setArtifacts((prevArtifacts) => {
+							const artifactIndex = prevArtifacts.length;
 
 							lastMessage.content = `
                                 <button 
                                     class="button" 
-                                    onclick="openSummaryWebsite(${artefactIndex})"
+                                    onclick="openSummaryWebsite(${artifactIndex})"
                                 >
                                     View Summary Website
                                 </button>`;
 
-							return prevArtefacts; // Return unchanged artefacts
+							return prevArtifacts; // Return unchanged artifacts
 						});
 					} else {
 						let finalContent =
@@ -277,20 +361,44 @@ function App() {
 				}
 				return updatedHistory;
 			});
+			setMessageIsComplete(true);
 		}
 	};
 
 	// Define the global function to open the summary website
 	window.openSummaryWebsite = (index) => {
-		if (index <= artefacts.length) {
-			setIsArtefactsPanelOpen(true);
-			setCurrentArtefactIndex(index);
+		if (index <= artifacts.length) {
+			setIsArtifactsPanelOpen(true);
+			setCurrentArtifactIndex(index);
 		}
 	};
 
-	const artefactCallback = (artefact, url) => {
-		setArtefacts((prevArtefacts) => [...prevArtefacts, { artefact, url }]);
+	const artifactCallback = (artifact, url) => {
+		setArtifacts((prevArtifacts) => [...prevArtifacts, { artifact, url }]);
 	};
+
+	const awaitUserResponse = () => {
+		setIsChatComplete(true);
+		setStatus("Ready to chat! Type your message and press enter!");
+		setIsSending(false);
+	}
+
+	const getAttachmentStatePrompt = (attachmentStatePrompts) => {
+		if (attachmentStatePrompts.size > 0) {
+			return "User attached the following files to the current query:\n" +
+				attachmentStatePrompts.join("\n");
+		}
+		else {
+			return "User did not attach any files."
+		}
+	}
+
+	const titleCallback = async (message) => {
+		if (message.status === "finished") {
+			const newTitle = JSON.parse(message.arguments).response.trim();
+			setChatTitle(newTitle);
+		}
+	}
 
 	const handleSend = async () => {
 		if (!svc) {
@@ -301,8 +409,8 @@ function App() {
 		if (question.trim()) {
 			const currentQuestion = question;
 			const joinedStatePrompt =
-				"User attached the following files to the current query:\n" +
-				attachmentStatePrompts.join("\n");
+				getAttachmentStatePrompt(attachmentStatePrompts);
+
 			const newChatHistory = [
 				...chatHistory.values(),
 				{
@@ -315,16 +423,16 @@ function App() {
 				},
 			];
 
+			const newChatMap = new Map(
+				newChatHistory.map((item, index) => [
+					index.toString(),
+					item,
+				])
+			);
+			
 			setIsChatComplete(false);
 			setAttachmentNames([]);
-			setChatHistory(
-				new Map(
-					newChatHistory.map((item, index) => [
-						index.toString(),
-						item,
-					])
-				)
-			);
+			setChatHistory(newChatMap);
 			setQuestion("");
 			setStatus("🤔 Thinking...");
 			setIsSending(true);
@@ -348,17 +456,31 @@ function App() {
 					currentChatHistory,
 					userProfile,
 					statusCallback,
-					artefactCallback,
+					artifactCallback,
 					sessionId,
 					extensions,
 					joinedStatePrompt
 				);
-				setIsChatComplete(true);
-				setStatus("Ready to chat! Type your message and press enter!");
+				if (chatTitle === "") {
+					const summaryQuestion = `Give a succinct title to this chat
+					session summarizing this prompt written by
+					the user: "${currentQuestion}". Respond ONLY with words,
+					maximum six words.`
+					await svc.chat(
+						summaryQuestion,
+						currentChatHistory,
+						userProfile,
+						titleCallback,
+						() => {},
+						sessionId,
+						extensions,
+						joinedStatePrompt
+					);
+				}
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
-				setIsSending(false);
+				awaitUserResponse();
 			}
 		}
 	};
@@ -400,6 +522,16 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
+	const displayChat = async (chat) => {
+		const chatMap = new Map(Object.entries(chat.conversations || {}));
+		setChatHistory(chatMap);
+		setChatTitle(chat.name || "");
+		setArtifacts(chat.artifacts || []);
+		setSessionId(chat.id || generateSessionID());
+		setMessageIsComplete(false);
+		awaitUserResponse();
+	}
+
 	return (
 		<div className="min-h-screen flex flex-col">
 			<button
@@ -414,12 +546,16 @@ function App() {
 				<Sidebar
 					isOpen={isSidebarOpen}
 					onClose={() => setIsSidebarOpen(false)}
-					onEditProfile={() => setShowProfileDialog(true)}
+					prevChats={prevChats}
+					onSelectChat={displayChat}
+					onDeleteChat={deleteChat}
+					isLoggedIn={svc != null}
+					sessionId={sessionId}
 				/>
 				<div
 					className={`main-panel ${
-						isArtefactsPanelOpen
-							? "main-panel-artefacts"
+						isArtifactsPanelOpen
+							? "main-panel-artifacts"
 							: "main-panel-full"
 					}`}
 					onDrop={handleDrop}
@@ -481,38 +617,38 @@ function App() {
 					}}
 				/>
 			)}
-			{isArtefactsPanelOpen ? (
-				<ArtefactsPanel
+			{isArtifactsPanelOpen ? (
+				<ArtifactsPanel
 					onClose={() =>
-						setIsArtefactsPanelOpen(!isArtefactsPanelOpen)
+						setIsArtifactsPanelOpen(!isArtifactsPanelOpen)
 					}
-					artefacts={artefacts}
-					currentArtefactIndex={currentArtefactIndex}
+					artifacts={artifacts}
+					currentArtifactIndex={currentArtifactIndex}
 					onPrev={() => {
-						if (currentArtefactIndex > 0) {
-							setCurrentArtefactIndex(currentArtefactIndex - 1);
+						if (currentArtifactIndex > 0) {
+							setCurrentArtifactIndex(currentArtifactIndex - 1);
 						}
 					}}
 					onNext={() => {
-						if (currentArtefactIndex < artefacts.length - 1) {
-							setCurrentArtefactIndex(currentArtefactIndex + 1);
+						if (currentArtifactIndex < artifacts.length - 1) {
+							setCurrentArtifactIndex(currentArtifactIndex + 1);
 						}
 					}}
 				/>
 			) : (
 				<button
 					onClick={() =>
-						setIsArtefactsPanelOpen(!isArtefactsPanelOpen)
+						setIsArtifactsPanelOpen(!isArtifactsPanelOpen)
 					}
 					className="button fixed top-0 right-0 mt-4 mr-4"
 				>
-					Artefacts
+					Artifacts
 				</button>
 			)}
 			{isLoading && (
 				<div
 					className={`spinner-container ${
-						isArtefactsPanelOpen ? "margin-right-artefacts" : ""
+						isArtifactsPanelOpen ? "margin-right-artifacts" : ""
 					}`}
 				>
 					<div className="spinner"></div>
