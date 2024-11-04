@@ -158,13 +158,18 @@ function App() {
 	};
 
 	const deleteChat = async (chat) => {
-		await artifactManager.delete({
-			prefix: `aria-agents-chats/${chat.id}`,
-			delete_files: true,
-			recursive: true,
-			_rkwargs: true
-		});
-		await loadChats();
+		try {
+			await artifactManager.delete({
+				prefix: `aria-agents-chats/${chat.id}`,
+				delete_files: true,
+				recursive: true,
+				_rkwargs: true
+			});
+			await loadChats();
+		}
+		catch {
+			console.log(`Chat ${chat.id} is already deleted.`);
+		}
 	}
 
 	const setServices = async (token) => {
@@ -517,11 +522,12 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
-	const displayChat = (chat) => {
+	const displayChat = async (chat) => {
 		const chatMap = new Map(Object.entries(chat.conversations || {}));
-		setChatTitle(chat.name || "");
 		setChatHistory(chatMap);
-		setSessionId(chatMap.id || generateSessionID());
+		setChatTitle(chat.name || "");
+		setArtifacts(chat.artifacts || []);
+		setSessionId(chat.id || generateSessionID());
 		setMessageIsComplete(false);
 		awaitUserResponse();
 	}
@@ -544,6 +550,7 @@ function App() {
 					onSelectChat={displayChat}
 					onDeleteChat={deleteChat}
 					isLoggedIn={svc != null}
+					sessionId={sessionId}
 				/>
 				<div
 					className={`main-panel ${

@@ -1,4 +1,4 @@
-function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLoggedIn }) {
+function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLoggedIn, sessionId }) {
 	return (
 		<div className={`hidden md:block sidebar z-50 ${isOpen ? "open" : ""}`}>
 			<button
@@ -19,7 +19,13 @@ function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLog
 				}
 				<div className="max-h-[calc(100vh-8rem)] overflow-y-auto">
 					{prevChats.map((chatObject) => (
-						<div key={chatObject.id} className="flex w-full items-center hover:bg-gray-200 rounded">
+						<div
+							key={chatObject.id}
+							title={chatObject.name}
+							className={`flex w-full items-center hover:bg-gray-200 rounded ${
+								chatObject.id === sessionId ? "bg-gray-200" : ""
+							}`}
+						>
 							<button
 								className="text-sm flex-1 text-left p-2 text-gray-700 overflow-hidden whitespace-nowrap text-ellipsis"
 								onClick={() => onSelectChat(chatObject)}
@@ -33,7 +39,6 @@ function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLog
 								X
 							</button>
 						</div>
-
 					))}
 				</div>
 			</div>
