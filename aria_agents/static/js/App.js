@@ -138,6 +138,7 @@ function App() {
 			"type": "chat",
 			"conversations": chatHistory,
 			"artifacts": artifacts,
+			"attachmentPrompts": attachmentStatePrompts,
 			"timestamp": new Date().toISOString(),
 		};
 
@@ -383,8 +384,8 @@ function App() {
 		setIsSending(false);
 	}
 
-	const getAttachmentStatePrompt = (attachmentStatePrompts) => {
-		if (attachmentStatePrompts.size > 0) {
+	const getAttachmentStatePrompt = () => {
+		if (attachmentStatePrompts.length > 0) {
 			return "User attached the following files to the current query:\n" +
 				attachmentStatePrompts.join("\n");
 		}
@@ -409,7 +410,7 @@ function App() {
 		if (question.trim()) {
 			const currentQuestion = question;
 			const joinedStatePrompt =
-				getAttachmentStatePrompt(attachmentStatePrompts);
+				getAttachmentStatePrompt();
 
 			const newChatHistory = [
 				...chatHistory.values(),
@@ -463,9 +464,10 @@ function App() {
 				);
 				if (chatTitle === "") {
 					const summaryQuestion = `Give a succinct title to this chat
-					session summarizing this prompt written by
-					the user: "${currentQuestion}". Respond ONLY with words,
-					maximum six words.`
+					 session summarizing this prompt written by
+					 the user: "${currentQuestion}". Respond ONLY with words,
+					 maximum six words. DO NOT include the words
+					 "Chat Session Title" or similar`
 					await svc.chat(
 						summaryQuestion,
 						currentChatHistory,
@@ -528,6 +530,7 @@ function App() {
 		setChatTitle(chat.name || "");
 		setArtifacts(chat.artifacts || []);
 		setSessionId(chat.id || generateSessionID());
+		setAttachmentStatePrompts(chat.attachmentPrompts || []);
 		setMessageIsComplete(false);
 		awaitUserResponse();
 	}
