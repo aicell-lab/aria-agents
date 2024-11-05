@@ -8,17 +8,25 @@ function ChatInput({
 	handleAttachment,
 	attachmentNames,
 	undoAttach,
+	shareChat,
 }) {
-	return (
-		<div className="mb-4 flex flex-col items-center">
+	return (<>
+		<div className="flex flex-row items-center">
 			<input
 				type="text"
 				placeholder={placeholder}
 				value={question}
 				onChange={(e) => setQuestion(e.target.value)}
-				className="w-full p-3 border border-gray-300 rounded mb-2 text-lg"
+				className="flex-grow p-3 border border-gray-300 rounded mb-2 text-lg"
 				onKeyPress={(e) => e.key === "Enter" && handleSend()}
 			/>
+			{shareChat &&
+				<button onClick={shareChat} className="p-3 border border-gray-300 mb-2 rounded text-lg">
+					Share
+				</button>
+			}
+		</div>
+		<div className="mb-4 flex flex-col items-center">
 			{svc ? (
 				<>
 					{attachmentNames.length > 0 ? (
@@ -106,7 +114,7 @@ function ChatInput({
 				</button>
 			)}
 		</div>
-	);
+	</>);
 }
 
 // Expose ChatInput globally

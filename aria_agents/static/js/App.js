@@ -9,6 +9,9 @@ const {
 	jsonToMarkdown,
 	modifyLinksToOpenInNewTab,
 	getServer,
+	getUrlParam,
+	urlMinusParam,
+	urlPlusParam,
 } = window.helpers;
 const {
 	Sidebar,
@@ -85,8 +88,27 @@ function App() {
 		if (artifactManager) {
 			await createChatCollection();
 			await loadChats();
+			const sessionIdParam = getUrlParam("sessionId");
+			if (sessionIdParam) {
+				try {
+					const chat = await readChat(sessionIdParam);
+					await displayChat(chat);
+				}
+				catch (e) {
+					console.error(e);
+					alert("That chat doesn't exist");
+					await displayChat({});
+				}
+			}
 		}
 	}, [artifactManager]);
+
+	const readChat = (newSessionId) => {
+		return artifactManager.read({
+			prefix: `aria-agents-chats/${newSessionId}`,
+			_rkwargs: true
+		});
+	}
 
 	useEffect(async () => {
 		if (chatTitle !== "" && messageIsComplete) {
@@ -130,7 +152,7 @@ function App() {
 		}
 	};
 
-	const saveChat = async () => {
+	const saveChat = async (permissions = null) => {
 		const datasetManifest = {
 			"id": `${sessionId}`,
 			"name": `${chatTitle}`,
@@ -141,6 +163,10 @@ function App() {
 			"attachmentPrompts": attachmentStatePrompts,
 			"timestamp": new Date().toISOString(),
 		};
+
+		if (permissions) {
+			datasetManifest["permissions"] = permissions;
+		}
 
 		try {
 			await artifactManager.create({
@@ -171,6 +197,15 @@ function App() {
 		catch {
 			console.log(`Chat ${chat.id} is already deleted.`);
 		}
+	}
+
+	const shareChat = async () => {
+		await saveChat({"@": "r"});
+		alert(
+			`Chat shared\n
+			Share link: ${window.location}\n
+			Warning: all users with this link will be able to see this chat`
+		);
 	}
 
 	const setServices = async (token) => {
@@ -529,9 +564,12 @@ function App() {
 		setChatHistory(chatMap);
 		setChatTitle(chat.name || "");
 		setArtifacts(chat.artifacts || []);
-		setSessionId(chat.id || generateSessionID());
+		const newSessionId = chat.id || generateSessionID();
+		setSessionId(newSessionId);
 		setAttachmentStatePrompts(chat.attachmentPrompts || []);
 		setMessageIsComplete(false);
+		const newUrl = urlPlusParam("sessionId", newSessionId);
+		window.history.replaceState({}, '', newUrl);
 		awaitUserResponse();
 	}
 
@@ -604,6 +642,7 @@ function App() {
 								handleAttachment={handleAttachment}
 								attachmentNames={attachmentNames}
 								undoAttach={undoAttach}
+								shareChat={shareChat}
 								placeholder="Type what you want to study"
 							/>
 						)}

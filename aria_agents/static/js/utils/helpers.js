@@ -2,13 +2,25 @@ function generateSessionID() {
 	return "session-" + Math.random().toString(36).substr(2, 9);
 }
 
-function getURLParam(param_name) {
+function getUrlParam(param_name) {
 	const urlParams = new URLSearchParams(window.location.search);
 	return urlParams.get(param_name);
 }
 
+function urlMinusParam(param_name) {
+	const url = new URL(window.location);
+	url.searchParams.delete(param_name);
+	return url.toString();
+}
+
+function urlPlusParam(param_name, param_value) {
+	const url = new URL(window.location);
+	url.searchParams.set(param_name, param_value);
+	return url.toString();
+}
+
 function getServerUrl() {
-	return getURLParam("server") || window.location.origin;
+	return getUrlParam("server") || window.location.origin;
 }
 
 async function getServer(token, providedUrl = null) {
@@ -154,5 +166,8 @@ window.helpers = {
 	completeCodeBlocks: completeCodeBlocks,
 	jsonToMarkdown: jsonToMarkdown,
 	modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
-	getServer: getServer
+	getServer: getServer,
+	getUrlParam: getUrlParam,
+	urlMinusParam: urlMinusParam,
+	urlPlusParam: urlPlusParam,
 };
