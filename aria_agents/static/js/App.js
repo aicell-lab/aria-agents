@@ -113,6 +113,7 @@ function App() {
 	useEffect(async () => {
 		if (chatTitle !== "" && messageIsComplete) {
 			await saveChat();
+			setUrlSessionId(sessionId);
 			await loadChats();
 		}
 	}, [messageIsComplete, chatTitle]);
@@ -200,7 +201,7 @@ function App() {
 	}
 
 	const shareChat = async () => {
-		await saveChat({"@": "r"});
+		await saveChat({"*": "r"});
 		alert(
 			`Chat shared\n
 			Share link: ${window.location}\n
@@ -559,17 +560,26 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
+	const setUrlSessionId = (newSessionId) => {
+		const newUrl = urlPlusParam("sessionId", newSessionId);
+		window.history.replaceState({}, '', newUrl);
+	}
+
 	const displayChat = async (chat) => {
 		const chatMap = new Map(Object.entries(chat.conversations || {}));
 		setChatHistory(chatMap);
 		setChatTitle(chat.name || "");
 		setArtifacts(chat.artifacts || []);
-		const newSessionId = chat.id || generateSessionID();
-		setSessionId(newSessionId);
+		if (chat.id) {
+			setUrlSessionId(chat.id);
+			setSessionId(chat.id);
+		}
+		else {
+			window.history.replaceState({}, '', urlMinusParam("sessionId"));
+			setSessionId(generateSessionID());
+		}
 		setAttachmentStatePrompts(chat.attachmentPrompts || []);
 		setMessageIsComplete(false);
-		const newUrl = urlPlusParam("sessionId", newSessionId);
-		window.history.replaceState({}, '', newUrl);
 		awaitUserResponse();
 	}
 

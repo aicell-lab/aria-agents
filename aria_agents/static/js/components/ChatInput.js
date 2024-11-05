@@ -17,7 +17,7 @@ function ChatInput({
 				placeholder={placeholder}
 				value={question}
 				onChange={(e) => setQuestion(e.target.value)}
-				className="flex-grow p-3 border border-gray-300 rounded mb-2 text-lg"
+				className="flex-grow p-3 border border-gray-300 rounded mb-2 mr-2 text-lg"
 				onKeyPress={(e) => e.key === "Enter" && handleSend()}
 			/>
 			{shareChat &&
