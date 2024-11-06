@@ -15,11 +15,13 @@ const {
 } = window.helpers;
 const {
 	Sidebar,
-	ProfileDialog,
 	ChatInput,
 	SuggestedStudies,
 	ChatHistory,
 	ArtifactsPanel,
+	AlertDialog,
+	ShareDialog,
+	InfoDialog,
 } = window;
 
 function App() {
@@ -34,7 +36,6 @@ function App() {
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
 	);
-	const [showProfileDialog, setShowProfileDialog] = useState(false);
 	const [userProfile, setUserProfile] = useState({
 		name: "",
 		occupation: "",
@@ -52,6 +53,8 @@ function App() {
 	const [messageIsComplete, setMessageIsComplete] = useState(false);
 	const chatContainerRef = useRef(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
+	const [showShareDialog, setShowShareDialog] = useState(false);
+	const [alertContent, setAlertContent] = useState("");
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -96,7 +99,10 @@ function App() {
 				}
 				catch (e) {
 					console.error(e);
-					alert("That chat doesn't exist");
+					setAlertContent(
+						`The chat ${sessionIdParam} doesn't exist or you lack\n`
+						+ `the permissions to access it.`
+					);
 					await displayChat({});
 				}
 			}
@@ -202,11 +208,7 @@ function App() {
 
 	const shareChat = async () => {
 		await saveChat({"*": "r"});
-		alert(
-			`Chat shared\n
-			Share link: ${window.location}\n
-			Warning: all users with this link will be able to see this chat`
-		);
+		setShowShareDialog(true);
 	}
 
 	const setServices = async (token) => {
@@ -223,8 +225,9 @@ function App() {
 		try {
 			await ariaAgentsService.ping();
 		} catch (error) {
+			// Red dialog
 			alert(
-				`You don't have permission to use the chatbot, please sign up and wait for approval`
+				`This account doesn't have permission to use the chatbot, please sign up and wait for approval`
 			);
 			console.error(error);
 		}
@@ -257,7 +260,8 @@ function App() {
 				);
 				newAttachmentNames.push(file.name);
 			} catch (error) {
-				console.error(`Error uploading ${file.name}:`, error);
+				// Red dialog
+				alert(`Error uploading ${file.name}:`, error);
 			}
 		}
 
@@ -659,16 +663,6 @@ function App() {
 					</div>
 				</div>
 			</div>
-			{showProfileDialog && (
-				<ProfileDialog
-					userProfile={userProfile}
-					onClose={() => setShowProfileDialog(false)}
-					onSave={(profile) => {
-						setUserProfile(profile);
-						setShowProfileDialog(false);
-					}}
-				/>
-			)}
 			{isArtifactsPanelOpen ? (
 				<ArtifactsPanel
 					onClose={() =>
@@ -705,6 +699,13 @@ function App() {
 				>
 					<div className="spinner"></div>
 				</div>
+			)}
+			{showShareDialog && (
+				<ShareDialog shareUrl={window.location} onClose={() => setShowShareDialog(false)}></ShareDialog>
+			)}
+			{alertContent && (
+				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>
+				</InfoDialog>
 			)}
 		</div>
 	);
