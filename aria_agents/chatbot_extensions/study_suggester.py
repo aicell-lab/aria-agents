@@ -84,10 +84,10 @@ def create_study_suggester_function(
         project_folder = os.path.abspath(
             os.path.join(project_folders, project_name)
         )
-        os.makedirs(project_folder, exist_ok=True)
+        event_bus = None
 
         if data_store is None:
-            event_bus = None
+            os.makedirs(project_folder, exist_ok=True)
         else:
             event_bus = data_store.get_event_bus()
 
@@ -116,7 +116,7 @@ def create_study_suggester_function(
                 tools=[
                     test_pmc_query_hits,
                     create_corpus_function(
-                        corpus_context, project_folder, data_store
+                        corpus_context
                     ),
                 ],
             )

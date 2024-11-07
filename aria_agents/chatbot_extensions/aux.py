@@ -16,7 +16,7 @@ from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
 
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.utils import QueryIndexer
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -127,7 +127,7 @@ def test_pmc_query_hits(
 
 
 def create_corpus_function(
-    context: dict, project_folder: str, data_store: HyphaDataStore = None
+    context: dict
 ) -> Callable:
     @schema_tool
     def create_pubmed_corpus(
@@ -154,17 +154,8 @@ def create_corpus_function(
             model=CONFIG["aux"]["embedding_model"]
         )
         query_index = VectorStoreIndex.from_documents(documents)
-
-        # Save the query index to disk
-        query_index_dir = os.path.join(project_folder, "query_index")
-        query_index.storage_context.persist(query_index_dir)
-        if data_store is not None:
-            project_name = os.path.basename(project_folder)
-            data_store.put(
-                obj_type="file",
-                value=query_index_dir,
-                name=f"{project_name}:pubmed_index_dir",
-            )
+        query_indexer = QueryIndexer()
+        query_indexer.query_index = query_index
 
         # Create a citation query engine object
         context["query_engine"] = CitationQueryEngine.from_args(
@@ -200,7 +191,6 @@ def load_template(template_filename):
     template_file = os.path.join(this_dir, f"html_templates/{template_filename}")
     with open(template_file, "r", encoding="utf-8") as t_file:
         return t_file.read()
-
 
 async def write_website(
     input_model: BaseModel,

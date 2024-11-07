@@ -117,3 +117,14 @@ async def legacy_extension_to_tool(extension: LegacyChatbotExtension):
         else:
             execute.__doc__ = extension.execute.__doc__ or extension.description
     return schema_tool(execute)
+
+
+class QueryIndexer:
+    """Singleton class for holding llama query index"""
+    _instance = None
+    query_index = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(QueryIndexer, cls).__new__(cls)
+        return cls._instance

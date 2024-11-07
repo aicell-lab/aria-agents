@@ -5,9 +5,7 @@ import os
 import uuid
 from typing import Callable, Dict, List, Union
 import dotenv
-from llama_index.core import load_index_from_storage
 from llama_index.core.query_engine import CitationQueryEngine
-from llama_index.core.storage import StorageContext
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
@@ -18,6 +16,7 @@ from aria_agents.chatbot_extensions.aux import (
     create_query_function,
     write_website,
 )
+from aria_agents.utils import QueryIndexer
 from aria_agents.hypha_store import HyphaDataStore
 
 dotenv.load_dotenv()
@@ -199,40 +198,28 @@ def create_experiment_compiler_function(
         """Generate an investigation from a suggested study"""
         pre_session = current_session.get()
         session_id = pre_session.id if pre_session else str(uuid.uuid4())
-
+        project_folder = None
+        event_bus = None
+        suggested_study = None
+        
         if data_store is None:
             project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
             project_folder = os.path.abspath(
                 os.path.join(project_folders, project_name)
             )
-            event_bus = None
-        else:
-            event_bus = data_store.get_event_bus()
-
-        if data_store is None:
-            # Load the suggested study from a JSON file
             suggested_study_file = os.path.join(
                 project_folder, "suggested_study.json"
             )
             with open(suggested_study_file, encoding="utf-8") as ss_file:
                 suggested_study = SuggestedStudy(**json.load(ss_file))
-
-            # Set the query index directory to the project folder
-            query_index_dir = os.path.join(project_folder, "query_index")
         else:
-            # TODO: Find a better way to get the suggested study from the datastore
             for obj in data_store.storage.values():
                 if obj["name"] == f"{project_name}:suggested_study.json":
-                    # Load the suggested study from the HyphaDataStore
                     suggested_study = SuggestedStudy(**obj["value"])
-                if obj["name"] == f"{project_name}:pubmed_index_dir":
-                    # Set the query index directory to the project folder
-                    query_index_dir = obj["value"]
+                    break
 
-        query_storage_context = StorageContext.from_defaults(
-            persist_dir=query_index_dir
-        )
-        query_index = load_index_from_storage(query_storage_context)
+        query_indexer = QueryIndexer()
+        query_index = query_indexer.query_index
         query_engine = CitationQueryEngine.from_args(
             query_index,
             similarity_top_k=CONFIG["aux"]["similarity_top_k"],

@@ -452,16 +452,6 @@ function App() {
 					}
 				);
 				const extensions = [{ id: "aria" }];
-				await svc.chat(
-					currentQuestion,
-					currentChatHistory,
-					userProfile,
-					statusCallback,
-					artifactCallback,
-					sessionId,
-					extensions,
-					joinedStatePrompt
-				);
 				if (chatTitle === "") {
 					const summaryQuestion = `Give a succinct title to this chat
 					 session summarizing this prompt written by
@@ -479,6 +469,16 @@ function App() {
 						joinedStatePrompt
 					);
 				}
+				await svc.chat(
+					currentQuestion,
+					currentChatHistory,
+					userProfile,
+					statusCallback,
+					artifactCallback,
+					sessionId,
+					extensions,
+					joinedStatePrompt
+				);
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
