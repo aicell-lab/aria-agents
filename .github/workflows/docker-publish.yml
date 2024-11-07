@@ -3,7 +3,10 @@ name: Build and Publish Docker Image
 on:
   push:
     branches:
-      - main  # Trigger the workflow on pushes to the main branch
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build-and-push:
@@ -14,18 +17,19 @@ jobs:
         with:
           fetch-depth: 2
       - name: Log in to the Container registry
+        if: github.event_name == 'push'
         uses: docker/login-action@v2.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image (latest tag)
+      - name: Build Docker image (latest tag)
         uses: docker/build-push-action@v5.0.0
         with:
           context: .
           file: docker/Dockerfile
-          push: true
+          push: ${{ github.event_name == 'push' }}
           tags: ghcr.io/${{ github.repository }}:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
