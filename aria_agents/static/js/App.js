@@ -104,6 +104,7 @@ function App() {
 						+ `the permissions to access it.`
 					);
 					await displayChat({});
+					// TODO: Send user to logout https://hypha.aicell.io/public/apps/hypha-login/
 				}
 			}
 		}
@@ -111,7 +112,7 @@ function App() {
 
 	const readChat = (newSessionId) => {
 		return artifactManager.read({
-			prefix: `aria-agents-chats/${newSessionId}`,
+			prefix: `/aria-agents/aria-agents-chats/${newSessionId}`,
 			_rkwargs: true
 		});
 	}
@@ -127,7 +128,7 @@ function App() {
 	const loadChats = async() => {
 		try {
 			const prevChatObjects = await artifactManager.list({
-				prefix: "aria-agents-chats",
+				prefix: "/aria-agents/aria-agents-chats",
 				summary_fields: ["*"],
 				_rkwargs: true,
 			});
@@ -148,7 +149,7 @@ function App() {
 	
 		try {
 			await artifactManager.create({
-				prefix: "aria-agents-chats",
+				prefix: "/aria-agents/aria-agents-chats",
 				manifest: galleryManifest,
 				orphan: true,
 				_rkwargs: true
@@ -177,24 +178,24 @@ function App() {
 
 		try {
 			await artifactManager.create({
-				prefix: `aria-agents-chats/${sessionId}`,
+				prefix: `/aria-agents/aria-agents-chats/${sessionId}`,
 				manifest: datasetManifest,
 				_rkwargs: true
 			});
 		} catch {
 			await artifactManager.edit({
-				prefix: `aria-agents-chats/${sessionId}`,
+				prefix: `/aria-agents/aria-agents-chats/${sessionId}`,
 				manifest: datasetManifest,
 				_rkwargs: true
 			})
-			await artifactManager.commit(`aria-agents-chats/${sessionId}`);
+			await artifactManager.commit(`/aria-agents/aria-agents-chats/${sessionId}`);
 		}
 	};
 
 	const deleteChat = async (chat) => {
 		try {
 			await artifactManager.delete({
-				prefix: `aria-agents-chats/${chat.id}`,
+				prefix: `/aria-agents/aria-agents-chats/${chat.id}`,
 				delete_files: true,
 				recursive: true,
 				_rkwargs: true
@@ -225,7 +226,7 @@ function App() {
 		try {
 			await ariaAgentsService.ping();
 		} catch (error) {
-			// Red dialog
+			// Red dialog. Show logout button
 			alert(
 				`This account doesn't have permission to use the chatbot, please sign up and wait for approval`
 			);
@@ -324,6 +325,11 @@ function App() {
 			name,
 			query_id,
 		} = message;
+
+		if (id !== sessionId) {
+			throw new Error("User has terminated this session.");
+		}
+
 		const { name: roleName, icon: roleIcon } = roleSetting || {};
 
 		const headerStartInProgress = marked(
@@ -420,7 +426,7 @@ function App() {
 
 	const awaitUserResponse = () => {
 		setIsChatComplete(true);
-		setStatus("Ready to chat! Type your message and press enter!");
+		// setStatus("Ready to chat! Type your message and press enter!");
 		setIsSending(false);
 	}
 

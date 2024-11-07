@@ -413,7 +413,11 @@ async def register_chat_service(server):
         async def stream_callback(message):
             if message.type in ["function_call", "text"]:
                 if message.session.id == session_id:
-                    await status_callback(message.model_dump())
+                    try:
+                        await status_callback(message.model_dump())
+                    except Exception:
+                        logger.exception("The status callback returned an error.")
+                        message.session.stop = True
 
         event_bus.on("stream", stream_callback)
 
