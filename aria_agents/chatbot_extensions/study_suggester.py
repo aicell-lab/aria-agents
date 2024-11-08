@@ -17,7 +17,7 @@ from aria_agents.chatbot_extensions.aux import (
     write_website,
     # TODO: add PMCQuery
 )
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.artifact_manager import ArtifactManager
 
 dotenv.load_dotenv()
 
@@ -61,7 +61,7 @@ class StudyWithDiagram(BaseModel):
 
 
 def create_study_suggester_function(
-    data_store: HyphaDataStore = None,
+    artifact_manager: ArtifactManager = None,
 ) -> Callable:
     @schema_tool
     async def run_study_suggester(
@@ -86,10 +86,10 @@ def create_study_suggester_function(
         )
         os.makedirs(project_folder, exist_ok=True)
 
-        if data_store is None:
+        if artifact_manager is None:
             event_bus = None
         else:
-            event_bus = data_store.get_event_bus()
+            event_bus = artifact_manager.get_event_bus()
 
         ncbi_querier = Role(
             name="NCBI Querier",
@@ -116,7 +116,7 @@ def create_study_suggester_function(
                 tools=[
                     test_pmc_query_hits,
                     create_corpus_function(
-                        corpus_context, project_folder, data_store
+                        corpus_context, project_folder, artifact_manager
                     ),
                 ],
             )
@@ -142,7 +142,7 @@ def create_study_suggester_function(
                 tools=[query_function],
                 output_schema=SuggestedStudy,
             )
-        if data_store is None:
+        if artifact_manager is None:
             # Save the suggested study to a JSON file
             suggested_study_file = os.path.join(
                 project_folder, "suggested_study.json"
@@ -151,13 +151,16 @@ def create_study_suggester_function(
                 json.dump(suggested_study.dict(), f, indent=4)
             suggested_study_url = "file://" + suggested_study_file
         else:
-            # Save the suggested study to the HyphaDataStore
-            suggested_study_id = data_store.put(
-                obj_type="json",
+            # Save the suggested study to the Artifact Manager
+            suggested_study_id = artifact_manager.put(
+                session_id=session_id,
                 value=suggested_study.dict(),
                 name=f"{project_name}:suggested_study.json",
             )
-            suggested_study_url = data_store.get_url(suggested_study_id)
+            suggested_study_url = artifact_manager.get_url(
+                session_id=session_id,
+                name=suggested_study_id
+            )
 
         diagrammer = Role(
             name="Diagrammer",
@@ -185,7 +188,7 @@ def create_study_suggester_function(
         summary_website_url = await write_website(
             study_with_diagram,
             event_bus,
-            data_store,
+            artifact_manager,
             "suggested_study",
             project_folder,
         )
@@ -221,9 +224,9 @@ async def main():
         default="",
     )
     args = parser.parse_args()
-    data_store = None
+    artifact_manager = None
 
-    run_study_suggester = create_study_suggester_function(data_store)
+    run_study_suggester = create_study_suggester_function(artifact_manager)
     await run_study_suggester(**vars(args))
 
 

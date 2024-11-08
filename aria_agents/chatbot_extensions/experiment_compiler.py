@@ -18,7 +18,7 @@ from aria_agents.chatbot_extensions.aux import (
     create_query_function,
     write_website,
 )
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.artifact_manager import ArtifactManager
 
 dotenv.load_dotenv()
 
@@ -180,7 +180,7 @@ async def write_protocol(
 
 
 def create_experiment_compiler_function(
-    data_store: HyphaDataStore = None,
+    artifact_manager: ArtifactManager = None,
 ) -> Callable:
     @schema_tool
     async def run_experiment_compiler(
@@ -200,16 +200,16 @@ def create_experiment_compiler_function(
         pre_session = current_session.get()
         session_id = pre_session.id if pre_session else str(uuid.uuid4())
 
-        if data_store is None:
+        if artifact_manager is None:
             project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
             project_folder = os.path.abspath(
                 os.path.join(project_folders, project_name)
             )
             event_bus = None
         else:
-            event_bus = data_store.get_event_bus()
+            event_bus = artifact_manager.get_event_bus()
 
-        if data_store is None:
+        if artifact_manager is None:
             # Load the suggested study from a JSON file
             suggested_study_file = os.path.join(
                 project_folder, "suggested_study.json"
@@ -220,14 +220,9 @@ def create_experiment_compiler_function(
             # Set the query index directory to the project folder
             query_index_dir = os.path.join(project_folder, "query_index")
         else:
-            # TODO: Find a better way to get the suggested study from the datastore
-            for obj in data_store.storage.values():
-                if obj["name"] == f"{project_name}:suggested_study.json":
-                    # Load the suggested study from the HyphaDataStore
-                    suggested_study = SuggestedStudy(**obj["value"])
-                if obj["name"] == f"{project_name}:pubmed_index_dir":
-                    # Set the query index directory to the project folder
-                    query_index_dir = obj["value"]
+            suggested_study = artifact_manager.get(session_id, f"{project_name}:suggested_study.json")
+            # TODO: fix pubmed index
+            query_index_dir = artifact_manager.get(session_id, f"{project_name}:pubmed_index_dir")
 
         query_storage_context = StorageContext.from_defaults(
             persist_dir=query_index_dir
@@ -294,7 +289,7 @@ def create_experiment_compiler_function(
             pbar.update(1)
         pbar.close()
 
-        if data_store is None:
+        if artifact_manager is None:
             # Save the suggested study to a JSON file
             protocol_file = os.path.join(
                 project_folder, "experimental_protocol.json"
@@ -304,18 +299,18 @@ def create_experiment_compiler_function(
             protocol_url = "file://" + protocol_file
 
         else:
-            # Save the suggested study to the HyphaDataStore
-            protocol_id = data_store.put(
-                obj_type="json",
-                value=protocol.dict(),
+            # Save the suggested study to the Artifact Manager
+            protocol_id = artifact_manager.put(
+                session_id=session_id, 
+                value=protocol.model_dump(),
                 name=f"{project_name}:experimental_protocol.json",
             )
-            protocol_url = data_store.get_url(protocol_id)
+            protocol_url = artifact_manager.get_url(session_id, protocol_id)
 
         summary_website_url = await write_website(
             protocol,
             event_bus,
-            data_store,
+            artifact_manager,
             "experimental_protocol",
             project_folder,
         )

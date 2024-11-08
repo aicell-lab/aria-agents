@@ -24,7 +24,7 @@ from aria_agents.chatbot_extensions import (
     extension_to_tools,
     get_builtin_extensions,
 )
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.artifact_manager import ArtifactManager
 from aria_agents.quota import QuotaManager
 from aria_agents.utils import (
     ChatbotExtension,
@@ -296,9 +296,9 @@ async def register_chat_service(server):
     """Hypha startup function."""
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
     event_bus = EventBus(name="AriaAgents")
-    data_store = HyphaDataStore(event_bus)
-    await data_store.setup(server)
-    builtin_extensions = get_builtin_extensions(data_store)
+    artifact_manager = ArtifactManager(event_bus)
+    await artifact_manager.setup(server, "aria-agents-chats", "public/artifact-manager")
+    builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
     default_quota = float(os.environ.get("BIOIMAGEIO_DEFAULT_QUOTA", "inf"))
@@ -418,12 +418,10 @@ async def register_chat_service(server):
         event_bus.on("stream", stream_callback)
 
         # Listen to the `store_put` event
-        async def store_put_callback(store_obj):
-            if store_obj["type"] == "file" and store_obj["name"].endswith(
-                ".html"
-            ):
-                summary_website = store_obj["value"]
-                url = data_store.get_url(store_obj["id"])
+        async def store_put_callback(session_id, file_name):
+            if file_name.endswith(".html"):
+                summary_website = artifact_manager.get(session_id, file_name)
+                url = artifact_manager.get_url(session_id, file_name)
                 await artifact_callback(summary_website, url)
 
         event_bus.on("store_put", store_put_callback)
