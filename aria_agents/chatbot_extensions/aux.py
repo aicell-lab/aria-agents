@@ -164,10 +164,10 @@ def create_corpus_function(
         session_id = pre_session.id if pre_session else str(uuid.uuid4())
         if artifact_manager is not None:
             project_name = os.path.basename(project_folder)
-            artifact_manager.put(
+            artifact_manager.put_dir(
                 session_id=session_id,
-                value=query_index_dir,
-                name=f"{project_name}:pubmed_index_dir",
+                local_path=query_index_dir,
+                file_prefix=project_name
             )
 
         # Create a citation query engine object

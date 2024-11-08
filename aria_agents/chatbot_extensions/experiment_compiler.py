@@ -199,15 +199,13 @@ def create_experiment_compiler_function(
         """Generate an investigation from a suggested study"""
         pre_session = current_session.get()
         session_id = pre_session.id if pre_session else str(uuid.uuid4())
-
-        if artifact_manager is None:
-            project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-            project_folder = os.path.abspath(
-                os.path.join(project_folders, project_name)
-            )
-            event_bus = None
-        else:
-            event_bus = artifact_manager.get_event_bus()
+        event_bus = None
+        project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
+        project_folder = os.path.abspath(
+            os.path.join(project_folders, project_name)
+        )
+        query_index_dir = os.path.join(project_folder, "query_index")
+        os.makedirs(query_index_dir, exist_ok=True)
 
         if artifact_manager is None:
             # Load the suggested study from a JSON file
@@ -216,13 +214,19 @@ def create_experiment_compiler_function(
             )
             with open(suggested_study_file, encoding="utf-8") as ss_file:
                 suggested_study = SuggestedStudy(**json.load(ss_file))
-
-            # Set the query index directory to the project folder
-            query_index_dir = os.path.join(project_folder, "query_index")
         else:
+            event_bus = artifact_manager.get_event_bus()
             suggested_study = artifact_manager.get(session_id, f"{project_name}:suggested_study.json")
-            # TODO: fix pubmed index
-            query_index_dir = artifact_manager.get(session_id, f"{project_name}:pubmed_index_dir")
+        
+            query_index_files = artifact_manager.list_dir(session_id, project_name)
+            for file in matching_files:
+                # Retrieve the content of each file
+                file_content = await self._svc.download_file(file.path)
+                local_path = os.path.join(query_index_dir, file.name)
+                
+                # Write the content to a local file asynchronously
+                async with aiofiles.open(local_path, 'wb') as local_file:
+                    await local_file.write(file_content)
 
         query_storage_context = StorageContext.from_defaults(
             persist_dir=query_index_dir

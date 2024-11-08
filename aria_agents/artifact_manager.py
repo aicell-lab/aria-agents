@@ -1,4 +1,5 @@
 import requests
+import os
 
 class ArtifactManager:
     def __init__(self, event_bus=None):
@@ -27,6 +28,25 @@ class ArtifactManager:
         self._event_bus.emit("store_put", session_id, name)
         return name
         
+    async def put_dir(self, session_id, local_path, file_prefix=None):
+        for filename in os.listdir(local_path):
+            file_path = os.path.join(local_path, filename)
+            
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+                await self.put(
+                    session_id=session_id,
+                    value=file_content,
+                    name=filename
+                )
+                
+    async def list_dir(self, session_id, file_prefix):
+        all_files = await self._svc.list_files(f"{self._prefix}/{session_id}")
+        
+        def file_has_prefix(this_file):
+            return this_file.name.startswith(file_prefix)
+        
+        return list(filter(file_has_prefix, all_files))
 
     async def get_url(self, session_id, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
