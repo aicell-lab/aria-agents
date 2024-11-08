@@ -84,10 +84,10 @@ def create_study_suggester_function(
         project_folder = os.path.abspath(
             os.path.join(project_folders, project_name)
         )
-        os.makedirs(project_folder, exist_ok=True)
+        event_bus = None
 
         if artifact_manager is None:
-            event_bus = None
+            os.makedirs(project_folder, exist_ok=True)
         else:
             event_bus = artifact_manager.get_event_bus()
 
