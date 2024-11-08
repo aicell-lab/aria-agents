@@ -11,7 +11,6 @@ class ArtifactManager:
         self._svc = await server.get_service(service_id)
         self._prefix = prefix
         
-        
     async def put(self, session_id, value, name):
         assert self._svc, "Please call `setup()` before using artifact manager"
         put_url = await self._svc.put_file(
@@ -22,6 +21,8 @@ class ArtifactManager:
         response = requests.put(put_url, data=value, timeout=500)
 
         assert response.ok, "File upload failed"
+        
+        self._svc.commit(f"{self._prefix}/{session_id}")
         
         self._event_bus.emit("store_put", session_id, name)
         return name
