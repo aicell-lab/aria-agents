@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import uuid
 from typing import Callable, List
 import urllib
@@ -111,11 +112,14 @@ def test_pmc_query_hits(
         "term": pmc_query.query,
         "retmax": CONFIG["aux"]["paper_limit"],
     }
-    resp = requests.get(
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
-        params=parameters,
-        timeout=500,
-    )
+    try:
+        resp = requests.get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+            params=parameters,
+            timeout=500,
+        )
+    except requests.RequestException as e:
+        return f"Failed to execute query: {e}"
 
     # Parse the XML response
     root = xml.fromstring(resp.content)
@@ -130,7 +134,7 @@ def create_corpus_function(
     context: dict, project_folder: str, artifact_manager: ArtifactManager = None
 ) -> Callable:
     @schema_tool
-    def create_pubmed_corpus(
+    async def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
             ...,
             description="The query to search the NCBI PubMed Central Database.",
@@ -156,19 +160,20 @@ def create_corpus_function(
         query_index = VectorStoreIndex.from_documents(documents)
 
         # Save the query index to disk
-        # TODO: fix for artifact_manager
         query_index_dir = os.path.join(project_folder, "query_index")
         query_index.storage_context.persist(query_index_dir)
         
-        pre_session = current_session.get()
-        session_id = pre_session.id if pre_session else str(uuid.uuid4())
         if artifact_manager is not None:
+            pre_session = current_session.get()
+            session_id = pre_session.id if pre_session else str(uuid.uuid4())
             project_name = os.path.basename(project_folder)
-            artifact_manager.put_dir(
+            await artifact_manager.put_dir(
                 session_id=session_id,
                 local_path=query_index_dir,
                 file_prefix=project_name
             )
+            # Delete even if not empty
+            shutil.rmtree(query_index_dir, ignore_errors=True)
 
         # Create a citation query engine object
         context["query_engine"] = CitationQueryEngine.from_args(

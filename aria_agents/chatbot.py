@@ -245,8 +245,7 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
         await f.write(chat_history_json)
 
 
-async def connect_server(server_url):
-    """Connect to the server and register the chat service."""
+async def get_server(server_url, use_workspace=True):
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     provided_token = os.environ.get("WORKSPACE_TOKEN")
     workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
@@ -258,16 +257,19 @@ async def connect_server(server_url):
             token = provided_token
     else:
         token = None
-    server = await connect_to_server(
-        {
-            "server_url": server_url,
-            "token": token,
-            "method_timeout": 500,
-            "workspace": workspace_name,
-        }
-    )
-    await register_chat_service(server)
+    server = await connect_to_server({
+        "server_url": server_url,
+        "token": token,
+        "method_timeout": 500,
+        **({"workspace": workspace_name} if use_workspace else {})
+    })
+    
+    return server
 
+async def connect_server(server_url):
+    """Connect to the server and register the chat service."""
+    chat_server = await get_server(server_url)
+    await register_chat_service(chat_server)
 
 async def serve_frontend(server, service_id):
     app = FastAPI(root_path=f"/aria-agents/apps/{service_id}")
@@ -297,7 +299,8 @@ async def register_chat_service(server):
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
     event_bus = EventBus(name="AriaAgents")
     artifact_manager = ArtifactManager(event_bus)
-    await artifact_manager.setup(server, "aria-agents-chats", "public/artifact-manager")
+    artifact_server = await get_server("https://hypha.aicell.io", use_workspace=False)
+    await artifact_manager.setup(artifact_server, "aria-agents-chats", "public/artifact-manager")
     builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
@@ -381,8 +384,11 @@ async def register_chat_service(server):
         filename = f"report-{session_id}.json"
         # Create a chat_log.json file inside the session folder
         chat_log_full_path = os.path.join(chat_logs_path, filename)
-        await save_chat_history(chat_log_full_path, chat_his_dict)
-        print(f"User report saved to {filename}")
+        try:
+            await save_chat_history(chat_log_full_path, chat_his_dict)
+            print(f"User report saved to {filename}")
+        except Exception as e:
+            print(f"Failed to save user report: {e}")
 
     async def talk_to_assistant(
         assistant_name,
@@ -420,8 +426,8 @@ async def register_chat_service(server):
         # Listen to the `store_put` event
         async def store_put_callback(session_id, file_name):
             if file_name.endswith(".html"):
-                summary_website = artifact_manager.get(session_id, file_name)
-                url = artifact_manager.get_url(session_id, file_name)
+                summary_website = await artifact_manager.get(session_id, file_name)
+                url = await artifact_manager.get_url(session_id, file_name)
                 await artifact_callback(summary_website, url)
 
         event_bus.on("store_put", store_put_callback)

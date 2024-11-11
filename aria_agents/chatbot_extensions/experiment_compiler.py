@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+import shutil
 import uuid
 from typing import Callable, Dict, List, Union
 import dotenv
@@ -216,21 +217,16 @@ def create_experiment_compiler_function(
                 suggested_study = SuggestedStudy(**json.load(ss_file))
         else:
             event_bus = artifact_manager.get_event_bus()
-            suggested_study = artifact_manager.get(session_id, f"{project_name}:suggested_study.json")
-        
-            query_index_files = artifact_manager.list_dir(session_id, project_name)
-            for file in matching_files:
-                # Retrieve the content of each file
-                file_content = await self._svc.download_file(file.path)
-                local_path = os.path.join(query_index_dir, file.name)
-                
-                # Write the content to a local file asynchronously
-                async with aiofiles.open(local_path, 'wb') as local_file:
-                    await local_file.write(file_content)
+            suggested_study = await artifact_manager.get(session_id, f"{project_name}:suggested_study.json")
+            await artifact_manager.get_dir(session_id, project_name, query_index_dir)
 
         query_storage_context = StorageContext.from_defaults(
             persist_dir=query_index_dir
         )
+        
+        if artifact_manager is not None:
+            shutil.rmtree(query_index_dir, ignore_errors=True)
+            
         query_index = load_index_from_storage(query_storage_context)
         query_engine = CitationQueryEngine.from_args(
             query_index,
@@ -304,12 +300,12 @@ def create_experiment_compiler_function(
 
         else:
             # Save the suggested study to the Artifact Manager
-            protocol_id = artifact_manager.put(
+            protocol_id = await artifact_manager.put(
                 session_id=session_id, 
                 value=protocol.model_dump(),
                 name=f"{project_name}:experimental_protocol.json",
             )
-            protocol_url = artifact_manager.get_url(session_id, protocol_id)
+            protocol_url = await artifact_manager.get_url(session_id, protocol_id)
 
         summary_website_url = await write_website(
             protocol,
