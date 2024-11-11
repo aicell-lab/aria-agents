@@ -217,8 +217,8 @@ def create_experiment_compiler_function(
                 suggested_study = SuggestedStudy(**json.load(ss_file))
         else:
             event_bus = artifact_manager.get_event_bus()
-            suggested_study = await artifact_manager.get(session_id, f"{project_name}:suggested_study.json")
-            await artifact_manager.get_dir(session_id, project_name, query_index_dir)
+            suggested_study = await artifact_manager.get(f"{project_name}:suggested_study.json")
+            await artifact_manager.get_dir(project_name, query_index_dir)
 
         query_storage_context = StorageContext.from_defaults(
             persist_dir=query_index_dir
@@ -301,7 +301,6 @@ def create_experiment_compiler_function(
         else:
             # Save the suggested study to the Artifact Manager
             protocol_id = await artifact_manager.put(
-                session_id=session_id, 
                 value=protocol.model_dump(),
                 name=f"{project_name}:experimental_protocol.json",
             )

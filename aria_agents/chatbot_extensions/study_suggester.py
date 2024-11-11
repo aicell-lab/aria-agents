@@ -151,14 +151,11 @@ def create_study_suggester_function(
                 json.dump(suggested_study.dict(), f, indent=4)
             suggested_study_url = "file://" + suggested_study_file
         else:
-            # Save the suggested study to the Artifact Manager
             suggested_study_id = await artifact_manager.put(
-                session_id=session_id,
                 value=suggested_study.dict(),
                 name=f"{project_name}:suggested_study.json",
             )
             suggested_study_url = await artifact_manager.get_url(
-                session_id=session_id,
                 name=suggested_study_id
             )
 

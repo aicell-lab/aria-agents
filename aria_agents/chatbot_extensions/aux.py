@@ -6,6 +6,7 @@ from typing import Callable, List
 import urllib
 import xml.etree.ElementTree as xml
 import requests
+import asyncio
 
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.query_engine import CitationQueryEngine
@@ -129,12 +130,22 @@ def test_pmc_query_hits(
 
     return f"The query `{pmc_query.query}` returned {n_hits} hits."
 
+async def save_index_artifact(project_folder: str, artifact_manager: ArtifactManager, query_index_dir: str):
+    pre_session = current_session.get()
+    session_id = pre_session.id if pre_session else str(uuid.uuid4())
+    project_name = os.path.basename(project_folder)
+    await artifact_manager.put_dir(
+        local_path=query_index_dir,
+        file_prefix=project_name
+    )
+    # Delete even if not empty
+    shutil.rmtree(query_index_dir, ignore_errors=True)
 
 def create_corpus_function(
     context: dict, project_folder: str, artifact_manager: ArtifactManager = None
 ) -> Callable:
     @schema_tool
-    async def create_pubmed_corpus(
+    def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
             ...,
             description="The query to search the NCBI PubMed Central Database.",
@@ -162,18 +173,6 @@ def create_corpus_function(
         # Save the query index to disk
         query_index_dir = os.path.join(project_folder, "query_index")
         query_index.storage_context.persist(query_index_dir)
-        
-        if artifact_manager is not None:
-            pre_session = current_session.get()
-            session_id = pre_session.id if pre_session else str(uuid.uuid4())
-            project_name = os.path.basename(project_folder)
-            await artifact_manager.put_dir(
-                session_id=session_id,
-                local_path=query_index_dir,
-                file_prefix=project_name
-            )
-            # Delete even if not empty
-            shutil.rmtree(query_index_dir, ignore_errors=True)
 
         # Create a citation query engine object
         context["query_engine"] = CitationQueryEngine.from_args(
@@ -181,6 +180,10 @@ def create_corpus_function(
             similarity_top_k=CONFIG["aux"]["similarity_top_k"],
             citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
         )
+        
+        if artifact_manager is not None:
+            asyncio.create_task(save_index_artifact(project_folder, artifact_manager, query_index_dir))
+        
         return f"Pubmed corpus with {len(documents)} papers has been created."
 
     return create_pubmed_corpus
@@ -277,13 +280,9 @@ async def write_website(
         # Save the summary website to the Artifact Manager
         project_name = os.path.basename(project_folder)
         summary_website_id = artifact_manager.put(
-            session_id=session_id,
             value=summary_website.html_code,
             name=f"{project_name}:{website_type}.html",
         )
-        summary_website_url = artifact_manager.get_url(
-            session_id=session_id,
-            name=summary_website_id
-        )
+        summary_website_url = artifact_manager.get_url(summary_website_id)
 
     return summary_website_url

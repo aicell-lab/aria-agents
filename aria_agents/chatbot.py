@@ -414,6 +414,7 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
+        artifact_manager.set_session_id(session_id)
 
         # Listen to the `stream` event
         async def stream_callback(message):
@@ -426,8 +427,8 @@ async def register_chat_service(server):
         # Listen to the `store_put` event
         async def store_put_callback(session_id, file_name):
             if file_name.endswith(".html"):
-                summary_website = await artifact_manager.get(session_id, file_name)
-                url = await artifact_manager.get_url(session_id, file_name)
+                summary_website = await artifact_manager.get(file_name)
+                url = await artifact_manager.get_url(file_name)
                 await artifact_callback(summary_website, url)
 
         event_bus.on("store_put", store_put_callback)
