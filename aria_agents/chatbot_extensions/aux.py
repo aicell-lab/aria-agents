@@ -1,10 +1,12 @@
 import json
 import os
+import shutil
 import uuid
 from typing import Callable, List
 import urllib
 import xml.etree.ElementTree as xml
 import requests
+import asyncio
 
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.core.query_engine import CitationQueryEngine
@@ -16,7 +18,7 @@ from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
 
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.artifact_manager import ArtifactManager
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -111,11 +113,14 @@ def test_pmc_query_hits(
         "term": pmc_query.query,
         "retmax": CONFIG["aux"]["paper_limit"],
     }
-    resp = requests.get(
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
-        params=parameters,
-        timeout=500,
-    )
+    try:
+        resp = requests.get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+            params=parameters,
+            timeout=500,
+        )
+    except requests.RequestException as e:
+        return f"Failed to execute query: {e}"
 
     # Parse the XML response
     root = xml.fromstring(resp.content)
@@ -125,9 +130,8 @@ def test_pmc_query_hits(
 
     return f"The query `{pmc_query.query}` returned {n_hits} hits."
 
-
 def create_corpus_function(
-    context: dict, project_folder: str, data_store: HyphaDataStore = None
+    context: dict, project_folder: str, artifact_manager: ArtifactManager = None
 ) -> Callable:
     @schema_tool
     def create_pubmed_corpus(
@@ -158,13 +162,6 @@ def create_corpus_function(
         # Save the query index to disk
         query_index_dir = os.path.join(project_folder, "query_index")
         query_index.storage_context.persist(query_index_dir)
-        if data_store is not None:
-            project_name = os.path.basename(project_folder)
-            data_store.put(
-                obj_type="file",
-                value=query_index_dir,
-                name=f"{project_name}:pubmed_index_dir",
-            )
 
         # Create a citation query engine object
         context["query_engine"] = CitationQueryEngine.from_args(
@@ -172,6 +169,7 @@ def create_corpus_function(
             similarity_top_k=CONFIG["aux"]["similarity_top_k"],
             citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
         )
+        
         return f"Pubmed corpus with {len(documents)} papers has been created."
 
     return create_pubmed_corpus
@@ -205,7 +203,7 @@ def load_template(template_filename):
 async def write_website(
     input_model: BaseModel,
     event_bus,
-    data_store,
+    artifact_manager,
     website_type: str,
     project_folder: str,
 ) -> SummaryWebsite:
@@ -256,7 +254,7 @@ async def write_website(
             SummaryWebsite,
         )
 
-    if data_store is None:
+    if artifact_manager is None:
         # Save the summary website to a HTML file
         summary_website_file = os.path.join(
             project_folder, f"{website_type}.html"
@@ -265,13 +263,12 @@ async def write_website(
             f.write(summary_website.html_code)
         summary_website_url = "file://" + summary_website_file
     else:
-        # Save the summary website to the HyphaDataStore
+        # Save the summary website to the Artifact Manager
         project_name = os.path.basename(project_folder)
-        summary_website_id = data_store.put(
-            obj_type="file",
+        summary_website_id = await artifact_manager.put(
             value=summary_website.html_code,
             name=f"{project_name}:{website_type}.html",
         )
-        summary_website_url = data_store.get_url(summary_website_id)
+        summary_website_url = await artifact_manager.get_url(summary_website_id)
 
     return summary_website_url

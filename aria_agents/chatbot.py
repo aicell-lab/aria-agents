@@ -24,7 +24,7 @@ from aria_agents.chatbot_extensions import (
     extension_to_tools,
     get_builtin_extensions,
 )
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.artifact_manager import ArtifactManager
 from aria_agents.quota import QuotaManager
 from aria_agents.utils import (
     ChatbotExtension,
@@ -245,8 +245,7 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
         await f.write(chat_history_json)
 
 
-async def connect_server(server_url):
-    """Connect to the server and register the chat service."""
+async def get_server(server_url, use_workspace=True):
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     provided_token = os.environ.get("WORKSPACE_TOKEN")
     workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
@@ -258,16 +257,19 @@ async def connect_server(server_url):
             token = provided_token
     else:
         token = None
-    server = await connect_to_server(
-        {
-            "server_url": server_url,
-            "token": token,
-            "method_timeout": 500,
-            "workspace": workspace_name,
-        }
-    )
-    await register_chat_service(server)
+    server = await connect_to_server({
+        "server_url": server_url,
+        "token": token,
+        "method_timeout": 500,
+        **({"workspace": workspace_name} if use_workspace else {})
+    })
+    
+    return server
 
+async def connect_server(server_url):
+    """Connect to the server and register the chat service."""
+    chat_server = await get_server(server_url)
+    await register_chat_service(chat_server)
 
 async def serve_frontend(server, service_id):
     app = FastAPI(root_path=f"/aria-agents/apps/{service_id}")
@@ -296,9 +298,10 @@ async def register_chat_service(server):
     """Hypha startup function."""
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
     event_bus = EventBus(name="AriaAgents")
-    data_store = HyphaDataStore(event_bus)
-    await data_store.setup(server)
-    builtin_extensions = get_builtin_extensions(data_store)
+    artifact_manager = ArtifactManager(event_bus)
+    artifact_server = await get_server("https://hypha.aicell.io", use_workspace=False)
+    await artifact_manager.setup(artifact_server, "/aria-agents/aria-agents-chats", "public/artifact-manager")
+    builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
     default_quota = float(os.environ.get("BIOIMAGEIO_DEFAULT_QUOTA", "inf"))
@@ -381,8 +384,11 @@ async def register_chat_service(server):
         filename = f"report-{session_id}.json"
         # Create a chat_log.json file inside the session folder
         chat_log_full_path = os.path.join(chat_logs_path, filename)
-        await save_chat_history(chat_log_full_path, chat_his_dict)
-        print(f"User report saved to {filename}")
+        try:
+            await save_chat_history(chat_log_full_path, chat_his_dict)
+            print(f"User report saved to {filename}")
+        except Exception as e:
+            print(f"Failed to save user report: {e}")
 
     async def talk_to_assistant(
         assistant_name,
@@ -408,6 +414,7 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
+        artifact_manager.set_session_id(session_id)
 
         # Listen to the `stream` event
         async def stream_callback(message):
@@ -422,12 +429,10 @@ async def register_chat_service(server):
         event_bus.on("stream", stream_callback)
 
         # Listen to the `store_put` event
-        async def store_put_callback(store_obj):
-            if store_obj["type"] == "file" and store_obj["name"].endswith(
-                ".html"
-            ):
-                summary_website = store_obj["value"]
-                url = data_store.get_url(store_obj["id"])
+        async def store_put_callback(file_name):
+            if file_name.endswith(".html"):
+                summary_website = await artifact_manager.get(file_name)
+                url = await artifact_manager.get_url(file_name)
                 await artifact_callback(summary_website, url)
 
         event_bus.on("store_put", store_put_callback)

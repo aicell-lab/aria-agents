@@ -31,7 +31,6 @@ function App() {
 	const [chatHistory, setChatHistory] = useState(new Map());
 	const [svc, setSvc] = useState(null);
 	const [sessionId, setSessionId] = useState(null);
-	const [dataStore, setDataStore] = useState(null);
 	const [artifactManager, setArtifactManager] = useState(null);
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
@@ -56,6 +55,7 @@ function App() {
 	const [showShareDialog, setShowShareDialog] = useState(false);
 	const [alertContent, setAlertContent] = useState("");
 	const [isPaused, setIsPaused] = useState(false);
+	const [artifactPrefix, setArtifactPrefix] = useState("/aria-agents/aria-agents-chats");
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -129,11 +129,14 @@ function App() {
 	const loadChats = async() => {
 		try {
 			const prevChatObjects = await artifactManager.list({
-				prefix: "/aria-agents/aria-agents-chats",
+				prefix: artifactPrefix,
 				summary_fields: ["*"],
 				_rkwargs: true,
 			});
-			setPrevChats(prevChatObjects);
+			const invalidChats = prevChatObjects.filter((chat) => chat.name === "");
+			invalidChats.forEach(deleteChat);
+			const validChats =  prevChatObjects.filter((chat) => chat.name !== "");
+			setPrevChats(validChats);
 		}
 		catch {
 			console.log("No previous chats.");
@@ -150,7 +153,7 @@ function App() {
 	
 		try {
 			await artifactManager.create({
-				prefix: "/aria-agents/aria-agents-chats",
+				prefix: artifactPrefix,
 				manifest: galleryManifest,
 				orphan: true,
 				_rkwargs: true
@@ -176,27 +179,26 @@ function App() {
 		if (permissions) {
 			datasetManifest["permissions"] = permissions;
 		}
+    
+		const sessionPrefix = `${artifactPrefix}/${sessionId}`;
+		const chatConfig = {
+			prefix: sessionPrefix,
+			manifest: datasetManifest,
+			_rkwargs: true
+		}
 
 		try {
-			await artifactManager.create({
-				prefix: `/aria-agents/aria-agents-chats/${sessionId}`,
-				manifest: datasetManifest,
-				_rkwargs: true
-			});
+			await artifactManager.create(chatConfig);
 		} catch {
-			await artifactManager.edit({
-				prefix: `/aria-agents/aria-agents-chats/${sessionId}`,
-				manifest: datasetManifest,
-				_rkwargs: true
-			})
-			await artifactManager.commit(`/aria-agents/aria-agents-chats/${sessionId}`);
+			await artifactManager.edit(chatConfig);
+			await artifactManager.commit(sessionPrefix);
 		}
 	};
 
 	const deleteChat = async (chat) => {
 		try {
 			await artifactManager.delete({
-				prefix: `/aria-agents/aria-agents-chats/${chat.id}`,
+				prefix: `${artifactPrefix}/${chat.id}`,
 				delete_files: true,
 				recursive: true,
 				_rkwargs: true
@@ -214,8 +216,6 @@ function App() {
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
-		const dataStoreService = await getService(
-			server, "aria-agents/data-store", "public/data-store");
 		const artifactManagerService = await getService(
 			artifactServer, "public/artifact-manager");
 
@@ -229,7 +229,6 @@ function App() {
 			console.error(error);
 		}
 
-		setDataStore(dataStoreService);
 		setSvc(ariaAgentsService);
 		setArtifactManager(artifactManagerService);
 	};
@@ -250,16 +249,15 @@ function App() {
 
 		for (const file of files) {
 			try {
-				const fileId = await uploadAttachment(file);
-				const fileUrl = await dataStore.getUrl(fileId);
-				newAttachmentPrompts.push(
-					`- **${file.name}**, available at: [${fileUrl}](${fileUrl})`
-				);
-				newAttachmentNames.push(file.name);
+				await saveFile(file);
 			} catch (error) {
-				// Red dialog
 				alert(`Error uploading ${file.name}:`, error);
+				continue;
 			}
+			newAttachmentPrompts.push(
+				`- **${file.name}**, available at: ${artifactPrefix}/${sessionId}`
+			);
+			newAttachmentNames.push(file.name);
 		}
 
 		setAttachmentStatePrompts([
@@ -269,46 +267,22 @@ function App() {
 		setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
 	};
 
-	const uploadAttachment = async (file) => {
-		const fileBytes = await file.arrayBuffer();
-		const byteArray = new Uint8Array(fileBytes);
-
-		const fileId = await dataStore.put("file", byteArray, file.name);
-
-		addItemToLocalStorageArr("attachments", {
-			value: file.name,
-			id: fileId,
+	const saveFile = async (file) => {
+		await saveChat()
+		const putUrl = await artifactManager.putFile({
+			prefix: `${artifactPrefix}/${sessionId}`,
+			file_path: file.name, // TODO: handle files with same name
+			_rkwargs: true
 		});
 
-		return fileId;
-	};
+		const response = await fetch(putUrl, {
+			method: "PUT",
+			body: file
+		})
 
-	const addItemToLocalStorageArr = (arrName, item) => {
-		const arr = JSON.parse(localStorage.getItem(arrName)) || [];
-		arr.push(item);
-		localStorage.setItem(arrName, JSON.stringify(arr));
-	};
-
-	const testUploadAttachment = async () => {
-		const fileContents = "Hello, World!";
-		const file = new File([fileContents], "test.txt", {
-			type: "text/plain",
-		});
-		const fileId = await uploadAttachment(file);
-
-		const returned_object = await dataStore.get({
-			query_string: "id=" + fileId,
-		});
-		const returnedBytes = returned_object.body;
-		const returnedFileContents = new Blob([returnedBytes], {
-			type: "text/plain",
-		});
-		const returnedText = await returnedFileContents.text();
-
-		console.assert(
-			returnedText === fileContents,
-			"File contents do not match"
-		);
+		if (!response.ok) {
+			throw new Error(`Upload of ${file.name} failed`);
+		}
 	};
 
 	const statusCallback = async (message) => {
