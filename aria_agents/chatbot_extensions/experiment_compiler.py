@@ -218,14 +218,10 @@ def create_experiment_compiler_function(
         else:
             event_bus = artifact_manager.get_event_bus()
             suggested_study = await artifact_manager.get(f"{project_name}:suggested_study.json")
-            await artifact_manager.get_dir(project_name, query_index_dir)
 
         query_storage_context = StorageContext.from_defaults(
             persist_dir=query_index_dir
         )
-        
-        if artifact_manager is not None:
-            shutil.rmtree(query_index_dir, ignore_errors=True)
             
         query_index = load_index_from_storage(query_storage_context)
         query_engine = CitationQueryEngine.from_args(

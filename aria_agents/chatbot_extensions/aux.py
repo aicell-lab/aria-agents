@@ -130,17 +130,6 @@ def test_pmc_query_hits(
 
     return f"The query `{pmc_query.query}` returned {n_hits} hits."
 
-async def save_index_artifact(project_folder: str, artifact_manager: ArtifactManager, query_index_dir: str):
-    pre_session = current_session.get()
-    session_id = pre_session.id if pre_session else str(uuid.uuid4())
-    project_name = os.path.basename(project_folder)
-    await artifact_manager.put_dir(
-        local_path=query_index_dir,
-        file_prefix=project_name
-    )
-    # Delete even if not empty
-    shutil.rmtree(query_index_dir, ignore_errors=True)
-
 def create_corpus_function(
     context: dict, project_folder: str, artifact_manager: ArtifactManager = None
 ) -> Callable:
@@ -180,9 +169,6 @@ def create_corpus_function(
             similarity_top_k=CONFIG["aux"]["similarity_top_k"],
             citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
         )
-        
-        if artifact_manager is not None:
-            asyncio.create_task(save_index_artifact(project_folder, artifact_manager, query_index_dir))
         
         return f"Pubmed corpus with {len(documents)} papers has been created."
 

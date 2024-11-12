@@ -37,40 +37,6 @@ class ArtifactManager:
         
         self._event_bus.emit("store_put", self.session_id, name)
         return name
-        
-    async def put_dir(self, local_path, file_prefix=None):
-        assert self._svc, "Please call `setup()` before using artifact manager"
-        assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
-        for filename in os.listdir(local_path):
-            file_path = os.path.join(local_path, filename)
-            
-            with open(file_path, 'rb') as f:
-                file_content = f.read()
-                await self.put(
-                    value=file_content,
-                    name=filename
-                )
-                
-    async def list_dir(self, file_prefix):
-        assert self._svc, "Please call `setup()` before using artifact manager"
-        assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
-        all_files = await self._svc.list_files(f"{self._prefix}/{self.session_id}")
-        
-        def file_has_prefix(this_file):
-            return this_file.name.startswith(file_prefix)
-        
-        return list(filter(file_has_prefix, all_files))
-    
-    async def get_dir(self, file_prefix, local_path):
-        assert self._svc, "Please call `setup()` before using artifact manager"
-        assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
-        dir_files = await self.list_dir(file_prefix)
-        for dir_file in dir_files:
-            file_content = await self.get(dir_file.path)
-            local_path = os.path.join(local_path, dir_file.name)
-            
-            async with aiofiles.open(local_path, 'wb') as local_file:
-                await local_file.write(file_content)
 
     async def get_url(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
