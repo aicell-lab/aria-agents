@@ -207,14 +207,9 @@ function App() {
 		}
 	}
 
-	const shareChat = async () => {
-		await saveChat({"*": "r"});
-		setShowShareDialog(true);
-	}
-
 	const setServices = async (token) => {
 		const server = await getServer(token);
-		const artifactServer = await getServer(token, "https://hypha.aicell.io");
+		const artifactServer = await getServer(token, "https://hypha.aicell.io", "aria-agents");
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
@@ -662,7 +657,7 @@ function App() {
 								handleAttachment={handleAttachment}
 								attachmentNames={attachmentNames}
 								undoAttach={undoAttach}
-								shareChat={shareChat}
+								shareChat={() => setShowShareDialog(true) }
 								placeholder="Type what you want to study"
 							/>
 						)}
@@ -707,7 +702,7 @@ function App() {
 				</div>
 			)}
 			{showShareDialog && (
-				<ShareDialog shareUrl={window.location} onClose={() => setShowShareDialog(false)}></ShareDialog>
+				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
 			)}
 			{alertContent && (
 				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>

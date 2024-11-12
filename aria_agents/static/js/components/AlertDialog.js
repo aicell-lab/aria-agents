@@ -14,7 +14,7 @@ function AlertDialog({ children }) {
 
 window.AlertDialog = AlertDialog; 
 
-function ShareDialog({onClose, shareUrl}) {
+function ShareDialog({onClose, onConfirm, shareUrl}) {
     const [showFirstDialog, setShowFirstDialog] = useState(true);
     const [showSecondDialog, setShowSecondDialog] = useState(false);
 
@@ -30,6 +30,7 @@ function ShareDialog({onClose, shareUrl}) {
                             className="px-4 py-2 mr-3 text-white bg-blue-500 rounded-lg hover:bg-blue-600"
                             onClick={() => {
                                 setShowFirstDialog(false);
+                                onConfirm();
                                 setShowSecondDialog(true);
                             }}
                         >
@@ -57,7 +58,7 @@ function ShareDialog({onClose, shareUrl}) {
                             value={shareUrl}
                         />
                         <button
-                            className="width-fill px-4 py-2 h-12 text-white bg-blue-500 mt-0 rounded-lg hover:bg-blue-600"
+                            className="width-fill px-4 py-2 h-12 text-white bg-blue-500 !mt-0 rounded-lg hover:bg-blue-600"
                             onClick={() => navigator.clipboard.writeText(shareUrl)}
                         >
                             Copy Link
