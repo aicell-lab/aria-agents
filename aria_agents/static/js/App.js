@@ -110,7 +110,7 @@ function App() {
 
 	const readChat = (newUserId, newSessionId) => {
 		return artifactManager.read({
-			prefix: `/aria-agents/aria-agents-chats/${newUserId}/${newSessionId}`,
+			prefix: `${newUserId}/${newSessionId}`,
 			_rkwargs: true
 		});
 	}
@@ -162,10 +162,10 @@ function App() {
 		}
 	};
 
-	const saveChat = async (altPrefix = null, permissions = null) => {
+	const saveChat = async (permissions = null) => {
 		const datasetManifest = {
-			"id": `${sessionId}`,
-			"name": `${chatTitle}`,
+			"id": sessionId,
+			"name": chatTitle,
 			"description": `The Aria Agents chat history of ${sessionId}`,
 			"type": "chat",
 			"conversations": chatHistory,
@@ -174,16 +174,16 @@ function App() {
 			"timestamp": new Date().toISOString(),
 			"userId": userId,
 		};
-
-		if (permissions) {
-			datasetManifest["permissions"] = permissions;
-		}
     
-		const sessionPrefix = altPrefix? `${altPrefix}/${sessionId}` : `${artifactPrefix}/${sessionId}`;
+		const sessionPrefix = `${artifactPrefix}/${sessionId}`;
 		const chatConfig = {
 			prefix: sessionPrefix,
 			manifest: datasetManifest,
 			_rkwargs: true
+		}
+
+		if (permissions) {
+			chatConfig.permissions = permissions;
 		}
 
 		try {
@@ -211,10 +211,10 @@ function App() {
 
 	const setServices = async (token) => {
 		const server = await getServer(token);
-		const artifactServer = await getServer(token, "https://hypha.aicell.io", "aria-agents");
+		const artifactServer = await getServer(token, "https://hypha.aicell.io");
 		const userId = artifactServer.config.user.id;
 		setUserId(userId);
-		setArtifactPrefix(`/aria-agents/aria-agents-chats/${userId}`);
+		setArtifactPrefix(userId);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
@@ -556,7 +556,7 @@ function App() {
 		setChatTitle(chat.name || "");
 		setArtifacts(chat.artifacts || []);
 		if (chat.id) {
-			setUrlParams(chat.id, chat.userId);
+			setUrlParams(chat.userId, chat.id);
 			setSessionId(chat.id);
 		}
 		else {
@@ -690,7 +690,7 @@ function App() {
 				</div>
 			)}
 			{showShareDialog && (
-				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat("/aria-agents/aria-agents-chat/public", {"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
+				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
 			)}
 			{alertContent && (
 				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>
