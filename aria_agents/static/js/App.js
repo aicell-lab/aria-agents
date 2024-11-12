@@ -118,6 +118,7 @@ function App() {
 	useEffect(async () => {
 		if (chatTitle !== "" && messageIsComplete) {
 			await saveChat();
+			// TODO: remove userId from here. Instead, use /aria-agents/aria-agents-chat/public collection for sharing
 			setUrlParams(userId, sessionId);
 			await loadChats();
 		}
@@ -161,7 +162,7 @@ function App() {
 		}
 	};
 
-	const saveChat = async (permissions = null) => {
+	const saveChat = async (altPrefix = null, permissions = null) => {
 		const datasetManifest = {
 			"id": `${sessionId}`,
 			"name": `${chatTitle}`,
@@ -178,7 +179,7 @@ function App() {
 			datasetManifest["permissions"] = permissions;
 		}
     
-		const sessionPrefix = `${artifactPrefix}/${sessionId}`;
+		const sessionPrefix = altPrefix? `${altPrefix}/${sessionId}` : `${artifactPrefix}/${sessionId}`;
 		const chatConfig = {
 			prefix: sessionPrefix,
 			manifest: datasetManifest,
@@ -644,7 +645,7 @@ function App() {
 								handleAttachment={handleAttachment}
 								attachmentNames={attachmentNames}
 								undoAttach={undoAttach}
-								shareChat={() => setShowShareDialog(true) }
+								shareChat={() => { setShowShareDialog(true) } }
 								placeholder="Type what you want to study"
 							/>
 						)}
@@ -689,7 +690,7 @@ function App() {
 				</div>
 			)}
 			{showShareDialog && (
-				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
+				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat("/aria-agents/aria-agents-chat/public", {"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
 			)}
 			{alertContent && (
 				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>
