@@ -1,4 +1,4 @@
-schema-agents==0.1.56
+schema-agents==0.1.57
 imjoy-rpc==0.5.48.post2
 requests==2.31.0
 pypdf==4.2.0
@@ -16,11 +16,12 @@ langchain-openai==0.1.7
 langchain-text-splitters==0.0.1
 langchain-experimental==0.0.56
 beautifulsoup4==4.12.3
-pandas==2.2.2
+pandas==1.5.3
 rank-bm25==0.2.2
 html2text==2020.1.16
 setuptools==70.0.0
 PyYAML==6.0.1
 llama_index==0.11.14
 llama-index-readers-papers==0.2.0
+pandasai==2.3.0
 ipdb

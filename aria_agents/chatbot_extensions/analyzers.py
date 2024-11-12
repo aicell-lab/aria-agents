@@ -90,10 +90,17 @@ def get_data_files(data_folder: str) -> List[str]:
 
 class SummarizedResponse(BaseModel):
     """A string representation of the data analysis bot's methods, steps, response, and explanation"""
-    response_summary: str = Field(description="A string representation of the data analysis bot's steps, response, and explanation")
+    summary: str = Field(description="A string representation of the data analysis bot's steps, response, and explanation")
     # next_steps: str = Field(description="Suggested next steps that the user can take in the analysis")
     # original_response: str = Field(description="The original response from the data analysis bot")
     # original_explanation: str = Field(description="The explanation from the data analysis bot")
+
+class CompleteResponse(SummarizedResponse):
+    """The complete response from the data analysis bot, including its summary, response, logs, plots created, and steps taken"""
+    bot_response: str = Field(description="The bot's final response from the data analysis. Note that this will not discuss the intermediate steps taken or all the plots created. You must look at the logs, summary, and urls for that.")
+    bot_explanation: str = Field(description="The explanation from the data analysis bot. Note that this will not discuss the intermediate steps taken or all the plots created. You must look at the logs, summary, and urls for that.")
+    pai_logs: List[Dict[str, str]] = Field(description="The logs from the data analysis bot's work")
+    plot_urls: Dict[str, str] = Field(description="The urls to the plots created by the data analysis bot")
 
 class PlotPaths(BaseModel):
     """A list of file paths to the plots (or any .png files) created by the data analysis bot"""
@@ -243,11 +250,18 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
                                                        pai_logs=pai_logs,
                                                        summarizer_agent=summarizer_agent,
                                                        session_id=session_id)
+        
+        complete_response = CompleteResponse(bot_response=response,
+                                            bot_explanation=explanation,
+                                            summary=summarized_response.summary,
+                                            pai_logs=pai_logs,
+                                            plot_urls=plot_urls)
 
         return {
             # "response": response,
             # "explanation": explanation,
-            "summarized_response": summarized_response,
+            # "summarized_response": summarized_response,
+            "complete_response": complete_response,
             "plot_urls": plot_urls,
         }
     return explore_data
