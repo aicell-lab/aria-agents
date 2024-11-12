@@ -55,6 +55,7 @@ function App() {
 	const [isNearBottom, setIsNearBottom] = useState(true);
 	const [showShareDialog, setShowShareDialog] = useState(false);
 	const [alertContent, setAlertContent] = useState("");
+	const [isPaused, setIsPaused] = useState(false);
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -321,7 +322,7 @@ function App() {
 			query_id,
 		} = message;
 
-		if (id !== sessionId) {
+		if (id !== sessionId || isPaused) {
 			throw new Error("User has terminated this session.");
 		}
 
@@ -421,7 +422,7 @@ function App() {
 
 	const awaitUserResponse = () => {
 		setIsChatComplete(true);
-		// setStatus("Ready to chat! Type your message and press enter!");
+		setIsPaused(false);
 		setIsSending(false);
 	}
 
@@ -493,16 +494,6 @@ function App() {
 					}
 				);
 				const extensions = [{ id: "aria" }];
-				await svc.chat(
-					currentQuestion,
-					currentChatHistory,
-					userProfile,
-					statusCallback,
-					artifactCallback,
-					sessionId,
-					extensions,
-					joinedStatePrompt
-				);
 				if (chatTitle === "") {
 					const summaryQuestion = `Give a succinct title to this chat
 					 session summarizing this prompt written by
@@ -520,6 +511,16 @@ function App() {
 						joinedStatePrompt
 					);
 				}
+				await svc.chat(
+					currentQuestion,
+					currentChatHistory,
+					userProfile,
+					statusCallback,
+					artifactCallback,
+					sessionId,
+					extensions,
+					joinedStatePrompt
+				);
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
@@ -645,6 +646,14 @@ function App() {
 						) : (
 							<div ref={chatContainerRef}>
 								<ChatHistory chatHistory={chatHistory} isSending={isSending} />
+								{!isChatComplete && chatHistory.size > 0 && (
+									<PauseButton pause={() => {
+											setIsPaused(true);
+											setStatus("Chat stopped.");
+											awaitUserResponse();
+										}}
+									/>	
+								)}
 							</div>
 						)}
 						{isChatComplete && chatHistory.size > 0 && (
