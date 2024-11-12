@@ -1,4 +1,4 @@
-import requests
+import httpx
 import os
 import aiofiles
 
@@ -20,15 +20,17 @@ class ArtifactManager:
     async def put(self, value, name):
         assert self._svc, "Please call `setup()` before using artifact manager"
         assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
+        print(f"Uploading {name} to {self._prefix}/{self.session_id}")
         put_url = await self._svc.put_file(
             prefix=f"{self._prefix}/{self.session_id}",
             file_path=name
         )
+        print(f"Uploading {name} to {put_url}")
         
         try:
-            response = await requests.put(put_url, data=value, timeout=500)
+            response = await httpx.put(put_url, data=value, timeout=500)
             response.raise_for_status()
-        except requests.RequestException as e:
+        except httpx.RequestError as e:
             raise RuntimeError(f"File upload failed: {e}") from e
         
         self._svc.commit(f"{self._prefix}/{self.session_id}")
@@ -85,9 +87,9 @@ class ArtifactManager:
         get_url = await self.get_url(name)
         
         try:
-            response = await requests.get(get_url, timeout=500)
+            response = await httpx.get(get_url, timeout=500)
             response.raise_for_status()
-        except requests.RequestException as e:
+        except httpx.RequestError as e:
             raise RuntimeError(f"File download failed: {e}") from e
         
         return response.text
