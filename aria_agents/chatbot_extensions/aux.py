@@ -265,10 +265,10 @@ async def write_website(
     else:
         # Save the summary website to the Artifact Manager
         project_name = os.path.basename(project_folder)
-        summary_website_id = artifact_manager.put(
+        summary_website_id = await artifact_manager.put(
             value=summary_website.html_code,
             name=f"{project_name}:{website_type}.html",
         )
-        summary_website_url = artifact_manager.get_url(summary_website_id)
+        summary_website_url = await artifact_manager.get_url(summary_website_id)
 
     return summary_website_url

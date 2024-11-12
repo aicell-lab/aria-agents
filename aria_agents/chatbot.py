@@ -300,7 +300,7 @@ async def register_chat_service(server):
     event_bus = EventBus(name="AriaAgents")
     artifact_manager = ArtifactManager(event_bus)
     artifact_server = await get_server("https://hypha.aicell.io", use_workspace=False)
-    await artifact_manager.setup(artifact_server, "aria-agents-chats", "public/artifact-manager")
+    await artifact_manager.setup(artifact_server, "/aria-agents/aria-agents-chats", "public/artifact-manager")
     builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
@@ -425,7 +425,7 @@ async def register_chat_service(server):
         event_bus.on("stream", stream_callback)
 
         # Listen to the `store_put` event
-        async def store_put_callback(session_id, file_name):
+        async def store_put_callback(file_name):
             if file_name.endswith(".html"):
                 summary_website = await artifact_manager.get(file_name)
                 url = await artifact_manager.get_url(file_name)

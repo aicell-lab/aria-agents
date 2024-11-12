@@ -48,6 +48,7 @@ function App() {
 	const [messageIsComplete, setMessageIsComplete] = useState(false);
 	const chatContainerRef = useRef(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
+	const [artifactPrefix, setArtifactPrefix] = useState("/aria-agents/aria-agents-chats");
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -97,7 +98,7 @@ function App() {
 	const loadChats = async() => {
 		try {
 			const prevChatObjects = await artifactManager.list({
-				prefix: "aria-agents-chats",
+				prefix: artifactPrefix,
 				summary_fields: ["*"],
 				_rkwargs: true,
 			});
@@ -121,7 +122,7 @@ function App() {
 	
 		try {
 			await artifactManager.create({
-				prefix: "aria-agents-chats",
+				prefix: artifactPrefix,
 				manifest: galleryManifest,
 				orphan: true,
 				_rkwargs: true
@@ -144,26 +145,25 @@ function App() {
 			"timestamp": new Date().toISOString(),
 		};
 
+		const sessionPrefix = `${artifactPrefix}/${sessionId}`;
+		const chatConfig = {
+			prefix: sessionPrefix,
+			manifest: datasetManifest,
+			_rkwargs: true
+		}
+
 		try {
-			await artifactManager.create({
-				prefix: `aria-agents-chats/${sessionId}`,
-				manifest: datasetManifest,
-				_rkwargs: true
-			});
+			await artifactManager.create(chatConfig);
 		} catch {
-			await artifactManager.edit({
-				prefix: `aria-agents-chats/${sessionId}`,
-				manifest: datasetManifest,
-				_rkwargs: true
-			})
-			await artifactManager.commit(`aria-agents-chats/${sessionId}`);
+			await artifactManager.edit(chatConfig);
+			await artifactManager.commit(sessionPrefix);
 		}
 	};
 
 	const deleteChat = async (chat) => {
 		try {
 			await artifactManager.delete({
-				prefix: `aria-agents-chats/${chat.id}`,
+				prefix: `${artifactPrefix}/${chat.id}`,
 				delete_files: true,
 				recursive: true,
 				_rkwargs: true
@@ -177,7 +177,7 @@ function App() {
 
 	const setServices = async (token) => {
 		const server = await getServer(token);
-		const artifactServer = await getServer(token, "https://hypha.aicell.io");
+		const artifactServer = await getServer(token, "https://hypha.aicell.io", "aria-agents");
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
@@ -219,7 +219,7 @@ function App() {
 				continue;
 			}
 			newAttachmentPrompts.push(
-				`- **${file.name}**, available at: aria-agents-chats/${sessionId}`
+				`- **${file.name}**, available at: ${artifactPrefix}/${sessionId}`
 			);
 			newAttachmentNames.push(file.name);
 		}
@@ -234,7 +234,7 @@ function App() {
 	const saveFile = async (file) => {
 		await saveChat()
 		const putUrl = await artifactManager.putFile({
-			prefix: `aria-agents-chats/${sessionId}`,
+			prefix: `${artifactPrefix}/${sessionId}`,
 			file_path: file.name, // TODO: handle files with same name
 			_rkwargs: true
 		});

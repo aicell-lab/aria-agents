@@ -15,7 +15,6 @@ from aria_agents.chatbot_extensions.aux import (
     create_corpus_function,
     create_query_function,
     write_website,
-    # TODO: add PMCQuery
 )
 from aria_agents.artifact_manager import ArtifactManager
 
@@ -152,7 +151,7 @@ def create_study_suggester_function(
             suggested_study_url = "file://" + suggested_study_file
         else:
             suggested_study_id = await artifact_manager.put(
-                value=suggested_study.dict(),
+                value=suggested_study.json(),
                 name=f"{project_name}:suggested_study.json",
             )
             suggested_study_url = await artifact_manager.get_url(

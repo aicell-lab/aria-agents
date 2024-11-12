@@ -20,24 +20,24 @@ class ArtifactManager:
     async def put(self, value, name):
         assert self._svc, "Please call `setup()` before using artifact manager"
         assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
-        print(f"Uploading {name} to {self._prefix}/{self.session_id}")
         put_url = await self._svc.put_file(
             prefix=f"{self._prefix}/{self.session_id}",
             file_path=name
         )
-        print(f"Uploading {name} to {put_url}")
         
         try:
-            response = await httpx.put(put_url, data=value, timeout=500)
+            async with httpx.AsyncClient() as client:
+                response = await client.put(put_url, data=value, timeout=500)
             response.raise_for_status()
         except httpx.RequestError as e:
             raise RuntimeError(f"File upload failed: {e}") from e
         
         self._svc.commit(f"{self._prefix}/{self.session_id}")
         
-        self._event_bus.emit("store_put", self.session_id, name)
+        self._event_bus.emit("store_put", name)
         return name
 
+    # TODO: fix URL so that it can be used to download the file as JSON
     async def get_url(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
         assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
@@ -53,7 +53,8 @@ class ArtifactManager:
         get_url = await self.get_url(name)
         
         try:
-            response = await httpx.get(get_url, timeout=500)
+            async with httpx.AsyncClient() as client:
+                response = await client.get(get_url, timeout=500)
             response.raise_for_status()
         except httpx.RequestError as e:
             raise RuntimeError(f"File download failed: {e}") from e

@@ -156,6 +156,7 @@ async def write_protocol(
             )
         else:
             prompt = """You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
+            # TODO: ensure that feedback is not None
             messages = [prompt, protocol, feedback]
             query_messages = [x for x in messages] + [
                 "Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."
@@ -217,7 +218,9 @@ def create_experiment_compiler_function(
                 suggested_study = SuggestedStudy(**json.load(ss_file))
         else:
             event_bus = artifact_manager.get_event_bus()
-            suggested_study = await artifact_manager.get(f"{project_name}:suggested_study.json")
+            suggested_study_json_str = await artifact_manager.get(f"{project_name}:suggested_study.json")
+            suggested_study_json = json.loads(suggested_study_json_str)
+            suggested_study = SuggestedStudy(**suggested_study_json)
 
         query_storage_context = StorageContext.from_defaults(
             persist_dir=query_index_dir
