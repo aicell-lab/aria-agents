@@ -13,9 +13,11 @@ function urlMinusParam(param_name) {
 	return url.toString();
 }
 
-function urlPlusParam(param_name, param_value) {
+function urlPlusParam(param_dict) {
 	const url = new URL(window.location);
-	url.searchParams.set(param_name, param_value);
+	for (const [param_name, param_value] of Object.entries(param_dict)) {
+		url.searchParams.set(param_name, param_value);
+	}
 	return url.toString();
 }
 

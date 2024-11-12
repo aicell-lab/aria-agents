@@ -7,21 +7,19 @@ class ArtifactManager:
         self.storage = {}
         self._svc = None
         self._prefix = None
-        self.session_id = None
         self._event_bus = event_bus
 
-    async def setup(self, server, prefix, service_id="public/artifact-manager"):
+    async def setup(self, server, service_id="public/artifact-manager"):
         self._svc = await server.get_service(service_id)
-        self._prefix = prefix
 
-    def set_session_id(self, session_id):
-        self.session_id = session_id
+    def set_prefix(self, prefix):
+        self._prefix = prefix
 
     async def put(self, value, name):
         assert self._svc, "Please call `setup()` before using artifact manager"
-        assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
+        assert self._prefix, "Please set prefix using `set_prefix()` before using artifact manager"
         put_url = await self._svc.put_file(
-            prefix=f"{self._prefix}/{self.session_id}",
+            prefix=self._prefix,
             file_path=name
         )
         
@@ -32,7 +30,7 @@ class ArtifactManager:
         except httpx.RequestError as e:
             raise RuntimeError(f"File upload failed: {e}") from e
         
-        self._svc.commit(f"{self._prefix}/{self.session_id}")
+        self._svc.commit(self._prefix)
         
         self._event_bus.emit("store_put", name)
         return name
@@ -40,16 +38,16 @@ class ArtifactManager:
     # TODO: fix URL so that it can be used to download the file as JSON
     async def get_url(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
-        assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
+        assert self._prefix, "Please set prefix using `set_prefix()` before using artifact manager"
         get_url = await self._svc.get_file(
-            prefix=f"{self._prefix}/{self.session_id}",
+            prefix=self._prefix,
             path=name
         )
         return get_url
 
     async def get(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
-        assert self.session_id, "Please set session_id using `set_session_id()` before using artifact manager"
+        assert self._prefix, "Please set prefix using `set_prefix()` before using artifact manager"
         get_url = await self.get_url(name)
         
         try:

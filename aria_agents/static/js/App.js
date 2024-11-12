@@ -35,11 +35,6 @@ function App() {
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
 	);
-	const [userProfile, setUserProfile] = useState({
-		name: "",
-		occupation: "",
-		background: "",
-	});
 	const [isArtifactsPanelOpen, setIsArtifactsPanelOpen] = useState(false);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 	const [artifacts, setArtifacts] = useState([]);
@@ -55,7 +50,8 @@ function App() {
 	const [showShareDialog, setShowShareDialog] = useState(false);
 	const [alertContent, setAlertContent] = useState("");
 	const [isPaused, setIsPaused] = useState(false);
-	const [artifactPrefix, setArtifactPrefix] = useState("/aria-agents/aria-agents-chats");
+	const [artifactPrefix, setArtifactPrefix] = useState("");
+	const [userId, setUserId] = useState("");
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -93,9 +89,10 @@ function App() {
 			await createChatCollection();
 			await loadChats();
 			const sessionIdParam = getUrlParam("sessionId");
-			if (sessionIdParam) {
+			const userIdParam = getUrlParam("userId");
+			if (sessionIdParam && userIdParam) {
 				try {
-					const chat = await readChat(sessionIdParam);
+					const chat = await readChat(userIdParam, sessionIdParam);
 					await displayChat(chat);
 				}
 				catch (e) {
@@ -111,9 +108,9 @@ function App() {
 		}
 	}, [artifactManager]);
 
-	const readChat = (newSessionId) => {
+	const readChat = (newUserId, newSessionId) => {
 		return artifactManager.read({
-			prefix: `/aria-agents/aria-agents-chats/${newSessionId}`,
+			prefix: `/aria-agents/aria-agents-chats/${newUserId}/${newSessionId}`,
 			_rkwargs: true
 		});
 	}
@@ -121,7 +118,7 @@ function App() {
 	useEffect(async () => {
 		if (chatTitle !== "" && messageIsComplete) {
 			await saveChat();
-			setUrlSessionId(sessionId);
+			setUrlParams(userId, sessionId);
 			await loadChats();
 		}
 	}, [messageIsComplete, chatTitle]);
@@ -155,11 +152,11 @@ function App() {
 			await artifactManager.create({
 				prefix: artifactPrefix,
 				manifest: galleryManifest,
-				orphan: true,
 				_rkwargs: true
 			});
 		}
-		catch {
+		catch (e) {
+			console.log(e);
 			console.log("User chat collection already exists.");
 		}
 	};
@@ -174,6 +171,7 @@ function App() {
 			"artifacts": artifacts,
 			"attachmentPrompts": attachmentStatePrompts,
 			"timestamp": new Date().toISOString(),
+			"userId": userId,
 		};
 
 		if (permissions) {
@@ -213,6 +211,9 @@ function App() {
 	const setServices = async (token) => {
 		const server = await getServer(token);
 		const artifactServer = await getServer(token, "https://hypha.aicell.io", "aria-agents");
+		const userId = artifactServer.config.user.id;
+		setUserId(userId);
+		setArtifactPrefix(`/aria-agents/aria-agents-chats/${userId}`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
@@ -268,7 +269,7 @@ function App() {
 	};
 
 	const saveFile = async (file) => {
-		await saveChat()
+		await saveChat();
 		const putUrl = await artifactManager.putFile({
 			prefix: `${artifactPrefix}/${sessionId}`,
 			file_path: file.name, // TODO: handle files with same name
@@ -396,6 +397,7 @@ function App() {
 
 	const awaitUserResponse = () => {
 		setIsChatComplete(true);
+		setStatus("Ready to chat! Type your message and press enter!");
 		setIsPaused(false);
 		setIsSending(false);
 	}
@@ -446,7 +448,6 @@ function App() {
 					item,
 				])
 			);
-			
 			setIsChatComplete(false);
 			setAttachmentNames([]);
 			setChatHistory(newChatMap);
@@ -455,7 +456,7 @@ function App() {
 			setIsSending(true);
 
 			try {
-				const currentChatHistory = Array.from(chatHistory.values()).map(
+				const currentChatHistory = Array.from(newChatMap.values()).map(
 					(chat) => {
 						let { role, content, attachments, ...rest } = chat;
 						role =
@@ -477,10 +478,10 @@ function App() {
 					await svc.chat(
 						summaryQuestion,
 						currentChatHistory,
-						userProfile,
 						titleCallback,
 						() => {},
 						sessionId,
+						userId,
 						extensions,
 						joinedStatePrompt
 					);
@@ -488,10 +489,10 @@ function App() {
 				await svc.chat(
 					currentQuestion,
 					currentChatHistory,
-					userProfile,
 					statusCallback,
 					artifactCallback,
 					sessionId,
+					userId,
 					extensions,
 					joinedStatePrompt
 				);
@@ -540,8 +541,11 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
-	const setUrlSessionId = (newSessionId) => {
-		const newUrl = urlPlusParam("sessionId", newSessionId);
+	const setUrlParams = (newUserId, newSessionId) => {
+		const newUrl = urlPlusParam({
+			"sessionId": newSessionId,
+			"userId": newUserId,
+		});
 		window.history.replaceState({}, '', newUrl);
 	}
 
@@ -551,7 +555,7 @@ function App() {
 		setChatTitle(chat.name || "");
 		setArtifacts(chat.artifacts || []);
 		if (chat.id) {
-			setUrlSessionId(chat.id);
+			setUrlParams(chat.id, chat.userId);
 			setSessionId(chat.id);
 		}
 		else {

@@ -46,28 +46,12 @@ with open(config_file, "r", encoding="utf-8") as file:
     CONFIG = json.load(file)
 
 
-class UserProfile(BaseModel):
-    """The user's profile. This will be used to personalize the response to the user."""
-
-    name: str = Field(description="The user's name.", max_length=32)
-    occupation: str = Field(
-        description="The user's occupation.", max_length=128
-    )
-    background: str = Field(
-        description="The user's background.", max_length=256
-    )
-
-
 class QuestionWithHistory(BaseModel):
     """The user's question, chat history, and user's profile."""
 
     question: str = Field(description="The user's question.")
     chat_history: Optional[List[Dict[str, str]]] = Field(
         None, description="The chat history."
-    )
-    user_profile: Optional[UserProfile] = Field(
-        None,
-        description="The user's profile. You should use this to personalize the response based on the user's background and occupation.",
     )
     chatbot_extensions: Optional[List[Dict[str, Any]]] = Field(
         None, description="Chatbot extensions."
@@ -107,8 +91,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         """Response to the user's query."""
         steps = []
         inputs = (
-            [question_with_history.user_profile]
-            + [question_with_history.state_prompt]
+            [question_with_history.state_prompt]
             + list(question_with_history.chat_history)
             + [question_with_history.question]
         )
@@ -300,7 +283,7 @@ async def register_chat_service(server):
     event_bus = EventBus(name="AriaAgents")
     artifact_manager = ArtifactManager(event_bus)
     artifact_server = await get_server("https://hypha.aicell.io", use_workspace=False)
-    await artifact_manager.setup(artifact_server, "/aria-agents/aria-agents-chats", "public/artifact-manager")
+    await artifact_manager.setup(artifact_server, "public/artifact-manager")
     builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
@@ -393,6 +376,7 @@ async def register_chat_service(server):
     async def talk_to_assistant(
         assistant_name,
         session_id,
+        user_id,
         user_message: QuestionWithHistory,
         status_callback,
         artifact_callback,
@@ -414,7 +398,7 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
-        artifact_manager.set_session_id(session_id)
+        artifact_manager.set_prefix(f"/aria-agents/aria-agents-chat/{user_id}/{session_id}")
 
         # Listen to the `stream` event
         async def stream_callback(message):
@@ -494,10 +478,10 @@ async def register_chat_service(server):
     async def chat(
         text,
         chat_history,
-        user_profile=None,
         status_callback=None,
         artifact_callback=None,
         session_id=None,
+        user_id=None,
         extensions=None,
         state_prompt=None,
         assistant_name="Aria",
@@ -535,7 +519,6 @@ async def register_chat_service(server):
         m = QuestionWithHistory(
             question=text,
             chat_history=chat_history,
-            user_profile=UserProfile.model_validate(user_profile),
             chatbot_extensions=extensions,
             state_prompt=state_prompt,
             context=context,
@@ -544,6 +527,7 @@ async def register_chat_service(server):
         return await talk_to_assistant(
             assistant_name,
             session_id,
+            user_id,
             m,
             status_callback,
             artifact_callback,
