@@ -9,14 +9,19 @@ const {
 	jsonToMarkdown,
 	modifyLinksToOpenInNewTab,
 	getServer,
+	getUrlParam,
+	urlMinusParam,
+	urlPlusParam,
 } = window.helpers;
 const {
 	Sidebar,
-	ProfileDialog,
 	ChatInput,
 	SuggestedStudies,
 	ChatHistory,
 	ArtifactsPanel,
+	AlertDialog,
+	ShareDialog,
+	InfoDialog,
 } = window;
 
 function App() {
@@ -30,7 +35,6 @@ function App() {
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
 	);
-	const [showProfileDialog, setShowProfileDialog] = useState(false);
 	const [userProfile, setUserProfile] = useState({
 		name: "",
 		occupation: "",
@@ -48,6 +52,9 @@ function App() {
 	const [messageIsComplete, setMessageIsComplete] = useState(false);
 	const chatContainerRef = useRef(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
+	const [showShareDialog, setShowShareDialog] = useState(false);
+	const [alertContent, setAlertContent] = useState("");
+	const [isPaused, setIsPaused] = useState(false);
 	const [artifactPrefix, setArtifactPrefix] = useState("/aria-agents/aria-agents-chats");
 
 	useEffect(() => {
@@ -85,12 +92,36 @@ function App() {
 		if (artifactManager) {
 			await createChatCollection();
 			await loadChats();
+			const sessionIdParam = getUrlParam("sessionId");
+			if (sessionIdParam) {
+				try {
+					const chat = await readChat(sessionIdParam);
+					await displayChat(chat);
+				}
+				catch (e) {
+					console.error(e);
+					setAlertContent(
+						`The chat ${sessionIdParam} doesn't exist or you lack\n`
+						+ `the permissions to access it.`
+					);
+					await displayChat({});
+					// TODO: Send user to logout https://hypha.aicell.io/public/apps/hypha-login/
+				}
+			}
 		}
 	}, [artifactManager]);
+
+	const readChat = (newSessionId) => {
+		return artifactManager.read({
+			prefix: `/aria-agents/aria-agents-chats/${newSessionId}`,
+			_rkwargs: true
+		});
+	}
 
 	useEffect(async () => {
 		if (chatTitle !== "" && messageIsComplete) {
 			await saveChat();
+			setUrlSessionId(sessionId);
 			await loadChats();
 		}
 	}, [messageIsComplete, chatTitle]);
@@ -133,7 +164,7 @@ function App() {
 		}
 	};
 
-	const saveChat = async () => {
+	const saveChat = async (permissions = null) => {
 		const datasetManifest = {
 			"id": `${sessionId}`,
 			"name": `${chatTitle}`,
@@ -145,6 +176,10 @@ function App() {
 			"timestamp": new Date().toISOString(),
 		};
 
+		if (permissions) {
+			datasetManifest["permissions"] = permissions;
+		}
+    
 		const sessionPrefix = `${artifactPrefix}/${sessionId}`;
 		const chatConfig = {
 			prefix: sessionPrefix,
@@ -187,8 +222,9 @@ function App() {
 		try {
 			await ariaAgentsService.ping();
 		} catch (error) {
+			// Red dialog. Show logout button
 			alert(
-				`You don't have permission to use the chatbot, please sign up and wait for approval`
+				`This account doesn't have permission to use the chatbot, please sign up and wait for approval`
 			);
 			console.error(error);
 		}
@@ -215,7 +251,7 @@ function App() {
 			try {
 				await saveFile(file);
 			} catch (error) {
-				alert(error);
+				alert(`Error uploading ${file.name}:`, error);
 				continue;
 			}
 			newAttachmentPrompts.push(
@@ -259,6 +295,11 @@ function App() {
 			name,
 			query_id,
 		} = message;
+
+		if (id !== sessionId || isPaused) {
+			throw new Error("User has terminated this session.");
+		}
+
 		const { name: roleName, icon: roleIcon } = roleSetting || {};
 
 		const headerStartInProgress = marked(
@@ -355,7 +396,7 @@ function App() {
 
 	const awaitUserResponse = () => {
 		setIsChatComplete(true);
-		setStatus("Ready to chat! Type your message and press enter!");
+		setIsPaused(false);
 		setIsSending(false);
 	}
 
@@ -499,12 +540,24 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
+	const setUrlSessionId = (newSessionId) => {
+		const newUrl = urlPlusParam("sessionId", newSessionId);
+		window.history.replaceState({}, '', newUrl);
+	}
+
 	const displayChat = async (chat) => {
 		const chatMap = new Map(Object.entries(chat.conversations || {}));
 		setChatHistory(chatMap);
 		setChatTitle(chat.name || "");
 		setArtifacts(chat.artifacts || []);
-		setSessionId(chat.id || generateSessionID());
+		if (chat.id) {
+			setUrlSessionId(chat.id);
+			setSessionId(chat.id);
+		}
+		else {
+			window.history.replaceState({}, '', urlMinusParam("sessionId"));
+			setSessionId(generateSessionID());
+		}
 		setAttachmentStatePrompts(chat.attachmentPrompts || []);
 		setMessageIsComplete(false);
 		awaitUserResponse();
@@ -567,6 +620,14 @@ function App() {
 						) : (
 							<div ref={chatContainerRef}>
 								<ChatHistory chatHistory={chatHistory} isSending={isSending} />
+								{!isChatComplete && chatHistory.size > 0 && (
+									<PauseButton pause={() => {
+											setIsPaused(true);
+											setStatus("Chat stopped.");
+											awaitUserResponse();
+										}}
+									/>	
+								)}
 							</div>
 						)}
 						{isChatComplete && chatHistory.size > 0 && (
@@ -579,22 +640,13 @@ function App() {
 								handleAttachment={handleAttachment}
 								attachmentNames={attachmentNames}
 								undoAttach={undoAttach}
+								shareChat={() => setShowShareDialog(true) }
 								placeholder="Type what you want to study"
 							/>
 						)}
 					</div>
 				</div>
 			</div>
-			{showProfileDialog && (
-				<ProfileDialog
-					userProfile={userProfile}
-					onClose={() => setShowProfileDialog(false)}
-					onSave={(profile) => {
-						setUserProfile(profile);
-						setShowProfileDialog(false);
-					}}
-				/>
-			)}
 			{isArtifactsPanelOpen ? (
 				<ArtifactsPanel
 					onClose={() =>
@@ -631,6 +683,13 @@ function App() {
 				>
 					<div className="spinner"></div>
 				</div>
+			)}
+			{showShareDialog && (
+				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
+			)}
+			{alertContent && (
+				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>
+				</InfoDialog>
 			)}
 		</div>
 	);
