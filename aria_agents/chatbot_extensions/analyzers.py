@@ -88,20 +88,6 @@ def get_data_files(data_folder: str) -> List[str]:
     data_files = filter(is_data_file, all_data_paths)
     return data_files
 
-class SummarizedResponse(BaseModel):
-    """A string representation of the data analysis bot's methods, steps, response, and explanation"""
-    summary: str = Field(description="A string representation of the data analysis bot's steps, response, and explanation")
-    # next_steps: str = Field(description="Suggested next steps that the user can take in the analysis")
-    # original_response: str = Field(description="The original response from the data analysis bot")
-    # original_explanation: str = Field(description="The explanation from the data analysis bot")
-
-class CompleteResponse(SummarizedResponse):
-    """The complete response from the data analysis bot, including its summary, response, logs, plots created, and steps taken"""
-    bot_response: str = Field(description="The bot's final response from the data analysis. Note that this will not discuss the intermediate steps taken or all the plots created. You must look at the logs, summary, and urls for that.")
-    bot_explanation: str = Field(description="The explanation from the data analysis bot. Note that this will not discuss the intermediate steps taken or all the plots created. You must look at the logs, summary, and urls for that.")
-    pai_logs: List[Dict[str, str]] = Field(description="The logs from the data analysis bot's work")
-    plot_urls: Dict[str, str] = Field(description="The urls to the plots created by the data analysis bot")
-
 class PlotPaths(BaseModel):
     """A list of file paths to the plots (or any .png files) created by the data analysis bot"""
     plot_paths: List[str] = Field(description="A list of paths to the .png files created by the data analysis bot")
@@ -112,12 +98,13 @@ async def get_plot_paths(response: str,
                         pai_logs: List[Dict[str, str]],
                         summarizer_agent: Role,
                         session_id: str = None) -> PlotPaths:
-    """Extracts the urls to the plots from the data analysis bot's response (if any were created by the bot)"""
+    """Extracts the urls to the plots from the data analysis bot's response (if any were created by the bot) and includes an explanation for each plot"""
     response_with_explanation = f"Response: {response}\n\nExplanation: {explanation}"
     async with create_session_context(id=session_id, role_setting=summarizer_agent._setting):
         res = await summarizer_agent.aask(
             ["""Extract the urls to the plots or any .png files created by the data analysis bot. 
-             Get this information from the data analysis bot's final response, explanation, and logs. 
+             Get this information from the data analysis bot's final response, explanation, and logs.
+             When creating your own explanations for the plots, refer to the input files used for the plots by their file names.
              If no plots were created, return an empty list. The bot's response and explanation is the following:""",
              response_with_explanation,
              "The bot's logs are the following:",
@@ -127,35 +114,6 @@ async def get_plot_paths(response: str,
         )
     return res
 
-async def summarize_response(
-    response: str,
-    explanation: str,
-    plot_urls: Dict[str, Dict[str, str]],
-    pai_logs: List[Dict[str, str]],
-    summarizer_agent: Role,
-    session_id: str = None,
-) -> SummarizedResponse:
-    response_with_explanation = f"Response: {response}\n\nExplanation: {explanation}\n\nPlot urls: {plot_urls}"
-    async with create_session_context(id=session_id, role_setting=summarizer_agent._setting):
-        res = await summarizer_agent.aask(
-            ["""Perform the following checks on the provided response from the data analysis bot and create a string representation of the bot's findings to be presented to the end-user:
-             
-             (1) If the bot created any plots or files, make sure to mention them in your summary including the plot urls and their meanings. If the bot mentions a local file and you have the plot urls, make sure to include the urls and tell the user what each url corresponds to.
-             (2) If the bot failed at analyzing the data, tell the user what the bot tried to do and mention that the user can try again by rephrasing their request.
-             (3) Suggest potential next steps that the user can take in the analysis
-             
-            Your final response should be a string that can be presented to the end-user. It should be a faithful complete summary of the bot's work, the steps it took, and the results. 
-             If the bot created any table or dataframes, make sure to include them in your response. If the bot made any plots, make sure to include the plot urls and their meanings.
-
-             The bot's final response and explanation are provided below:
-             """,
-             response_with_explanation,
-             "The bot's logs are the following:",
-             str(pai_logs),
-             ],
-            output_schema=SummarizedResponse,
-        )
-    return res
 def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
     summarizer_agents = {}
     pai_agents = {}
@@ -176,7 +134,10 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
             description="Specify any constraints that should be applied to the data analysis",
         ),
     ) -> Dict[str, str]:
-        """Analyzes or explores data files using a PandasAI agent, initializing it if necessary."""
+        """Analyzes or explores data files using a PandasAI data analysis agent, initializing it if necessary. 
+        Returns the agent's final response, explanation, logs, and plot urls. Make sure to look at the logs and plot 
+        urls to get the full picture of the bot's work. If the bot created any plots, make sure to include the plot urls 
+        and their meanings. Each function call creates at most one output plot, so if multiple plots are required the function must be once for each desired output plot"""
         session_id = get_session_id()
         pai_agent = pai_agents.get(session_id)
         summarizer_agent = summarizer_agents.get(session_id)
@@ -195,14 +156,14 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
                 'llm': pai_llm,
                 'save_charts': True,
                 'save_charts_path': project_folder,
-                'open_charts': True,
+                # 'open_charts': True,
                 'max_retries': AGENT_MAX_RETRIES,
             }
             pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
             pai_agents[session_id] = pai_agent
         
         if summarizer_agent is None:
-            summarizer_agent = protocol_manager = Role(
+            summarizer_agent = Role(
             name="Analysis summarizer",
             instructions="You are an data science manager. You read the responses from a data science bot performing analysis and make sure it is suitable to pass on to the end-user as serializable output.",
             icon="🤖",
@@ -214,8 +175,10 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
             summarizer_agents[session_id] = summarizer_agent
         
         pai_agent_request = f"""Analyze the data files and respond to the following request: ```{explore_request}```
-
+        
+        Every time you save a plot, you MUST save it to a different filename. 
         If you make any plots at any point, you MUST include the file locations in your final explanation.
+        When saving charts during CodeCleaning, you MUST save all the files to unique filenames.
         """
         response = pai_agent.chat(pai_agent_request)
         explanation = pai_agent.explain()
@@ -244,24 +207,9 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
             plot_urls[plot_path] = plot_url
 
 
-        summarized_response = await summarize_response(response=response,
-                                                       explanation=explanation,
-                                                       plot_urls=plot_urls,
-                                                       pai_logs=pai_logs,
-                                                       summarizer_agent=summarizer_agent,
-                                                       session_id=session_id)
-        
-        complete_response = CompleteResponse(bot_response=response,
-                                            bot_explanation=explanation,
-                                            summary=summarized_response.summary,
-                                            pai_logs=pai_logs,
-                                            plot_urls=plot_urls)
-
         return {
-            # "response": response,
-            # "explanation": explanation,
-            # "summarized_response": summarized_response,
-            "complete_response": complete_response,
+            "data_analysis_agent_final_response": str(response),
+            "data_analysis_agent_final_explanation": explanation,
             "plot_urls": plot_urls,
         }
     return explore_data
@@ -299,17 +247,4 @@ if __name__ == "__main__":
 
 
 
-        
-
-
-
-# async def main():
-#     data_store = HyphaDataStore()
-#     data_analyst = create_analyzer_function(data_store=data_store)
-#     result = await data_analyst()
-
-
-# if __name__ == "__main__":
-#     # asyncio.run(main())
-#     # asyncio.run("0.0.0.0")
-#     asyncio.run(main())
+    
