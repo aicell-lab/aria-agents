@@ -103,7 +103,7 @@ function App() {
 						+ `the permissions to access it.`
 					);
 					await displayChat({});
-					// TODO: Send user to logout https://hypha.aicell.io/public/apps/hypha-login/
+					window.open("https://hypha.aicell.io/public/apps/hypha-login/", '_blank').focus();
 				}
 			}
 		}
@@ -250,18 +250,20 @@ function App() {
 
 		const newAttachmentPrompts = [];
 		const newAttachmentNames = [];
+		let fileNum = 0;
 
 		for (const file of files) {
 			try {
-				await saveFile(file);
+				await saveFile(file, fileNum);
 			} catch (error) {
 				alert(`Error uploading ${file.name}:`, error);
 				continue;
 			}
 			newAttachmentPrompts.push(
-				`- **${file.name}**, available at: ${artifactPrefix}/${sessionId}`
+				`- **${file.name}<${fileNum}>**, available at: ${artifactPrefix}/${sessionId}`
 			);
 			newAttachmentNames.push(file.name);
+			fileNum++;
 		}
 
 		setAttachmentStatePrompts([
@@ -271,11 +273,11 @@ function App() {
 		setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
 	};
 
-	const saveFile = async (file) => {
+	const saveFile = async (file, fileNum) => {
 		await saveChat();
 		const putUrl = await artifactManager.putFile({
 			prefix: `${artifactPrefix}/${sessionId}`,
-			file_path: file.name, // TODO: handle files with same name
+			file_path: `${file.name}<${fileNum}>`,
 			_rkwargs: true
 		});
 

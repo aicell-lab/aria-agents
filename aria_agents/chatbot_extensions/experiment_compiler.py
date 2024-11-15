@@ -156,7 +156,6 @@ async def write_protocol(
             )
         else:
             prompt = """You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
-            # TODO: ensure that feedback is not None
             messages = [prompt, protocol, feedback]
             query_messages = [x for x in messages] + [
                 "Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."
@@ -302,10 +301,10 @@ def create_experiment_compiler_function(
         else:
             # Save the suggested study to the Artifact Manager
             protocol_id = await artifact_manager.put(
-                value=protocol.model_dump(),
+                value=protocol.model_dump_json(),
                 name=f"{project_name}:experimental_protocol.json",
             )
-            protocol_url = await artifact_manager.get_url(session_id, protocol_id)
+            protocol_url = await artifact_manager.get_url(protocol_id)
 
         summary_website_url = await write_website(
             protocol,

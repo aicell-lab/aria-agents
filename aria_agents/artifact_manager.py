@@ -38,7 +38,6 @@ class ArtifactManager:
         self._event_bus.emit("store_put", name)
         return name
 
-    # TODO: fix URL so that it can be used to download the file as JSON
     async def get_url(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
         assert self._prefix, "Please set prefix using `set_prefix()` before using artifact manager"

@@ -155,6 +155,7 @@ def create_corpus_function(
         print(
             f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}"
         )
+        # Move more of this to save_query_index for async?
         loader = PubmedReader()
         # print(test_pmc_query_hits(pmc_query))
         documents = loader.load_data(
