@@ -108,9 +108,9 @@ function App() {
 		}
 	}, [artifactManager]);
 
-	const readChat = (newUserId, newSessionId) => {
+	const readChat = (newSessionId) => {
 		return artifactManager.read({
-			prefix: `${newUserId}/${newSessionId}`,
+			prefix: `aria-agents-chats/${newSessionId}`,
 			_rkwargs: true
 		});
 	}
@@ -214,7 +214,7 @@ function App() {
 		const artifactServer = await getServer(token, "https://hypha.aicell.io");
 		const userId = artifactServer.config.user.id;
 		setUserId(userId);
-		setArtifactPrefix(userId);
+		setArtifactPrefix("aria-agents-chats");
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
@@ -399,7 +399,6 @@ function App() {
 	const awaitUserResponse = () => {
 		setIsChatComplete(true);
 		setStatus("Ready to chat! Type your message and press enter!");
-		setIsPaused(false);
 		setIsSending(false);
 	}
 
@@ -455,6 +454,7 @@ function App() {
 			setQuestion("");
 			setStatus("🤔 Thinking...");
 			setIsSending(true);
+			setIsPaused(false);
 
 			try {
 				const currentChatHistory = Array.from(newChatMap.values()).map(
