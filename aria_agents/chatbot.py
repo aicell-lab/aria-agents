@@ -228,10 +228,8 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
         await f.write(chat_history_json)
 
 
-async def get_server(server_url, use_workspace=True):
+async def get_server(server_url, workspace_name=None, provided_token=None):
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
-    provided_token = os.environ.get("WORKSPACE_TOKEN")
-    workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
 
     if login_required:
         if provided_token is None:
@@ -244,14 +242,16 @@ async def get_server(server_url, use_workspace=True):
         "server_url": server_url,
         "token": token,
         "method_timeout": 500,
-        **({"workspace": workspace_name} if use_workspace else {})
+        **({"workspace": workspace_name} if workspace_name is not None else {})
     })
     
     return server
 
 async def connect_server(server_url):
     """Connect to the server and register the chat service."""
-    chat_server = await get_server(server_url)
+    workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
+    token = os.environ.get("WORKSPACE_TOKEN")
+    chat_server = await get_server(server_url, workspace_name, token)
     await register_chat_service(chat_server)
 
 async def serve_frontend(server, service_id):
@@ -282,8 +282,6 @@ async def register_chat_service(server):
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
     event_bus = EventBus(name="AriaAgents")
     artifact_manager = ArtifactManager(event_bus)
-    artifact_server = await get_server("https://hypha.aicell.io", use_workspace=False)
-    await artifact_manager.setup(artifact_server, "public/artifact-manager")
     builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
@@ -377,6 +375,7 @@ async def register_chat_service(server):
         assistant_name,
         session_id,
         user_id,
+        user_token,
         user_message: QuestionWithHistory,
         status_callback,
         artifact_callback,
@@ -398,7 +397,8 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
-        artifact_manager.set_prefix(user_id, session_id)
+        artifact_server = await get_server(server_url="https://hypha.aicell.io", provided_token=user_token)
+        await artifact_manager.setup(artifact_server, user_id, session_id, "public/artifact-manager")
 
         # Listen to the `stream` event
         async def stream_callback(message):
@@ -482,6 +482,7 @@ async def register_chat_service(server):
         artifact_callback=None,
         session_id=None,
         user_id=None,
+        user_token=None,
         extensions=None,
         state_prompt=None,
         assistant_name="Aria",
@@ -528,6 +529,7 @@ async def register_chat_service(server):
             assistant_name,
             session_id,
             user_id,
+            user_token,
             m,
             status_callback,
             artifact_callback,

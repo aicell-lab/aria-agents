@@ -52,6 +52,7 @@ function App() {
 	const [isPaused, setIsPaused] = useState(false);
 	const [artifactPrefix, setArtifactPrefix] = useState("");
 	const [userId, setUserId] = useState("");
+	const [userToken, setUserToken] = useState("");
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -237,6 +238,7 @@ function App() {
 
 	const handleLogin = async () => {
 		const token = await login();
+		setUserToken(token);
 		setIsLoading(true);
 		await setServices(token);
 		setStatus("Ready to chat! Type your message and press enter!");
@@ -483,6 +485,7 @@ function App() {
 						() => {},
 						sessionId,
 						userId,
+						userToken,
 						extensions,
 						joinedStatePrompt
 					);
@@ -494,6 +497,7 @@ function App() {
 					artifactCallback,
 					sessionId,
 					userId,
+					userToken,
 					extensions,
 					joinedStatePrompt
 				);

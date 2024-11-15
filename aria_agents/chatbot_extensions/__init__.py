@@ -81,9 +81,7 @@ async def extension_to_tools(extension: ChatbotExtension):
 
 
 async def main():
-    server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
     artifact_manager = ArtifactManager()
-    await artifact_manager.setup(server, "public/artifact-manager")
 
     extensions = get_builtin_extensions(artifact_manager)
     tools = []

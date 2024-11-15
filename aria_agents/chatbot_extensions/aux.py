@@ -130,6 +130,16 @@ def test_pmc_query_hits(
 
     return f"The query `{pmc_query.query}` returned {n_hits} hits."
 
+async def save_query_index(context, query_index_dir, documents):
+    query_index = VectorStoreIndex.from_documents(documents)
+    query_index.storage_context.persist(query_index_dir)
+    # Create a citation query engine object
+    context["query_engine"] = CitationQueryEngine.from_args(
+        query_index,
+        similarity_top_k=CONFIG["aux"]["similarity_top_k"],
+        citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
+    )
+
 def create_corpus_function(
     context: dict, project_folder: str, artifact_manager: ArtifactManager = None
 ) -> Callable:
@@ -141,11 +151,11 @@ def create_corpus_function(
         )
     ) -> str:
         """Searches PubMed Central using `PMCQuery` and creates a citation query engine."""
-        loader = PubmedReader()
         terms = urllib.parse.urlencode({"term": pmc_query.query, "db": "pmc"})
         print(
             f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}"
         )
+        loader = PubmedReader()
         # print(test_pmc_query_hits(pmc_query))
         documents = loader.load_data(
             search_query=pmc_query.query,
@@ -157,7 +167,7 @@ def create_corpus_function(
         Settings.embed_model = OpenAIEmbedding(
             model=CONFIG["aux"]["embedding_model"]
         )
-        query_index = VectorStoreIndex.from_documents(documents)
+        print("Document loading complete")
 
         query_index_dir = None
         if artifact_manager is None:
@@ -165,14 +175,7 @@ def create_corpus_function(
         else:
             query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
         
-        query_index.storage_context.persist(query_index_dir)
-
-        # Create a citation query engine object
-        context["query_engine"] = CitationQueryEngine.from_args(
-            query_index,
-            similarity_top_k=CONFIG["aux"]["similarity_top_k"],
-            citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
-        )
+        asyncio.create_task(save_query_index(context, query_index_dir, documents))
         
         return f"Pubmed corpus with {len(documents)} papers has been created."
 

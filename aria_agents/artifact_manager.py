@@ -11,10 +11,8 @@ class ArtifactManager:
         self.session_id = None
         self._event_bus = event_bus
 
-    async def setup(self, server, service_id="public/artifact-manager"):
+    async def setup(self, server, user_id, session_id, service_id="public/artifact-manager"):
         self._svc = await server.get_service(service_id)
-
-    def set_prefix(self, user_id, session_id):
         self.user_id = user_id
         self.session_id = session_id
         self._prefix = f"/ws-user-{user_id}/aria-agents-chats/{session_id}"
@@ -32,6 +30,7 @@ class ArtifactManager:
                 response = await client.put(put_url, data=value, timeout=500)
             response.raise_for_status()
         except httpx.RequestError as e:
+            print(f"File upload failed: {e}")
             raise RuntimeError(f"File upload failed: {e}") from e
         
         self._svc.commit(self._prefix)
