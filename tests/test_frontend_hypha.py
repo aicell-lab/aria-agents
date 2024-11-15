@@ -41,7 +41,5 @@ async def main():
 
     print(f"Access your app at: {server_url}/{server.config.workspace}/apps/{svc_info['id'].split(':')[1]}")
     
-    await server.serve()
-    
-if __name__ == "__main__":
+def test_frontend():
     asyncio.run(main())

@@ -9,14 +9,19 @@ const {
 	jsonToMarkdown,
 	modifyLinksToOpenInNewTab,
 	getServer,
+	getUrlParam,
+	urlMinusParam,
+	urlPlusParam,
 } = window.helpers;
 const {
 	Sidebar,
-	ProfileDialog,
 	ChatInput,
 	SuggestedStudies,
 	ChatHistory,
 	ArtifactsPanel,
+	AlertDialog,
+	ShareDialog,
+	InfoDialog,
 } = window;
 
 function App() {
@@ -26,17 +31,10 @@ function App() {
 	const [chatHistory, setChatHistory] = useState(new Map());
 	const [svc, setSvc] = useState(null);
 	const [sessionId, setSessionId] = useState(null);
-	const [dataStore, setDataStore] = useState(null);
 	const [artifactManager, setArtifactManager] = useState(null);
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
 	);
-	const [showProfileDialog, setShowProfileDialog] = useState(false);
-	const [userProfile, setUserProfile] = useState({
-		name: "",
-		occupation: "",
-		background: "",
-	});
 	const [isArtifactsPanelOpen, setIsArtifactsPanelOpen] = useState(false);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 	const [artifacts, setArtifacts] = useState([]);
@@ -49,6 +47,12 @@ function App() {
 	const [messageIsComplete, setMessageIsComplete] = useState(false);
 	const chatContainerRef = useRef(null);
 	const [isNearBottom, setIsNearBottom] = useState(true);
+	const [showShareDialog, setShowShareDialog] = useState(false);
+	const [alertContent, setAlertContent] = useState("");
+	const [isPaused, setIsPaused] = useState(false);
+	const [artifactPrefix, setArtifactPrefix] = useState("");
+	const [userId, setUserId] = useState("");
+	const [userToken, setUserToken] = useState("");
 
 	useEffect(() => {
 		// Automatically generate a session ID
@@ -85,12 +89,37 @@ function App() {
 		if (artifactManager) {
 			await createChatCollection();
 			await loadChats();
+			const sessionIdParam = getUrlParam("sessionId");
+			const userIdParam = getUrlParam("userId");
+			if (sessionIdParam && userIdParam) {
+				try {
+					const chat = await readChat(userIdParam, sessionIdParam);
+					await displayChat(chat);
+				}
+				catch (e) {
+					console.error(e);
+					setAlertContent(
+						`The chat ${sessionIdParam} doesn't exist or you lack\n`
+						+ `the permissions to access it.`
+					);
+					await displayChat({});
+					window.open("https://hypha.aicell.io/public/apps/hypha-login/", '_blank').focus();
+				}
+			}
 		}
 	}, [artifactManager]);
+
+	const readChat = (newUserId, newSessionId) => {
+		return artifactManager.read({
+			prefix: `/ws-user-${newUserId}/aria-agents-chats/${newSessionId}`,
+			_rkwargs: true
+		});
+	}
 
 	useEffect(async () => {
 		if (chatTitle !== "" && messageIsComplete) {
 			await saveChat();
+			setUrlParams(userId, sessionId);
 			await loadChats();
 		}
 	}, [messageIsComplete, chatTitle]);
@@ -98,11 +127,14 @@ function App() {
 	const loadChats = async() => {
 		try {
 			const prevChatObjects = await artifactManager.list({
-				prefix: "aria-agents-chats",
+				prefix: artifactPrefix,
 				summary_fields: ["*"],
 				_rkwargs: true,
 			});
-			setPrevChats(prevChatObjects);
+			const invalidChats = prevChatObjects.filter((chat) => chat.name === "");
+			invalidChats.forEach(deleteChat);
+			const validChats =  prevChatObjects.filter((chat) => chat.name !== "");
+			setPrevChats(validChats);
 		}
 		catch {
 			console.log("No previous chats.");
@@ -119,49 +151,54 @@ function App() {
 	
 		try {
 			await artifactManager.create({
-				prefix: "aria-agents-chats",
+				prefix: artifactPrefix,
 				manifest: galleryManifest,
 				orphan: true,
 				_rkwargs: true
 			});
 		}
-		catch {
+		catch (e) {
+			console.log(e);
 			console.log("User chat collection already exists.");
 		}
 	};
 
-	const saveChat = async () => {
+	const saveChat = async (permissions = null) => {
 		const datasetManifest = {
-			"id": `${sessionId}`,
-			"name": `${chatTitle}`,
+			"id": sessionId,
+			"name": chatTitle,
 			"description": `The Aria Agents chat history of ${sessionId}`,
 			"type": "chat",
 			"conversations": chatHistory,
 			"artifacts": artifacts,
 			"attachmentPrompts": attachmentStatePrompts,
 			"timestamp": new Date().toISOString(),
+			"userId": userId,
 		};
+    
+		const sessionPrefix = `${artifactPrefix}/${sessionId}`;
+		const chatConfig = {
+			prefix: sessionPrefix,
+			manifest: datasetManifest,
+			_rkwargs: true
+		}
+
+		if (permissions) {
+			chatConfig.permissions = permissions;
+		}
 
 		try {
-			await artifactManager.create({
-				prefix: `aria-agents-chats/${sessionId}`,
-				manifest: datasetManifest,
-				_rkwargs: true
-			});
+			await artifactManager.create(chatConfig);
 		} catch {
-			await artifactManager.edit({
-				prefix: `aria-agents-chats/${sessionId}`,
-				manifest: datasetManifest,
-				_rkwargs: true
-			})
-			await artifactManager.commit(`aria-agents-chats/${sessionId}`);
+			await artifactManager.edit(chatConfig);
+			await artifactManager.commit(sessionPrefix);
 		}
 	};
 
 	const deleteChat = async (chat) => {
 		try {
 			await artifactManager.delete({
-				prefix: `aria-agents-chats/${chat.id}`,
+				prefix: `${artifactPrefix}/${chat.id}`,
 				delete_files: true,
 				recursive: true,
 				_rkwargs: true
@@ -176,30 +213,32 @@ function App() {
 	const setServices = async (token) => {
 		const server = await getServer(token);
 		const artifactServer = await getServer(token, "https://hypha.aicell.io");
+		const configUserId = artifactServer.config.user.id;
+		setUserId(configUserId);
+		setArtifactPrefix(`/ws-user-${configUserId}/aria-agents-chats`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
-		const dataStoreService = await getService(
-			server, "aria-agents/data-store", "public/data-store");
 		const artifactManagerService = await getService(
 			artifactServer, "public/artifact-manager");
 
 		try {
 			await ariaAgentsService.ping();
 		} catch (error) {
+			// Red dialog. Show logout button
 			alert(
-				`You don't have permission to use the chatbot, please sign up and wait for approval`
+				`This account doesn't have permission to use the chatbot, please sign up and wait for approval`
 			);
 			console.error(error);
 		}
 
-		setDataStore(dataStoreService);
 		setSvc(ariaAgentsService);
 		setArtifactManager(artifactManagerService);
 	};
 
 	const handleLogin = async () => {
 		const token = await login();
+		setUserToken(token);
 		setIsLoading(true);
 		await setServices(token);
 		setStatus("Ready to chat! Type your message and press enter!");
@@ -211,18 +250,20 @@ function App() {
 
 		const newAttachmentPrompts = [];
 		const newAttachmentNames = [];
+		let fileNum = 0;
 
 		for (const file of files) {
 			try {
-				const fileId = await uploadAttachment(file);
-				const fileUrl = await dataStore.getUrl(fileId);
-				newAttachmentPrompts.push(
-					`- **${file.name}**, available at: [${fileUrl}](${fileUrl})`
-				);
-				newAttachmentNames.push(file.name);
+				await saveFile(file, fileNum);
 			} catch (error) {
-				console.error(`Error uploading ${file.name}:`, error);
+				alert(`Error uploading ${file.name}:`, error);
+				continue;
 			}
+			newAttachmentPrompts.push(
+				`- **${file.name}<${fileNum}>**, available at: ${artifactPrefix}/${sessionId}`
+			);
+			newAttachmentNames.push(file.name);
+			fileNum++;
 		}
 
 		setAttachmentStatePrompts([
@@ -232,46 +273,22 @@ function App() {
 		setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
 	};
 
-	const uploadAttachment = async (file) => {
-		const fileBytes = await file.arrayBuffer();
-		const byteArray = new Uint8Array(fileBytes);
-
-		const fileId = await dataStore.put("file", byteArray, file.name);
-
-		addItemToLocalStorageArr("attachments", {
-			value: file.name,
-			id: fileId,
+	const saveFile = async (file, fileNum) => {
+		await saveChat();
+		const putUrl = await artifactManager.putFile({
+			prefix: `${artifactPrefix}/${sessionId}`,
+			file_path: `${file.name}<${fileNum}>`,
+			_rkwargs: true
 		});
 
-		return fileId;
-	};
+		const response = await fetch(putUrl, {
+			method: "PUT",
+			body: file
+		})
 
-	const addItemToLocalStorageArr = (arrName, item) => {
-		const arr = JSON.parse(localStorage.getItem(arrName)) || [];
-		arr.push(item);
-		localStorage.setItem(arrName, JSON.stringify(arr));
-	};
-
-	const testUploadAttachment = async () => {
-		const fileContents = "Hello, World!";
-		const file = new File([fileContents], "test.txt", {
-			type: "text/plain",
-		});
-		const fileId = await uploadAttachment(file);
-
-		const returned_object = await dataStore.get({
-			query_string: "id=" + fileId,
-		});
-		const returnedBytes = returned_object.body;
-		const returnedFileContents = new Blob([returnedBytes], {
-			type: "text/plain",
-		});
-		const returnedText = await returnedFileContents.text();
-
-		console.assert(
-			returnedText === fileContents,
-			"File contents do not match"
-		);
+		if (!response.ok) {
+			throw new Error(`Upload of ${file.name} failed`);
+		}
 	};
 
 	const statusCallback = async (message) => {
@@ -284,6 +301,11 @@ function App() {
 			name,
 			query_id,
 		} = message;
+
+		if (id !== sessionId || isPaused) {
+			throw new Error("User has terminated this session.");
+		}
+
 		const { name: roleName, icon: roleIcon } = roleSetting || {};
 
 		const headerStartInProgress = marked(
@@ -430,16 +452,16 @@ function App() {
 					item,
 				])
 			);
-			
 			setIsChatComplete(false);
 			setAttachmentNames([]);
 			setChatHistory(newChatMap);
 			setQuestion("");
 			setStatus("🤔 Thinking...");
 			setIsSending(true);
+			setIsPaused(false);
 
 			try {
-				const currentChatHistory = Array.from(chatHistory.values()).map(
+				const currentChatHistory = Array.from(newChatMap.values()).map(
 					(chat) => {
 						let { role, content, attachments, ...rest } = chat;
 						role =
@@ -452,16 +474,6 @@ function App() {
 					}
 				);
 				const extensions = [{ id: "aria" }];
-				await svc.chat(
-					currentQuestion,
-					currentChatHistory,
-					userProfile,
-					statusCallback,
-					artifactCallback,
-					sessionId,
-					extensions,
-					joinedStatePrompt
-				);
 				if (chatTitle === "") {
 					const summaryQuestion = `Give a succinct title to this chat
 					 session summarizing this prompt written by
@@ -471,14 +483,26 @@ function App() {
 					await svc.chat(
 						summaryQuestion,
 						currentChatHistory,
-						userProfile,
 						titleCallback,
 						() => {},
 						sessionId,
+						userId,
+						userToken,
 						extensions,
 						joinedStatePrompt
 					);
 				}
+				await svc.chat(
+					currentQuestion,
+					currentChatHistory,
+					statusCallback,
+					artifactCallback,
+					sessionId,
+					userId,
+					userToken,
+					extensions,
+					joinedStatePrompt
+				);
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
@@ -524,12 +548,27 @@ function App() {
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
+	const setUrlParams = (newUserId, newSessionId) => {
+		const newUrl = urlPlusParam({
+			"sessionId": newSessionId,
+			"userId": newUserId,
+		});
+		window.history.replaceState({}, '', newUrl);
+	}
+
 	const displayChat = async (chat) => {
 		const chatMap = new Map(Object.entries(chat.conversations || {}));
 		setChatHistory(chatMap);
 		setChatTitle(chat.name || "");
 		setArtifacts(chat.artifacts || []);
-		setSessionId(chat.id || generateSessionID());
+		if (chat.id) {
+			setUrlParams(chat.userId, chat.id);
+			setSessionId(chat.id);
+		}
+		else {
+			window.history.replaceState({}, '', urlMinusParam("sessionId"));
+			setSessionId(generateSessionID());
+		}
 		setAttachmentStatePrompts(chat.attachmentPrompts || []);
 		setMessageIsComplete(false);
 		awaitUserResponse();
@@ -592,6 +631,14 @@ function App() {
 						) : (
 							<div ref={chatContainerRef}>
 								<ChatHistory chatHistory={chatHistory} isSending={isSending} />
+								{!isChatComplete && chatHistory.size > 0 && (
+									<PauseButton pause={() => {
+											setIsPaused(true);
+											setStatus("Chat stopped.");
+											awaitUserResponse();
+										}}
+									/>	
+								)}
 							</div>
 						)}
 						{isChatComplete && chatHistory.size > 0 && (
@@ -604,22 +651,13 @@ function App() {
 								handleAttachment={handleAttachment}
 								attachmentNames={attachmentNames}
 								undoAttach={undoAttach}
+								shareChat={() => { setShowShareDialog(true) } }
 								placeholder="Type what you want to study"
 							/>
 						)}
 					</div>
 				</div>
 			</div>
-			{showProfileDialog && (
-				<ProfileDialog
-					userProfile={userProfile}
-					onClose={() => setShowProfileDialog(false)}
-					onSave={(profile) => {
-						setUserProfile(profile);
-						setShowProfileDialog(false);
-					}}
-				/>
-			)}
 			{isArtifactsPanelOpen ? (
 				<ArtifactsPanel
 					onClose={() =>
@@ -656,6 +694,13 @@ function App() {
 				>
 					<div className="spinner"></div>
 				</div>
+			)}
+			{showShareDialog && (
+				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
+			)}
+			{alertContent && (
+				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>
+				</InfoDialog>
 			)}
 		</div>
 	);
