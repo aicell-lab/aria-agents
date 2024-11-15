@@ -160,6 +160,7 @@ def create_corpus_function(
         query_index = VectorStoreIndex.from_documents(documents)
 
         # Save the query index to disk
+        # TODO: add user ID and session ID
         query_index_dir = os.path.join(project_folder, "query_index")
         query_index.storage_context.persist(query_index_dir)
 

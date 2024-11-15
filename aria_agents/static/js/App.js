@@ -108,9 +108,9 @@ function App() {
 		}
 	}, [artifactManager]);
 
-	const readChat = (newSessionId) => {
+	const readChat = (newUserId, newSessionId) => {
 		return artifactManager.read({
-			prefix: `aria-agents-chats/${newSessionId}`,
+			prefix: `/ws-user-${newUserId}/aria-agents-chats/${newSessionId}`,
 			_rkwargs: true
 		});
 	}
@@ -118,7 +118,6 @@ function App() {
 	useEffect(async () => {
 		if (chatTitle !== "" && messageIsComplete) {
 			await saveChat();
-			// TODO: remove userId from here. Instead, use /aria-agents/aria-agents-chat/public collection for sharing
 			setUrlParams(userId, sessionId);
 			await loadChats();
 		}
@@ -153,6 +152,7 @@ function App() {
 			await artifactManager.create({
 				prefix: artifactPrefix,
 				manifest: galleryManifest,
+				orphan: true,
 				_rkwargs: true
 			});
 		}
@@ -212,9 +212,9 @@ function App() {
 	const setServices = async (token) => {
 		const server = await getServer(token);
 		const artifactServer = await getServer(token, "https://hypha.aicell.io");
-		const userId = artifactServer.config.user.id;
-		setUserId(userId);
-		setArtifactPrefix("aria-agents-chats");
+		const configUserId = artifactServer.config.user.id;
+		setUserId(configUserId);
+		setArtifactPrefix(`/ws-user-${configUserId}/aria-agents-chats`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
