@@ -398,7 +398,7 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
-        artifact_manager.set_prefix(f"/ws-user-{user_id}/aria-agents-chats/{session_id}")
+        artifact_manager.set_prefix(user_id, session_id)
 
         # Listen to the `stream` event
         async def stream_callback(message):

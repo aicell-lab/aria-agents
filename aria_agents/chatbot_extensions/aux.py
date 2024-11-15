@@ -159,9 +159,12 @@ def create_corpus_function(
         )
         query_index = VectorStoreIndex.from_documents(documents)
 
-        # Save the query index to disk
-        # TODO: add user ID and session ID
-        query_index_dir = os.path.join(project_folder, "query_index")
+        query_index_dir = None
+        if artifact_manager is None:
+            query_index_dir = os.path.join(project_folder, "query_index")
+        else:
+            query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
+        
         query_index.storage_context.persist(query_index_dir)
 
         # Create a citation query engine object

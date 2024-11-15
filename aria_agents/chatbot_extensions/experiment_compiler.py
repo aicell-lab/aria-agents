@@ -206,10 +206,10 @@ def create_experiment_compiler_function(
         project_folder = os.path.abspath(
             os.path.join(project_folders, project_name)
         )
-        query_index_dir = os.path.join(project_folder, "query_index")
-        os.makedirs(query_index_dir, exist_ok=True)
+        query_index_dir = None
 
         if artifact_manager is None:
+            query_index_dir = os.path.join(project_folder, "query_index")
             # Load the suggested study from a JSON file
             suggested_study_file = os.path.join(
                 project_folder, "suggested_study.json"
@@ -217,11 +217,13 @@ def create_experiment_compiler_function(
             with open(suggested_study_file, encoding="utf-8") as ss_file:
                 suggested_study = SuggestedStudy(**json.load(ss_file))
         else:
+            query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
             event_bus = artifact_manager.get_event_bus()
             suggested_study_json_str = await artifact_manager.get(f"{project_name}:suggested_study.json")
             suggested_study_json = json.loads(suggested_study_json_str)
             suggested_study = SuggestedStudy(**suggested_study_json)
 
+        os.makedirs(query_index_dir, exist_ok=True)
         query_storage_context = StorageContext.from_defaults(
             persist_dir=query_index_dir
         )

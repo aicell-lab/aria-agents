@@ -7,23 +7,27 @@ class ArtifactManager:
         self.storage = {}
         self._svc = None
         self._prefix = None
+        self.user_id = None
+        self.session_id = None
         self._event_bus = event_bus
 
     async def setup(self, server, service_id="public/artifact-manager"):
         self._svc = await server.get_service(service_id)
 
-    def set_prefix(self, prefix):
-        self._prefix = prefix
+    def set_prefix(self, user_id, session_id):
+        self.user_id = user_id
+        self.session_id = session_id
+        self._prefix = f"/ws-user-{user_id}/aria-agents-chats/{session_id}"
 
     async def put(self, value, name):
         assert self._svc, "Please call `setup()` before using artifact manager"
         assert self._prefix, "Please set prefix using `set_prefix()` before using artifact manager"
-        put_url = await self._svc.put_file(
-            prefix=self._prefix,
-            file_path=name
-        )
         
         try:
+            put_url = await self._svc.put_file(
+                prefix=self._prefix,
+                file_path=name
+            )
             async with httpx.AsyncClient() as client:
                 response = await client.put(put_url, data=value, timeout=500)
             response.raise_for_status()
