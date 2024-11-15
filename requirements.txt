@@ -24,3 +24,4 @@ PyYAML==6.0.1
 llama_index==0.11.14
 llama-index-readers-papers==0.2.0
 ipdb
+websockets==13.1
