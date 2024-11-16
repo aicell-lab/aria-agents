@@ -109,11 +109,12 @@ function App() {
 		}
 	}, [artifactManager]);
 
-	const readChat = (newUserId, newSessionId) => {
-		return artifactManager.read({
-			prefix: `/ws-user-${newUserId}/aria-agents-chats/${newSessionId}`,
+	const readChat = async (newUserId, newSessionId) => {
+		const chat = await artifactManager.read({
+			artifact_id: `ws-user-${newUserId}/${newSessionId}`,
 			_rkwargs: true
 		});
+		return chat.manifest;
 	}
 
 	useEffect(async () => {
@@ -126,11 +127,11 @@ function App() {
 
 	const loadChats = async() => {
 		try {
-			const prevChatObjects = await artifactManager.list({
-				prefix: artifactPrefix,
-				summary_fields: ["*"],
+			let prevChatObjects = await artifactManager.list({
+				artifact_id: artifactPrefix,
 				_rkwargs: true,
 			});
+			prevChatObjects = prevChatObjects.map((chat) => chat.manifest);
 			const invalidChats = prevChatObjects.filter((chat) => chat.name === "");
 			invalidChats.forEach(deleteChat);
 			const validChats =  prevChatObjects.filter((chat) => chat.name !== "");
@@ -145,15 +146,17 @@ function App() {
 		const galleryManifest = {
 			"name": "Aria Agents Chat History",
 			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
-			"type": "collection",
 			"collection": [],
 		};
 	
 		try {
 			await artifactManager.create({
-				prefix: artifactPrefix,
+				type: "collection",
+				alias: artifactPrefix,
 				manifest: galleryManifest,
-				orphan: true,
+				config: {
+					// permissions: {"*": "r", "@": "r+"},
+				},
 				_rkwargs: true
 			});
 		}
@@ -176,29 +179,28 @@ function App() {
 			"userId": userId,
 		};
     
-		const sessionPrefix = `${artifactPrefix}/${sessionId}`;
+		const sessionPrefix = `${artifactPrefix}:${sessionId}`;
 		const chatConfig = {
-			prefix: sessionPrefix,
+			type: "chat",
+			parent_id: artifactPrefix,
+			alias: sessionPrefix,
 			manifest: datasetManifest,
+			config: {},
+			overwrite: true,
 			_rkwargs: true
 		}
 
 		if (permissions) {
-			chatConfig.permissions = permissions;
+			chatConfig.config.permissions = permissions;
 		}
 
-		try {
-			await artifactManager.create(chatConfig);
-		} catch {
-			await artifactManager.edit(chatConfig);
-			await artifactManager.commit(sessionPrefix);
-		}
+		await artifactManager.create(chatConfig);
 	};
 
 	const deleteChat = async (chat) => {
 		try {
 			await artifactManager.delete({
-				prefix: `${artifactPrefix}/${chat.id}`,
+				artifact_id: `${artifactPrefix}:${chat.id}`,
 				delete_files: true,
 				recursive: true,
 				_rkwargs: true
@@ -215,7 +217,7 @@ function App() {
 		const artifactServer = await getServer(token, "https://hypha.aicell.io");
 		const configUserId = artifactServer.config.user.id;
 		setUserId(configUserId);
-		setArtifactPrefix(`/ws-user-${configUserId}/aria-agents-chats`);
+		setArtifactPrefix(`aria-agents-chats`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
@@ -276,7 +278,7 @@ function App() {
 	const saveFile = async (file, fileNum) => {
 		await saveChat();
 		const putUrl = await artifactManager.putFile({
-			prefix: `${artifactPrefix}/${sessionId}`,
+			artifact_id: `${artifactPrefix}:${sessionId}`,
 			file_path: `${file.name}<${fileNum}>`,
 			_rkwargs: true
 		});
