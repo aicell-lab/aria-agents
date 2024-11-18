@@ -1,11 +1,11 @@
-schema-agents==0.1.58
+schema-agents==0.1.59
 imjoy-rpc==0.5.48.post2
 requests==2.31.0
 pypdf==4.2.0
 pillow==10.3.0
 matplotlib==3.9.0
-hypha==0.20.38
-hypha-rpc==0.20.38
+hypha==0.20.39
+hypha-rpc==0.20.39
 tqdm==4.66.4
 aiofiles==23.2.1
 serpapi==0.1.5

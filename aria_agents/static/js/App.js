@@ -50,7 +50,7 @@ function App() {
 	const [showShareDialog, setShowShareDialog] = useState(false);
 	const [alertContent, setAlertContent] = useState("");
 	const [isPaused, setIsPaused] = useState(false);
-	const [artifactPrefix, setArtifactPrefix] = useState("");
+	const [artifactWorkspace, setArtifactWorkspace] = useState("");
 	const [userId, setUserId] = useState("");
 	const [userToken, setUserToken] = useState("");
 
@@ -111,7 +111,7 @@ function App() {
 
 	const readChat = async (newUserId, newSessionId) => {
 		const chat = await artifactManager.read({
-			artifact_id: `ws-user-${newUserId}/${newSessionId}`,
+			artifact_id: `ws-user-${newUserId}/aria-agents-chats:${newSessionId}`,
 			_rkwargs: true
 		});
 		return chat.manifest;
@@ -128,7 +128,7 @@ function App() {
 	const loadChats = async() => {
 		try {
 			let prevChatObjects = await artifactManager.list({
-				artifact_id: artifactPrefix,
+				parent_id: `${artifactWorkspace}/aria-agents-chats`,
 				_rkwargs: true,
 			});
 			prevChatObjects = prevChatObjects.map((chat) => chat.manifest);
@@ -152,11 +152,9 @@ function App() {
 		try {
 			await artifactManager.create({
 				type: "collection",
-				alias: artifactPrefix,
+				workspace: artifactWorkspace,
+				alias: "aria-agents-chats",
 				manifest: galleryManifest,
-				config: {
-					// permissions: {"*": "r", "@": "r+"},
-				},
 				_rkwargs: true
 			});
 		}
@@ -179,11 +177,10 @@ function App() {
 			"userId": userId,
 		};
     
-		const sessionPrefix = `${artifactPrefix}:${sessionId}`;
 		const chatConfig = {
 			type: "chat",
-			parent_id: artifactPrefix,
-			alias: sessionPrefix,
+			parent_id: `${artifactWorkspace}/aria-agents-chats`,
+			alias: `aria-agents-chats:${sessionId}`,
 			manifest: datasetManifest,
 			config: {},
 			overwrite: true,
@@ -200,7 +197,7 @@ function App() {
 	const deleteChat = async (chat) => {
 		try {
 			await artifactManager.delete({
-				artifact_id: `${artifactPrefix}:${chat.id}`,
+				artifact_id: `${artifactWorkspace}/aria-agents-chats:${chat.id}`,
 				delete_files: true,
 				recursive: true,
 				_rkwargs: true
@@ -217,7 +214,7 @@ function App() {
 		const artifactServer = await getServer(token, "https://hypha.aicell.io");
 		const configUserId = artifactServer.config.user.id;
 		setUserId(configUserId);
-		setArtifactPrefix(`aria-agents-chats`);
+		setArtifactWorkspace(`ws-user-${configUserId}`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
@@ -262,7 +259,7 @@ function App() {
 				continue;
 			}
 			newAttachmentPrompts.push(
-				`- **${file.name}<${fileNum}>**, available at: ${artifactPrefix}/${sessionId}`
+				`- **${file.name}<${fileNum}>**, available at: ${artifactWorkspace}/aria-agents-chats:${sessionId}`
 			);
 			newAttachmentNames.push(file.name);
 			fileNum++;
@@ -278,7 +275,7 @@ function App() {
 	const saveFile = async (file, fileNum) => {
 		await saveChat();
 		const putUrl = await artifactManager.putFile({
-			artifact_id: `${artifactPrefix}:${sessionId}`,
+			artifact_id: `${artifactWorkspace}/aria-agents-chats:${sessionId}`,
 			file_path: `${file.name}<${fileNum}>`,
 			_rkwargs: true
 		});
