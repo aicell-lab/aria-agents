@@ -50,7 +50,7 @@ function App() {
 	const [showShareDialog, setShowShareDialog] = useState(false);
 	const [alertContent, setAlertContent] = useState("");
 	const [isPaused, setIsPaused] = useState(false);
-	const [artifactPrefix, setArtifactPrefix] = useState("");
+	const [artifactWorkspace, setArtifactWorkspace] = useState("");
 	const [userId, setUserId] = useState("");
 	const [userToken, setUserToken] = useState("");
 
@@ -109,11 +109,12 @@ function App() {
 		}
 	}, [artifactManager]);
 
-	const readChat = (newUserId, newSessionId) => {
-		return artifactManager.read({
-			prefix: `/ws-user-${newUserId}/aria-agents-chats/${newSessionId}`,
+	const readChat = async (newUserId, newSessionId) => {
+		const chat = await artifactManager.read({
+			artifact_id: `ws-user-${newUserId}/aria-agents-chats:${newSessionId}`,
 			_rkwargs: true
 		});
+		return chat.manifest;
 	}
 
 	useEffect(async () => {
@@ -126,11 +127,11 @@ function App() {
 
 	const loadChats = async() => {
 		try {
-			const prevChatObjects = await artifactManager.list({
-				prefix: artifactPrefix,
-				summary_fields: ["*"],
+			let prevChatObjects = await artifactManager.list({
+				parent_id: `${artifactWorkspace}/aria-agents-chats`,
 				_rkwargs: true,
 			});
+			prevChatObjects = prevChatObjects.map((chat) => chat.manifest);
 			const invalidChats = prevChatObjects.filter((chat) => chat.name === "");
 			invalidChats.forEach(deleteChat);
 			const validChats =  prevChatObjects.filter((chat) => chat.name !== "");
@@ -145,15 +146,15 @@ function App() {
 		const galleryManifest = {
 			"name": "Aria Agents Chat History",
 			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
-			"type": "collection",
 			"collection": [],
 		};
 	
 		try {
 			await artifactManager.create({
-				prefix: artifactPrefix,
+				type: "collection",
+				workspace: artifactWorkspace,
+				alias: "aria-agents-chats",
 				manifest: galleryManifest,
-				orphan: true,
 				_rkwargs: true
 			});
 		}
@@ -176,29 +177,37 @@ function App() {
 			"userId": userId,
 		};
     
-		const sessionPrefix = `${artifactPrefix}/${sessionId}`;
 		const chatConfig = {
-			prefix: sessionPrefix,
+			type: "chat",
+			parent_id: `${artifactWorkspace}/aria-agents-chats`,
+			alias: `aria-agents-chats:${sessionId}`,
 			manifest: datasetManifest,
 			_rkwargs: true
 		}
 
 		if (permissions) {
-			chatConfig.permissions = permissions;
+			chatConfig.config.permissions = permissions;
 		}
-
+		
 		try {
 			await artifactManager.create(chatConfig);
-		} catch {
-			await artifactManager.edit(chatConfig);
-			await artifactManager.commit(sessionPrefix);
+		}
+		catch (e) {
+			console.log(e);
+			const chatId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
+			await artifactManager.edit({
+				artifact_id: chatId,
+				manifest: datasetManifest,
+				_rkwargs: true
+			});
+			await artifactManager.commit(chatId);
 		}
 	};
 
 	const deleteChat = async (chat) => {
 		try {
 			await artifactManager.delete({
-				prefix: `${artifactPrefix}/${chat.id}`,
+				artifact_id: `${artifactWorkspace}/aria-agents-chats:${chat.id}`,
 				delete_files: true,
 				recursive: true,
 				_rkwargs: true
@@ -215,7 +224,7 @@ function App() {
 		const artifactServer = await getServer(token, "https://hypha.aicell.io");
 		const configUserId = artifactServer.config.user.id;
 		setUserId(configUserId);
-		setArtifactPrefix(`/ws-user-${configUserId}/aria-agents-chats`);
+		setArtifactWorkspace(`ws-user-${configUserId}`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
@@ -260,7 +269,7 @@ function App() {
 				continue;
 			}
 			newAttachmentPrompts.push(
-				`- **${file.name}<${fileNum}>**, available at: ${artifactPrefix}/${sessionId}`
+				`- **${file.name}<${fileNum}>**, available at: ${artifactWorkspace}/aria-agents-chats:${sessionId}`
 			);
 			newAttachmentNames.push(file.name);
 			fileNum++;
@@ -276,7 +285,7 @@ function App() {
 	const saveFile = async (file, fileNum) => {
 		await saveChat();
 		const putUrl = await artifactManager.putFile({
-			prefix: `${artifactPrefix}/${sessionId}`,
+			artifact_id: `${artifactWorkspace}/aria-agents-chats:${sessionId}`,
 			file_path: `${file.name}<${fileNum}>`,
 			_rkwargs: true
 		});
