@@ -20,6 +20,8 @@ class ArtifactManager:
         
         # Artifact has to be staged before we can put files
         try:
+            manifest = await self._svc.read(artifact_id=self._artifact_id)
+            self._svc.edit(artifact_id=self._artifact_id, manifest=manifest, version="stage")
             put_url = await self._svc.put_file(
                 artifact_id=self._artifact_id,
                 file_path=name

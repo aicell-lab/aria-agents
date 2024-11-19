@@ -182,16 +182,26 @@ function App() {
 			parent_id: `${artifactWorkspace}/aria-agents-chats`,
 			alias: `aria-agents-chats:${sessionId}`,
 			manifest: datasetManifest,
-			config: {},
-			overwrite: true,
 			_rkwargs: true
 		}
 
 		if (permissions) {
 			chatConfig.config.permissions = permissions;
 		}
-
-		await artifactManager.create(chatConfig);
+		
+		try {
+			await artifactManager.create(chatConfig);
+		}
+		catch (e) {
+			console.log(e);
+			const chatId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
+			await artifactManager.edit({
+				artifact_id: chatId,
+				manifest: datasetManifest,
+				_rkwargs: true
+			});
+			await artifactManager.commit(chatId);
+		}
 	};
 
 	const deleteChat = async (chat) => {
