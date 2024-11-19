@@ -148,6 +148,8 @@ cython_debug/
 
 # Node
 node_modules/
+package-lock.json
+package.json
 
 # others
 *.bin
@@ -160,3 +162,5 @@ authorized_users.json
 # pixi environments
 .pixi
 *.egg-info
+.prettierrc
+eslint.config*
