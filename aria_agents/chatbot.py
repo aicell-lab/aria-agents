@@ -405,10 +405,9 @@ async def register_chat_service(server):
             if message.type in ["function_call", "text"]:
                 try:
                     await status_callback(message.model_dump())
-                except Exception:
-                    logger.exception("The status callback returned an error.")
-                    # TODO: fix stopping
+                except Exception as exc:
                     message.session.stop = True
+                    raise RuntimeError("The status callback returned an error.") from exc
 
         event_bus.on("stream", stream_callback)
 
