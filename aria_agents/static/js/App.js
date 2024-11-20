@@ -65,6 +65,13 @@ function App() {
 		return () => window.removeEventListener('scroll', handleScroll);
 	}, []);
 
+	useEffect(() => {
+		const newUrl = urlPlusParam({
+			"isPaused": isPaused,
+		});
+		window.history.replaceState({}, '', newUrl);
+	}, [isPaused]);
+
 	
 	useEffect(() => {
 		if (chatContainerRef.current && isNearBottom) {
@@ -158,8 +165,7 @@ function App() {
 				_rkwargs: true
 			});
 		}
-		catch (e) {
-			console.log(e);
+		catch {
 			console.log("User chat collection already exists.");
 		}
 	};
@@ -192,8 +198,7 @@ function App() {
 		try {
 			await artifactManager.create(chatConfig);
 		}
-		catch (e) {
-			console.log(e);
+		catch {
 			const chatId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
 			await artifactManager.edit({
 				artifact_id: chatId,
@@ -311,7 +316,10 @@ function App() {
 			query_id,
 		} = message;
 
-		if (id !== sessionId || isPaused) {
+		const currentSessionId = getUrlParam("sessionId") ?? sessionId;
+		const currentIsPaused = getUrlParam("isPaused") === "true";
+
+		if (id !== currentSessionId || currentIsPaused) {
 			throw new Error("User has terminated this session.");
 		}
 
