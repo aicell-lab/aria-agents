@@ -171,38 +171,24 @@ function App() {
 	};
 
 	const saveChat = async (permissions = null) => {
-		const datasetManifest = {
-			"id": sessionId,
-			"name": chatTitle,
-			"description": `The Aria Agents chat history of ${sessionId}`,
-			"type": "chat",
-			"conversations": chatHistory,
-			"artifacts": artifacts,
-			"attachmentPrompts": attachmentStatePrompts,
-			"timestamp": new Date().toISOString(),
-			"userId": userId,
-		};
-    
-		const chatConfig = {
-			type: "chat",
-			parent_id: `${artifactWorkspace}/aria-agents-chats`,
-			alias: `aria-agents-chats:${sessionId}`,
-			manifest: datasetManifest,
-			_rkwargs: true
-		}
-
-		if (permissions) {
-			chatConfig.config.permissions = permissions;
-		}
+		const datasetManifest = getChatManifest();
 		
 		try {
-			await artifactManager.create(chatConfig);
+			await artifactManager.create({
+				type: "chat",
+				parent_id: `${artifactWorkspace}/aria-agents-chats`,
+				alias: `aria-agents-chats:${sessionId}`,
+				manifest: datasetManifest,
+				...permissions && { permissions },
+				_rkwargs: true
+			});
 		}
 		catch {
 			const chatId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
 			await artifactManager.edit({
 				artifact_id: chatId,
 				manifest: datasetManifest,
+				...permissions && { permissions },
 				_rkwargs: true
 			});
 			await artifactManager.commit(chatId);
@@ -287,10 +273,35 @@ function App() {
 		setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
 	};
 
+	const getChatManifest = () => {
+		return {
+			"id": sessionId,
+			"name": chatTitle,
+			"description": `The Aria Agents chat history of ${sessionId}`,
+			"type": "chat",
+			"conversations": chatHistory,
+			"artifacts": artifacts,
+			"attachmentPrompts": attachmentStatePrompts,
+			"timestamp": new Date().toISOString(),
+			"userId": userId,
+		};
+	}
+
+	const stageChat = async (artifactId) => {
+		const manifest = getChatManifest();
+		await artifactManager.edit({
+			artifact_id: artifactId,
+			manifest: manifest,
+			version: "stage",
+			_rkwargs: true
+		});
+	};
+
 	const saveFile = async (file, fileNum) => {
-		await saveChat();
+		const sessionArtifactId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
+		await stageChat(sessionArtifactId);
 		const putUrl = await artifactManager.putFile({
-			artifact_id: `${artifactWorkspace}/aria-agents-chats:${sessionId}`,
+			artifact_id: sessionArtifactId,
 			file_path: `${file.name}<${fileNum}>`,
 			_rkwargs: true
 		});
@@ -298,7 +309,9 @@ function App() {
 		const response = await fetch(putUrl, {
 			method: "PUT",
 			body: file
-		})
+		});
+
+		await artifactManager.commit(sessionArtifactId);
 
 		if (!response.ok) {
 			throw new Error(`Upload of ${file.name} failed`);
