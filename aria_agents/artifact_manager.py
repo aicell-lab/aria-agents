@@ -42,7 +42,7 @@ class ArtifactManager:
         assert self._svc, "Please call `setup()` before using artifact manager"
         get_url = await self._svc.get_file(
             artifact_id=self._artifact_id,
-            path=name
+            file_path=name
         )
         return get_url
 
