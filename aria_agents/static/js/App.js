@@ -172,23 +172,22 @@ function App() {
 
 	const saveChat = async (permissions = null) => {
 		const datasetManifest = getChatManifest();
-		
+	
 		try {
 			await artifactManager.create({
 				type: "chat",
 				parent_id: `${artifactWorkspace}/aria-agents-chats`,
 				alias: `aria-agents-chats:${sessionId}`,
 				manifest: datasetManifest,
-				...permissions && { permissions },
+				...(permissions && { config: permissions }),
 				_rkwargs: true
 			});
-		}
-		catch {
+		} catch {
 			const chatId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
 			await artifactManager.edit({
 				artifact_id: chatId,
 				manifest: datasetManifest,
-				...permissions && { permissions },
+				...(permissions && { config: permissions }),
 				_rkwargs: true
 			});
 			await artifactManager.commit(chatId);
