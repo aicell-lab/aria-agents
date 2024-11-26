@@ -26,7 +26,7 @@ const {
 
 function App() {
 	const [question, setQuestion] = useState("");
-	const [attachmentStatePrompts, setAttachmentStatePrompts] = useState([]);
+	const [attachments, setAttachments] = useState([]);
 	const [attachmentNames, setAttachmentNames] = useState([]);
 	const [chatHistory, setChatHistory] = useState(new Map());
 	const [svc, setSvc] = useState(null);
@@ -247,29 +247,15 @@ function App() {
 
 	const handleAttachment = async (event) => {
 		const files = event.target.files || event.dataTransfer.files;
-
-		const newAttachmentPrompts = [];
+		const newAttachments = [];
 		const newAttachmentNames = [];
-		let fileNum = 0;
 
 		for (const file of files) {
-			try {
-				await saveFile(file, fileNum);
-			} catch (error) {
-				alert(`Error uploading ${file.name}:`, error);
-				continue;
-			}
-			newAttachmentPrompts.push(
-				`- **${file.name}<${fileNum}>**, available at: ${artifactWorkspace}/aria-agents-chats:${sessionId}`
-			);
+			const content = await file.text();
+			newAttachments.push({ name: file.name, content });
 			newAttachmentNames.push(file.name);
-			fileNum++;
 		}
-
-		setAttachmentStatePrompts([
-			...attachmentStatePrompts,
-			...newAttachmentPrompts,
-		]);
+		setAttachments([...attachments, ...newAttachments]);
 		setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
 	};
 
@@ -281,42 +267,11 @@ function App() {
 			"type": "chat",
 			"conversations": chatHistory,
 			"artifacts": artifacts,
-			"attachmentPrompts": attachmentStatePrompts,
+			"attachments": attachments,
 			"timestamp": new Date().toISOString(),
 			"userId": userId,
 		};
 	}
-
-	const stageChat = async (artifactId) => {
-		const manifest = getChatManifest();
-		await artifactManager.edit({
-			artifact_id: artifactId,
-			manifest: manifest,
-			version: "stage",
-			_rkwargs: true
-		});
-	};
-
-	const saveFile = async (file, fileNum) => {
-		const sessionArtifactId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
-		await stageChat(sessionArtifactId);
-		const putUrl = await artifactManager.putFile({
-			artifact_id: sessionArtifactId,
-			file_path: `${file.name}<${fileNum}>`,
-			_rkwargs: true
-		});
-
-		const response = await fetch(putUrl, {
-			method: "PUT",
-			body: file
-		});
-
-		await artifactManager.commit(sessionArtifactId);
-
-		if (!response.ok) {
-			throw new Error(`Upload of ${file.name} failed`);
-		}
-	};
 
 	const statusCallback = async (message) => {
 		const {
@@ -437,12 +392,12 @@ function App() {
 	}
 
 	const getAttachmentStatePrompt = () => {
-		if (attachmentStatePrompts.length > 0) {
-			return "User attached the following files to the current query:\n" +
-				attachmentStatePrompts.join("\n");
+		if (attachments.length > 0) {
+			return `User attached the following files to the chat, available at ${artifactWorkspace}/aria-agents-chats:${sessionId}:\n` +
+				attachments.map(att => att.name).join("\n");
 		}
 		else {
-			return "User did not attach any files."
+			return "User did not attach any files.";
 		}
 	}
 
@@ -566,15 +521,10 @@ function App() {
 	};
 
 	const undoAttach = (index) => {
-		const attachmentName = attachmentNames[index];
-		const updatedAttachments = [...attachmentStatePrompts];
-		const updatedAttachmentNames = [...attachmentNames];
-
+		const attachmentName = attachments[index].name;
+		const updatedAttachments = [...attachments];
 		updatedAttachments.splice(index, 1);
-		updatedAttachmentNames.splice(index, 1);
-
-		setAttachmentStatePrompts(updatedAttachments);
-		setAttachmentNames(updatedAttachmentNames);
+		setAttachments(updatedAttachments);
 		setStatus(`📎 Removed ${attachmentName}`);
 	};
 
@@ -587,10 +537,6 @@ function App() {
 	}
 
 	const displayChat = async (chat) => {
-		const chatMap = new Map(Object.entries(chat.conversations || {}));
-		setChatHistory(chatMap);
-		setChatTitle(chat.name || "");
-		setArtifacts(chat.artifacts || []);
 		if (chat.id) {
 			setUrlParams(chat.userId, chat.id);
 			setSessionId(chat.id);
@@ -599,7 +545,12 @@ function App() {
 			window.history.replaceState({}, '', urlMinusParam("sessionId"));
 			setSessionId(generateSessionID());
 		}
-		setAttachmentStatePrompts(chat.attachmentPrompts || []);
+		const chatMap = new Map(Object.entries(chat.conversations || {}));
+		setChatHistory(chatMap);
+		setChatTitle(chat.name || "");
+		setArtifacts(chat.artifacts || []);
+		setAttachments(chat.attachments || []);
+		setAttachmentNames([]);
 		setMessageIsComplete(false);
 		awaitUserResponse();
 	}
