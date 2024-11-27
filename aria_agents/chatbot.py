@@ -56,10 +56,6 @@ class QuestionWithHistory(BaseModel):
     chatbot_extensions: Optional[List[Dict[str, Any]]] = Field(
         None, description="Chatbot extensions."
     )
-    state_prompt: Optional[str] = Field(
-        None,
-        description="The state of the user's interface, including attachments uploaded by the user.",
-    )
     context: Optional[Dict[str, Any]] = Field(
         None, description="The context of request."
     )
@@ -91,8 +87,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         """Response to the user's query."""
         steps = []
         inputs = (
-            [question_with_history.state_prompt]
-            + list(question_with_history.chat_history)
+            list(question_with_history.chat_history)
             + [question_with_history.question]
         )
         assert question_with_history.chatbot_extensions is not None
@@ -483,7 +478,6 @@ async def register_chat_service(server):
         user_id=None,
         user_token=None,
         extensions=None,
-        state_prompt=None,
         assistant_name="Aria",
         context=None,
     ):
@@ -520,7 +514,6 @@ async def register_chat_service(server):
             question=text,
             chat_history=chat_history,
             chatbot_extensions=extensions,
-            state_prompt=state_prompt,
             context=context,
         )
 

@@ -390,21 +390,16 @@ function App() {
 		setIsSending(false);
 	}
 
-	const getAttachmentStatePrompt = () => {
-		if (attachments.length > 0) {
-			return `User attached the following files to the chat, available at ${artifactWorkspace}/aria-agents-chats:${sessionId}:\n` +
-				attachments.map(att => att.name).join("\n");
-		}
-		else {
-			return "User did not attach any files.";
-		}
-	}
-
 	const titleCallback = async (message) => {
 		if (message.status === "finished") {
 			const newTitle = JSON.parse(message.arguments).response.trim();
 			setChatTitle(newTitle);
 		}
+	}
+
+	const contentWithAttachments = (content, attachmentNames) => {
+		const attachmentNamesString = attachmentNames.join(",\n");
+		return `<QUESTION>\n${content.toString()}\n</QUESTION>\n\n<ATTACHMENT_NAMES>${attachmentNamesString}</ATTACHMENT_NAMES>`;
 	}
 
 	const handleSend = async () => {
@@ -415,8 +410,6 @@ function App() {
 
 		if (question.trim()) {
 			const currentQuestion = question;
-			const joinedStatePrompt =
-				getAttachmentStatePrompt();
 
 			const newChatHistory = [
 				...chatHistory.values(),
@@ -453,7 +446,7 @@ function App() {
 						return {
 							...rest,
 							role: role.toString(),
-							content: content.toString(),
+							content: contentWithAttachments(content, attachments),
 						};
 					}
 				);
@@ -473,7 +466,6 @@ function App() {
 						userId,
 						userToken,
 						extensions,
-						joinedStatePrompt
 					);
 				}
 				await svc.chat(
@@ -485,7 +477,6 @@ function App() {
 					userId,
 					userToken,
 					extensions,
-					joinedStatePrompt
 				);
 			} catch (e) {
 				setStatus(`❌ Error: ${e.message || e}`);
