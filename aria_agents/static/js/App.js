@@ -399,7 +399,7 @@ function App() {
 
 	const contentWithAttachments = (content, attachmentNames) => {
 		const attachmentNamesString = attachmentNames.join(",\n");
-		return `<QUESTION>\n${content.toString()}\n</QUESTION>\n\n<ATTACHMENT_NAMES>${attachmentNamesString}</ATTACHMENT_NAMES>`;
+		return `<MESSAGE_CONTENT>\n${content.toString()}\n</MESSAGE_CONTENT>\n\n<ATTACHMENT_NAMES>\n${attachmentNamesString}</ATTACHMENT_NAMES>`;
 	}
 
 	const handleSend = async () => {
