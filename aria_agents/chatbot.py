@@ -51,7 +51,7 @@ class QuestionWithHistory(BaseModel):
 
     question: str = Field(description="The user's question.")
     chat_history: Optional[List[Dict[str, str]]] = Field(
-        None, description="The chat history. Each item is a chat message including its role, content, and attachments."
+        None, description="The chat history."
     )
     chatbot_extensions: Optional[List[Dict[str, Any]]] = Field(
         None, description="Chatbot extensions."
