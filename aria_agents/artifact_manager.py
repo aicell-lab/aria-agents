@@ -72,7 +72,8 @@ class ArtifactManager:
     async def get_attachment(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
         attachments = await self.get_attachments()
-        for attachment in attachments:
+        reversed_attachments = attachments[::-1] # Reverse order to get the latest attachment first
+        for attachment in reversed_attachments:
             if attachment["name"] == name:
                 return attachment
         return None
