@@ -60,5 +60,22 @@ class ArtifactManager:
         
         return response.text
     
+    async def get_attachments(self):
+        assert self._svc, "Please call `setup()` before using artifact manager"
+        try:
+            manifest = await self._svc.read(artifact_id=self._artifact_id)
+            return manifest.get("attachments", [])
+        except Exception as e:
+            print(f"Failed to get attachments: {e}")
+            raise RuntimeError(f"Failed to get attachments: {e}") from e
+        
+    async def get_attachment(self, name: str):
+        assert self._svc, "Please call `setup()` before using artifact manager"
+        attachments = await self.get_attachments()
+        for attachment in attachments:
+            if attachment["name"] == name:
+                return attachment
+        return None
+    
     def get_event_bus(self):
         return self._event_bus
