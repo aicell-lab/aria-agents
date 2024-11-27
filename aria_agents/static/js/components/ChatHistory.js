@@ -102,12 +102,12 @@ function ChatHistory({ chatHistory, isSending }) {
 					chat.attachments &&
 					chat.attachments.length > 0 && (
 						<div className="mt-2 flex flex-wrap gap-2">
-							{chat.attachments.map((fileName, fileIndex) => (
+							{chat.attachments.map((file, fileIndex) => (
 								<div
 									key={fileIndex}
 									className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md"
 								>
-									<span>{fileName}</span>
+									<span>{file.name}</span>
 								</div>
 							))}
 						</div>
