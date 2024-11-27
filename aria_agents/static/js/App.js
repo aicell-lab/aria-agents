@@ -397,6 +397,11 @@ function App() {
 		}
 	}
 
+	const contentWithAttachments = (content, attachmentNames) => {
+		const attachmentNamesString = attachmentNames.join(",\n");
+		return `<QUESTION>\n${content.toString()}\n</QUESTION>\n\n<ATTACHMENT_NAMES>${attachmentNamesString}</ATTACHMENT_NAMES>`;
+	}
+
 	const handleSend = async () => {
 		if (!svc) {
 			await handleLogin();
@@ -414,7 +419,7 @@ function App() {
 					content: marked(completeCodeBlocks(currentQuestion)),
 					sources: "",
 					image: "",
-					attachments: attachments,
+					attachments: attachmentNames,
 				},
 			];
 
@@ -441,7 +446,7 @@ function App() {
 						return {
 							...rest,
 							role: role.toString(),
-							content: content.toString(),
+							content: contentWithAttachments(content, attachments),
 						};
 					}
 				);
