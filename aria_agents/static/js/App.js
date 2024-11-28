@@ -309,6 +309,7 @@ function App() {
 					accumulatedArgs: "",
 					title: headerStartInProgress,
 					content: "",
+					attachments: [],
 					status: "in_progress",
 				});
 				return updatedHistory;
@@ -461,12 +462,13 @@ function App() {
 						summaryQuestion,
 						currentChatHistory,
 						titleCallback,
-						() => {},
+						() => { },
 						sessionId,
 						userId,
 						userToken,
 						extensions,
 					);
+					await saveChat();
 				}
 				await svc.chat(
 					currentQuestion,
@@ -479,6 +481,7 @@ function App() {
 					extensions,
 				);
 			} catch (e) {
+				console.log(e);
 				setStatus(`❌ Error: ${e.message || e}`);
 			} finally {
 				awaitUserResponse();

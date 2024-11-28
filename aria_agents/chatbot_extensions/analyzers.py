@@ -3,6 +3,7 @@ import os
 import asyncio
 import json
 import uuid
+from io import StringIO
 from typing import List, Callable, Dict
 import dotenv
 from pydantic import BaseModel, Field
@@ -26,19 +27,20 @@ config_file = os.path.join(this_dir, "config.json")
 with open(config_file, "r", encoding="utf-8") as file:
     CONFIG = json.load(file)
 
-async def read_df(file_path: str) -> pd.DataFrame:
-    def _read_file(path):
+async def read_df(file_path: str, content: str = None) -> pd.DataFrame:
+    def _read_file(path, content = None):
         ext = os.path.splitext(path)[1].lower()
+        file_content = StringIO(content) if content else path
         try:
             match ext:
                 case ".csv":
-                    return pd.read_csv(path)
+                    return pd.read_csv(file_content)
                 case ".tsv":
-                    return pd.read_csv(path, sep='\t')
+                    return pd.read_csv(file_content, sep='\t')
                 case ".xlsx":
-                    return pd.read_excel(path, engine='openpyxl')
+                    return pd.read_excel(file_content, engine='openpyxl')
                 case _:
-                    return pd.read_csv(path, sep=None, engine='python')
+                    return pd.read_csv(file_content, sep=None, engine='python')
         except EmptyDataError:
             print(f"Warning: The file {path} is empty or contains no data.")
             return pd.DataFrame()
@@ -46,7 +48,7 @@ async def read_df(file_path: str) -> pd.DataFrame:
             print(f"Error reading file {path}: {str(e)}")
             raise ValueError(f"Unable to open file {path} as tabular file: {str(e)}") from e
 
-    return await asyncio.get_event_loop().run_in_executor(None, _read_file, file_path)
+    return await asyncio.get_event_loop().run_in_executor(None, _read_file, file_path, content)
 
 def get_session_id() -> str:
     pre_session = current_session.get()
@@ -98,11 +100,12 @@ async def get_data_files_dfs(data_file_names: List[str], artifact_manager: Artif
     if artifact_manager is None:
         return await asyncio.gather(*[read_df(file_path) for file_path in data_file_names])
     
-    data_files_dfs = []
+    data_files = []
     for file_name in data_file_names:
-        data_file_content = await artifact_manager.get_attachment(file_name)
-        data_files_dfs.append(pd.read_json(data_file_content))
-    return data_files_dfs
+        data_file = await artifact_manager.get_attachment(file_name)
+        data_files.append((file_name, data_file.content))
+        
+    return await asyncio.gather(*[read_df(file_path, file_content) for (file_path, file_content) in data_files])
 
 async def get_pai_agent(project_name: str, data_file_names: List[str], artifact_manager: ArtifactManager = None) -> tuple[PaiAgent, Role]:
     data_files_dfs = await get_data_files_dfs(data_file_names, artifact_manager)
@@ -146,7 +149,8 @@ async def get_or_create_agent(agent_dict, session_id, create_agent_func, *args):
     if agent is None:
         agent = await create_agent_func(*args) if asyncio.iscoroutinefunction(create_agent_func) else create_agent_func(*args)
         agent_dict[session_id] = agent
-        return agent
+    
+    return agent
 
 def create_explore_data(artifact_manager: ArtifactManager = None) -> Callable:
     summarizer_agents = {}
