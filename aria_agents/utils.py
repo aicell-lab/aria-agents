@@ -1,6 +1,8 @@
+import os
 from typing import Any, Callable, Dict, Optional, _UnionGenericAlias
 from inspect import signature
 import requests
+import dotenv
 from tqdm import tqdm
 from pydantic import BaseModel, Field
 from schema_agents import schema_tool
@@ -72,6 +74,16 @@ class LegacyChatbotExtension(BaseModel):
     schema_class: Optional[BaseModel] = Field(
         None, description="The schema class for the extension"
     )
+
+def get_project_folder(project_name: str):
+    dotenv.load_dotenv()
+    project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
+    project_folder = os.path.abspath(
+        os.path.join(project_folders, project_name)
+    )
+    os.makedirs(project_folder, exist_ok=True)
+    
+    return project_folder
 
 
 def convert_to_dict(obj):

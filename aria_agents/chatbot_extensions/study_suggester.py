@@ -6,6 +6,7 @@ import uuid
 from typing import Callable, Dict
 import dotenv
 from pydantic import BaseModel, Field
+from aria_agents.utils import get_project_folder
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
@@ -79,10 +80,7 @@ def create_study_suggester_function(
         pre_session = current_session.get()
         session_id = pre_session.id if pre_session else str(uuid.uuid4())
 
-        project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-        project_folder = os.path.abspath(
-            os.path.join(project_folders, project_name)
-        )
+        project_folder = get_project_folder(project_name)
         event_bus = None
 
         if artifact_manager is None:

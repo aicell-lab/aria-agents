@@ -20,8 +20,8 @@ class ArtifactManager:
         
         # Artifact has to be staged before we can put files
         try:
-            manifest = await self._svc.read(artifact_id=self._artifact_id)
-            await self._svc.edit(artifact_id=self._artifact_id, manifest=manifest, version="stage")
+            artifact_info = await self._svc.read(artifact_id=self._artifact_id)
+            await self._svc.edit(artifact_id=self._artifact_id, manifest=artifact_info.manifest, version="stage")
             put_url = await self._svc.put_file(
                 artifact_id=self._artifact_id,
                 file_path=name
@@ -63,11 +63,10 @@ class ArtifactManager:
     async def get_attachments(self):
         assert self._svc, "Please call `setup()` before using artifact manager"
         try:
-            manifest = await self._svc.read(artifact_id=self._artifact_id)
-            return manifest.get("attachments", [])
+            artifact_info = await self._svc.read(artifact_id=self._artifact_id)
+            return artifact_info.manifest.get("attachments", [])
         except Exception as e:
             print(f"Failed to get attachments: {e}")
-            raise RuntimeError(f"Failed to get attachments: {e}") from e
         
     async def get_attachment(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"

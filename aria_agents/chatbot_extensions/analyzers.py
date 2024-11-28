@@ -1,92 +1,57 @@
 import argparse
-import dotenv
-dotenv.load_dotenv()
-import os
-import pandas as pd
-import asyncio
-from typing import List, Dict 
-import asyncio
-import shutil
-import dotenv
-from pandas.errors import EmptyDataError
-from schema_agents import schema_tool, Role
-from pydantic import BaseModel, Field
-import json
 import os
 import asyncio
-import base64
 import json
-# from hypha_store import HyphaDataStore
-from aria_agents.hypha_store import HyphaDataStore
-# from aria_agents.chatbot_extensions.code_execution import execute_code
-from schema_agents import Role, schema_tool
-from hypha_rpc import connect_to_server, login
-from typing import List, Callable
-from pydantic import BaseModel, Field
-from langchain_experimental.tools.python.tool import PythonAstREPLTool
-from schema_agents.role import create_session_context
-from schema_agents.utils.common import current_session
 import uuid
+from typing import List, Callable, Dict
+import dotenv
+from pydantic import BaseModel, Field
+import pandas as pd
+from pandas.errors import EmptyDataError
 from pandasai.llm import OpenAI as PaiOpenAI
 from pandasai import Agent as PaiAgent
+from schema_agents import schema_tool, Role
+from schema_agents.role import create_session_context
+from schema_agents.utils.common import current_session
+from schema_agents.utils.common import EventBus
+from aria_agents.utils import get_project_folder
+from aria_agents.artifact_manager import ArtifactManager
+dotenv.load_dotenv()
 
 AGENT_MAX_RETRIES = 5
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
 config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r") as file:
+with open(config_file, "r", encoding="utf-8") as file:
     CONFIG = json.load(file)
 
 async def read_df(file_path: str) -> pd.DataFrame:
     def _read_file(path):
         ext = os.path.splitext(path)[1].lower()
         try:
-            if ext == ".csv":
-                return pd.read_csv(path)
-            elif ext == ".tsv":
-                return pd.read_csv(path, sep='\t')
-            elif ext == ".xlsx":
-                return pd.read_excel(path, engine='openpyxl')
-            else:
-                return pd.read_csv(path, sep=None, engine='python')
+            match ext:
+                case ".csv":
+                    return pd.read_csv(path)
+                case ".tsv":
+                    return pd.read_csv(path, sep='\t')
+                case ".xlsx":
+                    return pd.read_excel(path, engine='openpyxl')
+                case _:
+                    return pd.read_csv(path, sep=None, engine='python')
         except EmptyDataError:
             print(f"Warning: The file {path} is empty or contains no data.")
             return pd.DataFrame()
         except Exception as e:
             print(f"Error reading file {path}: {str(e)}")
-            raise ValueError(f"Unable to open file {path} as tabular file: {str(e)}")
+            raise ValueError(f"Unable to open file {path} as tabular file: {str(e)}") from e
 
     return await asyncio.get_event_loop().run_in_executor(None, _read_file, file_path)
-
-def is_data_file(file_path : str) -> bool:
-    if not os.path.isfile(file_path):
-        return False
-    
-    ext = os.path.splitext(file_path)[1]
-    return ext in [".csv", ".tsv", ".xlsx"]
-
-def get_analyzer_folders(project_name: str, env_var: str, default_val: str) -> tuple[str]:
-    project_folders = os.environ.get(env_var, default_val)
-    project_folder = os.path.abspath(os.path.join(project_folders, project_name))
-    data_folder = os.path.join(project_folder, "data")
-    analysis_folder = os.path.join(project_folder, "analysis")
-    
-    for this_folder in [project_folder, data_folder, analysis_folder]:
-            os.makedirs(this_folder, exist_ok=True)
-    
-    return project_folder, data_folder, analysis_folder
 
 def get_session_id() -> str:
     pre_session = current_session.get()
     session_id = pre_session.id if pre_session else str(uuid.uuid4())
     return session_id
-
-def get_data_files(data_folder: str) -> List[str]:
-    data_listdir = os.listdir(data_folder)
-    all_data_paths = [os.path.join(data_folder, data_item) for data_item in data_listdir]    
-    data_files = filter(is_data_file, all_data_paths)
-    return data_files
 
 class PlotPaths(BaseModel):
     """A list of file paths to the plots (or any .png files) created by the data analysis bot"""
@@ -100,9 +65,9 @@ async def get_plot_paths(response: str,
                         session_id: str = None) -> PlotPaths:
     """Extracts the urls to the plots from the data analysis bot's response (if any were created by the bot) and includes an explanation for each plot"""
     response_with_explanation = f"Response: {response}\n\nExplanation: {explanation}"
-    async with create_session_context(id=session_id, role_setting=summarizer_agent._setting):
+    async with create_session_context(id=session_id, role_setting=summarizer_agent.role_setting):
         res = await summarizer_agent.aask(
-            ["""Extract the urls to the plots or any .png files created by the data analysis bot. 
+            ["""Extract the paths to the plots or any .png files created by the data analysis bot.
              Get this information from the data analysis bot's final response, explanation, and logs.
              When creating your own explanations for the plots, refer to the input files used for the plots by their file names.
              If no plots were created, return an empty list. The bot's response and explanation is the following:""",
@@ -114,7 +79,76 @@ async def get_plot_paths(response: str,
         )
     return res
 
-def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
+async def upload_plots(plot_paths: PlotPaths, project_name: str, artifact_manager: ArtifactManager) -> Dict[str, str]:
+    plot_urls = {}
+    for plot_path in plot_paths.plot_paths:
+        with open(plot_path, "rb") as image_file:
+            plot_content = image_file.read()
+    
+        plot_name_base = f"plot_{str(uuid.uuid4())}"
+        plot_id = await artifact_manager.put(
+            value=plot_content,
+            name=f"{project_name}:{plot_name_base}.png",
+        )
+        plot_urls[plot_path] = await artifact_manager.get_url(plot_id)
+        
+    return plot_urls
+
+async def get_data_files_dfs(data_file_names: List[str], artifact_manager: ArtifactManager = None) -> List[pd.DataFrame]:
+    if artifact_manager is None:
+        return await asyncio.gather(*[read_df(file_path) for file_path in data_file_names])
+    
+    data_files_dfs = []
+    for file_name in data_file_names:
+        data_file_content = await artifact_manager.get_attachment(file_name)
+        data_files_dfs.append(pd.read_json(data_file_content))
+    return data_files_dfs
+
+async def get_pai_agent(project_name: str, data_file_names: List[str], artifact_manager: ArtifactManager = None) -> tuple[PaiAgent, Role]:
+    data_files_dfs = await get_data_files_dfs(data_file_names, artifact_manager)
+    project_folder = get_project_folder(project_name)
+    pai_llm = PaiOpenAI()
+    pai_agent_config = {
+        'llm': pai_llm,
+        'save_charts': True,
+        'save_charts_path': project_folder,
+        'max_retries': AGENT_MAX_RETRIES,
+    }
+    pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
+    
+    return pai_agent
+
+def get_summarizer_agent(constraints: str, llm_model: str, event_bus: EventBus = None) -> Role:
+    return Role(
+        name="Analysis summarizer",
+        instructions="You are a data science manager. You read the responses from a data science bot performing analysis and make sure it is suitable to pass on to the end-user as serializable output.",
+        icon="🤖",
+        constraints=constraints,
+        event_bus=event_bus,
+        register_default_events=True,
+        model=llm_model,
+    )
+
+def query_pai_agent(pai_agent: PaiAgent, query: str) -> str:
+    request = f"""Analyze the data files and respond to the following request: ```{query}```
+        
+    Every time you save a plot, you MUST save it to a different filename. 
+    If you make any plots at any point, you MUST include the file locations in your final explanation.
+    When saving charts during CodeCleaning, you MUST save all the files to unique filenames.
+    """
+    response = pai_agent.chat(request)
+    explanation = pai_agent.explain()
+    logs = pai_agent.logs
+    return response, explanation, logs
+
+async def get_or_create_agent(agent_dict, session_id, create_agent_func, *args):
+    agent = agent_dict.get(session_id)
+    if agent is None:
+        agent = await create_agent_func(*args) if asyncio.iscoroutinefunction(create_agent_func) else create_agent_func(*args)
+        agent_dict[session_id] = agent
+        return agent
+
+def create_explore_data(artifact_manager: ArtifactManager = None) -> Callable:
     summarizer_agents = {}
     pai_agents = {}
 
@@ -124,7 +158,7 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
             description="A request to explore the data files",
         ),
         data_files: List[str] = Field(
-            description="List of filepaths/urls of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
+            description="List of file names or file paths of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
         ),
         project_name: str = Field(
             description="The name of the project, used to create a folder to store the output files",
@@ -138,74 +172,20 @@ def create_explore_data(data_store: HyphaDataStore = None) -> Callable:
         Returns the agent's final response, explanation, logs, and plot urls. Make sure to look at the logs and plot 
         urls to get the full picture of the bot's work. If the bot created any plots, make sure to include the plot urls 
         and their meanings. Each function call creates at most one output plot, so if multiple plots are required the function must be once for each desired output plot"""
-        session_id = get_session_id()
-        pai_agent = pai_agents.get(session_id)
-        summarizer_agent = summarizer_agents.get(session_id)
 
-        if data_store is None:
-            event_bus = None
-        else:
-            event_bus = data_store.get_event_bus()
+        event_bus = artifact_manager.get_event_bus() if artifact_manager else None
+        session_id = get_session_id()
+        pai_agent = await get_or_create_agent(pai_agents, session_id, get_pai_agent, project_name, data_files, artifact_manager)
+        summarizer_agent = await get_or_create_agent(summarizer_agents, session_id, get_summarizer_agent, constraints, CONFIG["llm_model"], event_bus)
         
-        if pai_agent is None:
-            # Initialize the PandasAI agent
-            data_files_dfs = await asyncio.gather(*[read_df(file_path) for file_path in data_files])
-            project_folder, _, _ = get_analyzer_folders(project_name, "PROJECT_FOLDERS", "./projects")
-            pai_llm = PaiOpenAI()
-            pai_agent_config = {
-                'llm': pai_llm,
-                'save_charts': True,
-                'save_charts_path': project_folder,
-                # 'open_charts': True,
-                'max_retries': AGENT_MAX_RETRIES,
-            }
-            pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
-            pai_agents[session_id] = pai_agent
-        
-        if summarizer_agent is None:
-            summarizer_agent = Role(
-            name="Analysis summarizer",
-            instructions="You are an data science manager. You read the responses from a data science bot performing analysis and make sure it is suitable to pass on to the end-user as serializable output.",
-            icon="🤖",
-            constraints=constraints,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=CONFIG["llm_model"],
-        )
-            summarizer_agents[session_id] = summarizer_agent
-        
-        pai_agent_request = f"""Analyze the data files and respond to the following request: ```{explore_request}```
-        
-        Every time you save a plot, you MUST save it to a different filename. 
-        If you make any plots at any point, you MUST include the file locations in your final explanation.
-        When saving charts during CodeCleaning, you MUST save all the files to unique filenames.
-        """
-        response = pai_agent.chat(pai_agent_request)
-        explanation = pai_agent.explain()
-        pai_logs = pai_agent.logs
+        response, explanation, pai_logs = query_pai_agent(pai_agent, explore_request)
         plot_paths = await get_plot_paths(response=response,
                                         explanation=explanation,
                                         pai_logs=pai_logs,
                                         summarizer_agent=summarizer_agent,
                                         session_id=session_id)
         
-        plot_urls = {}
-        for plot_path in plot_paths.plot_paths:
-            with open(plot_path, "rb") as image_file:
-                plot_content = image_file.read()
-                plot_content_base64 = base64.b64encode(plot_content).decode('utf-8')
-            if data_store is not None:
-                plot_name_base = f"plot_{str(uuid.uuid4())}"
-                plot_id = data_store.put(
-                    obj_type="file",
-                    value=plot_content,
-                    name=f"{project_name}:{plot_name_base}.png",
-                )
-                plot_url = data_store.get_url(plot_id)
-            else:
-                plot_url = plot_path
-            plot_urls[plot_path] = plot_url
-
+        plot_urls = plot_paths.plot_paths if artifact_manager is None else await upload_plots(plot_paths, project_name, artifact_manager)
 
         return {
             "data_analysis_agent_final_response": str(response),
@@ -235,8 +215,8 @@ async def main():
         default="",
     )
     args = parser.parse_args()
-    data_store = None
-    run_data_analyzer = create_analyzer_function(data_store=data_store)
+    artifact_manager = None
+    run_data_analyzer = create_explore_data(artifact_manager)
     await run_data_analyzer(**vars(args))
 
 if __name__ == "__main__":
