@@ -4,6 +4,9 @@ from aria_agents.chatbot_extensions.experiment_compiler import (
 from aria_agents.chatbot_extensions.study_suggester import (
     create_study_suggester_function,
 )
+from aria_agents.chatbot_extensions.analyzers import (
+    create_explore_data
+)
 from aria_agents.artifact_manager import ArtifactManager
 from aria_agents.utils import ChatbotExtension
 
@@ -19,6 +22,7 @@ def get_extension(artifact_manager: ArtifactManager = None) -> ChatbotExtension:
         tools=dict(
             study_suggester=create_study_suggester_function(artifact_manager),
             experiment_compiler=create_experiment_compiler_function(artifact_manager),
+            data_analyzer = create_explore_data(artifact_manager),
         ),
     )
 

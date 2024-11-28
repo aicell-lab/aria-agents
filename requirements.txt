@@ -16,12 +16,13 @@ langchain-openai==0.1.7
 langchain-text-splitters==0.0.1
 langchain-experimental==0.0.56
 beautifulsoup4==4.12.3
-pandas==2.2.2
+pandas==1.5.3
 rank-bm25==0.2.2
 html2text==2020.1.16
 setuptools==70.0.0
 PyYAML==6.0.1
 llama_index==0.12.1
 llama-index-readers-papers==0.3.0
+pandasai==2.3.0
 ipdb
 websockets==13.1
