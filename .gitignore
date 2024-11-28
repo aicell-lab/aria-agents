@@ -146,6 +146,11 @@ cython_debug/
 # Visual Studio Code
 .vscode/
 
+# Node
+node_modules/
+package-lock.json
+package.json
+
 # others
 *.bin
 logs/
@@ -157,3 +162,5 @@ authorized_users.json
 # pixi environments
 .pixi
 *.egg-info
+.prettierrc
+eslint.config*

@@ -1,32 +1,29 @@
-import dotenv
-
-dotenv.load_dotenv()
 import argparse
 import asyncio
 import json
 import os
 import uuid
 from typing import Callable, Dict
-
+import dotenv
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
-
 from aria_agents.chatbot_extensions.aux import (
-    PMCQuery,
     SuggestedStudy,
     test_pmc_query_hits,
     create_corpus_function,
     create_query_function,
     write_website,
 )
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.artifact_manager import ArtifactManager
+
+dotenv.load_dotenv()
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
 config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r") as file:
+with open(config_file, "r", encoding="utf-8") as file:
     CONFIG = json.load(file)
 
 
@@ -62,7 +59,9 @@ class StudyWithDiagram(BaseModel):
     )
 
 
-def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callable:
+def create_study_suggester_function(
+    artifact_manager: ArtifactManager = None,
+) -> Callable:
     @schema_tool
     async def run_study_suggester(
         user_request: str = Field(
@@ -81,13 +80,15 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         session_id = pre_session.id if pre_session else str(uuid.uuid4())
 
         project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-        project_folder = os.path.abspath(os.path.join(project_folders, project_name))
-        os.makedirs(project_folder, exist_ok=True)
+        project_folder = os.path.abspath(
+            os.path.join(project_folders, project_name)
+        )
+        event_bus = None
 
-        if data_store is None:
-            event_bus = None
+        if artifact_manager is None:
+            os.makedirs(project_folder, exist_ok=True)
         else:
-            event_bus = data_store.get_event_bus()
+            event_bus = artifact_manager.get_event_bus()
 
         ncbi_querier = Role(
             name="NCBI Querier",
@@ -101,11 +102,11 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
 
         corpus_context = {}
         async with create_session_context(
-            id=session_id, role_setting=ncbi_querier._setting
+            id=session_id, role_setting=ncbi_querier.role_setting
         ):
-            response = await ncbi_querier.acall(
+            await ncbi_querier.acall(
                 [
-                    f"""Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. 
+                    """Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. 
                     Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. 
                     If no queries return hits, adjust the queries to be more general (for example, by removing the `[Title/Abstract]` field specifications from search terms), and try again.
                     Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.""",
@@ -113,7 +114,9 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
                 ],
                 tools=[
                     test_pmc_query_hits,
-                    create_corpus_function(corpus_context, project_folder, data_store)
+                    create_corpus_function(
+                        corpus_context, project_folder, artifact_manager
+                    ),
                 ],
             )
 
@@ -128,30 +131,32 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         )
         query_function = create_query_function(corpus_context["query_engine"])
         async with create_session_context(
-            id=session_id, role_setting=study_suggester._setting
+            id=session_id, role_setting=study_suggester.role_setting
         ):
             suggested_study = await study_suggester.acall(
                 [
-                    f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",       
+                    f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
                     "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
                 ],
                 tools=[query_function],
                 output_schema=SuggestedStudy,
             )
-        if data_store is None:
+        if artifact_manager is None:
             # Save the suggested study to a JSON file
-            suggested_study_file = os.path.join(project_folder, "suggested_study.json")
-            with open(suggested_study_file, "w") as f:
+            suggested_study_file = os.path.join(
+                project_folder, "suggested_study.json"
+            )
+            with open(suggested_study_file, "w", encoding="utf-8") as f:
                 json.dump(suggested_study.dict(), f, indent=4)
             suggested_study_url = "file://" + suggested_study_file
         else:
-            # Save the suggested study to the HyphaDataStore
-            suggested_study_id = data_store.put(
-                obj_type="json",
-                value=suggested_study.dict(),
+            suggested_study_id = await artifact_manager.put(
+                value=suggested_study.json(),
                 name=f"{project_name}:suggested_study.json",
             )
-            suggested_study_url = data_store.get_url(suggested_study_id)
+            suggested_study_url = await artifact_manager.get_url(
+                name=suggested_study_id
+            )
 
         diagrammer = Role(
             name="Diagrammer",
@@ -163,7 +168,7 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
             model=CONFIG["llm_model"],
         )
         async with create_session_context(
-            id=session_id, role_setting=study_suggester._setting
+            id=session_id, role_setting=study_suggester.role_setting
         ):
             study_diagram = await diagrammer.aask(
                 [
@@ -177,7 +182,11 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
         )
 
         summary_website_url = await write_website(
-            study_with_diagram, event_bus, data_store, "suggested_study", project_folder
+            study_with_diagram,
+            event_bus,
+            artifact_manager,
+            "suggested_study",
+            project_folder,
         )
 
         return {
@@ -189,7 +198,9 @@ def create_study_suggester_function(data_store: HyphaDataStore = None) -> Callab
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Run the study suggester pipeline")
+    parser = argparse.ArgumentParser(
+        description="Run the study suggester pipeline"
+    )
     parser.add_argument(
         "--user_request",
         type=str,
@@ -209,19 +220,14 @@ async def main():
         default="",
     )
     args = parser.parse_args()
+    artifact_manager = None
 
-    # from hypha_rpc import connect_to_server
-    # server = await connect_to_server({"server_url": "https://ai.imjoy.io"})
-    # data_store = HyphaDataStore()
-    # await data_store.setup(server)
-    data_store = None
-
-    run_study_suggester = create_study_suggester_function(data_store)
+    run_study_suggester = create_study_suggester_function(artifact_manager)
     await run_study_suggester(**vars(args))
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except Exception as e:
+    except (RuntimeError, ValueError, IOError) as e:
         print(e)

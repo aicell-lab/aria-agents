@@ -1,6 +1,3 @@
-import dotenv
-
-dotenv.load_dotenv()
 import asyncio
 import datetime
 import json
@@ -11,7 +8,11 @@ import secrets
 from typing import Any, Dict, List, Optional
 
 import aiofiles
+import dotenv
 import pkg_resources
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from hypha_rpc import connect_to_server, login
 from pydantic import BaseModel, Field
 from schema_agents import Message, Role
@@ -23,13 +24,15 @@ from aria_agents.chatbot_extensions import (
     extension_to_tools,
     get_builtin_extensions,
 )
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.artifact_manager import ArtifactManager
 from aria_agents.quota import QuotaManager
 from aria_agents.utils import (
     ChatbotExtension,
     LegacyChatbotExtension,
     legacy_extension_to_tool,
 )
+
+dotenv.load_dotenv()
 
 logger = logging.getLogger("bioimageio-chatbot")
 # set logger level
@@ -39,16 +42,9 @@ logger.setLevel(logging.INFO)
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
 config_file = os.path.join(this_dir, "chatbot_extensions", "config.json")
-with open(config_file, "r") as file:
+with open(config_file, "r", encoding="utf-8") as file:
     CONFIG = json.load(file)
 
-
-class UserProfile(BaseModel):
-    """The user's profile. This will be used to personalize the response to the user."""
-
-    name: str = Field(description="The user's name.", max_length=32)
-    occupation: str = Field(description="The user's occupation.", max_length=128)
-    background: str = Field(description="The user's background.", max_length=256)
 
 class QuestionWithHistory(BaseModel):
     """The user's question, chat history, and user's profile."""
@@ -57,16 +53,8 @@ class QuestionWithHistory(BaseModel):
     chat_history: Optional[List[Dict[str, str]]] = Field(
         None, description="The chat history."
     )
-    user_profile: Optional[UserProfile] = Field(
-        None,
-        description="The user's profile. You should use this to personalize the response based on the user's background and occupation.",
-    )
     chatbot_extensions: Optional[List[Dict[str, Any]]] = Field(
         None, description="Chatbot extensions."
-    )
-    state_prompt: Optional[str] = Field(
-        None,
-        description="The state of the user's interface, including attachments uploaded by the user."
     )
     context: Optional[Dict[str, Any]] = Field(
         None, description="The context of request."
@@ -85,7 +73,9 @@ class RichResponse(BaseModel):
 
     text: str = Field(description="Response text")
     steps: List[ResponseStep] = Field(description="Intermediate steps")
-    remaining_quota: Optional[float] = Field(None, description="Remaining quota")
+    remaining_quota: Optional[float] = Field(
+        None, description="Remaining quota"
+    )
 
 
 def create_assistants(builtin_extensions, event_bus: EventBus):
@@ -97,9 +87,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         """Response to the user's query."""
         steps = []
         inputs = (
-            [question_with_history.user_profile]
-            + [question_with_history.state_prompt]
-            + list(question_with_history.chat_history)
+            list(question_with_history.chat_history)
             + [question_with_history.question]
         )
         assert question_with_history.chatbot_extensions is not None
@@ -115,11 +103,16 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
             elif "name" in ext and ext["name"] in extensions_by_name:
                 extension = extensions_by_name[ext["name"]]
             else:
-                if "tools" not in ext and "execute" in ext and "get_schema" in ext:
+                if (
+                    "tools" not in ext
+                    and "execute" in ext
+                    and "get_schema" in ext
+                ):
                     # legacy chatbot extension
                     extension = LegacyChatbotExtension.model_validate(ext)
                     logger.warning(
-                        f"Legacy chatbot extension is deprecated. Please use the new ChatbotExtension interface for {extension.name} with multi-tool support."
+                        "Legacy chatbot extension is deprecated. Please use the new ChatbotExtension interface for %s with multi-tool support.",
+                        extension.name,
                     )
                 else:
                     extension = ChatbotExtension.model_validate(ext)
@@ -157,7 +150,10 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         tool_usage_prompt = (
             "Tool usage guidelines (* represent the prefix of a tool group):\n"
             + "\n".join(
-                [f" - {ext}:{tool_prompt}" for ext, tool_prompt in tool_prompts.items()]
+                [
+                    f" - {ext}:{tool_prompt}"
+                    for ext, tool_prompt in tool_prompts.items()
+                ]
             )
         )
         response, metadata = await role.acall(
@@ -172,7 +168,8 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         for idx, step_list in enumerate(result_steps):
             steps.append(
                 ResponseStep(
-                    name=f"step-{idx}", details={"details": convert_to_dict(step_list)}
+                    name=f"step-{idx}",
+                    details={"details": convert_to_dict(step_list)},
                 )
             )
         return RichResponse(text=response, steps=steps)
@@ -189,7 +186,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
     aria = Role(
         name="Aria",
         instructions=aria_instructions,
-        icon="./img/favicon-32x32.png",
+        icon="./chat/img/favicon-32x32.png",
         actions=[respond_to_user],
         event_bus=event_bus,
         register_default_events=True,
@@ -220,35 +217,74 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
     chat_history_json = json.dumps(chat_his_dict)
 
     # Write the serialized chat history to the json file
-    async with aiofiles.open(chat_log_full_path, mode="w", encoding="utf-8") as f:
+    async with aiofiles.open(
+        chat_log_full_path, mode="w", encoding="utf-8"
+    ) as f:
         await f.write(chat_history_json)
 
 
-async def connect_server(server_url):
-    """Connect to the server and register the chat service."""
+async def get_server(server_url, workspace_name=None, provided_token=None):
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
+
     if login_required:
-        token = await login({"server_url": server_url})
+        if provided_token is None:
+            token = await login({"server_url": server_url})
+        else:
+            token = provided_token
     else:
         token = None
-    server = await connect_to_server(
-        {"server_url": server_url, "token": token, "method_timeout": 100}
+    server = await connect_to_server({
+        "server_url": server_url,
+        "token": token,
+        "method_timeout": 500,
+        **({"workspace": workspace_name} if workspace_name is not None else {})
+    })
+    
+    return server
+
+async def connect_server(server_url):
+    """Connect to the server and register the chat service."""
+    workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
+    token = os.environ.get("WORKSPACE_TOKEN")
+    chat_server = await get_server(server_url, workspace_name, token)
+    await register_chat_service(chat_server)
+
+async def serve_frontend(server, service_id):
+    app = FastAPI(root_path=f"/aria-agents/apps/{service_id}")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    app.mount("/chat", StaticFiles(directory=static_dir), name="chat")
+
+    async def serve_fastapi(args, context=None):
+        await app(args["scope"], args["receive"], args["send"])
+
+    @app.get("/", response_class=HTMLResponse)
+    async def root():
+        return FileResponse(os.path.join(static_dir, "index.html"))
+
+    await server.register_service(
+        {
+            "id": service_id,
+            "name": "Aria Agents UI",
+            "type": "asgi",
+            "serve": serve_fastapi,
+            "config": {"visibility": "public"},
+        }
     )
-    await register_chat_service(server)
 
 
 async def register_chat_service(server):
     """Hypha startup function."""
-    debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
+    # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
     event_bus = EventBus(name="AriaAgents")
-    data_store = HyphaDataStore(event_bus)
-    await data_store.setup(server)
-    builtin_extensions = get_builtin_extensions(data_store)
+    artifact_manager = ArtifactManager(event_bus)
+    builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
     default_quota = float(os.environ.get("BIOIMAGEIO_DEFAULT_QUOTA", "inf"))
     reset_period = os.environ.get("BIOIMAGEIO_DEFAULT_RESET_PERIOD", "hourly")
-    quota_database_path = os.environ.get("BIOIMAGEIO_QUOTA_DATABASE_PATH", ":memory:")
+    quota_database_path = os.environ.get(
+        "BIOIMAGEIO_QUOTA_DATABASE_PATH", ":memory:"
+    )
     quota_manager = QuotaManager(
         db_file=quota_database_path,
         vip_list=[],
@@ -268,15 +304,23 @@ async def register_chat_service(server):
 
     def load_authorized_emails():
         if login_required:
-            authorized_users_path = os.environ.get("BIOIMAGEIO_AUTHORIZED_USERS_PATH")
+            authorized_users_file_name = os.environ.get(
+                "ARIA_AGENTS_AUTHORIZED_USERS_PATH",
+                "aria_agents_authorized_users.json",
+            )
+            authorized_users_path = os.path.join(
+                this_dir, authorized_users_file_name
+            )
             if authorized_users_path:
                 assert os.path.exists(
                     authorized_users_path
                 ), f"The authorized users file is not found at {authorized_users_path}"
-                with open(authorized_users_path, "r") as f:
+                with open(authorized_users_path, "r", encoding="utf-8") as f:
                     authorized_users = json.load(f)["users"]
                 authorized_emails = [
-                    user["email"] for user in authorized_users if "email" in user
+                    user["email"]
+                    for user in authorized_users
+                    if "email" in user
                 ]
             else:
                 authorized_emails = None
@@ -306,7 +350,9 @@ async def register_chat_service(server):
             "feedback": user_report["feedback"],
             "conversations": user_report["messages"],
             "session_id": user_report["session_id"],
-            "timestamp": str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            "timestamp": str(
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ),
             "user": context.get("user"),
             "version": version,
         }
@@ -314,15 +360,20 @@ async def register_chat_service(server):
         filename = f"report-{session_id}.json"
         # Create a chat_log.json file inside the session folder
         chat_log_full_path = os.path.join(chat_logs_path, filename)
-        await save_chat_history(chat_log_full_path, chat_his_dict)
-        print(f"User report saved to {filename}")
+        try:
+            await save_chat_history(chat_log_full_path, chat_his_dict)
+            print(f"User report saved to {filename}")
+        except Exception as e:
+            print(f"Failed to save user report: {e}")
 
     async def talk_to_assistant(
         assistant_name,
         session_id,
+        user_id,
+        user_token,
         user_message: QuestionWithHistory,
         status_callback,
-        artefact_callback,
+        artifact_callback,
         user,
         cross_assistant=False,
     ):
@@ -337,30 +388,40 @@ async def register_chat_service(server):
             assistant_name in assistant_names
         ), f"Assistant {assistant_name} is not found."
         # find assistant by name
-        assistant = next(a["agent"] for a in assistants if a["name"] == assistant_name)
+        assistant = next(
+            a["agent"] for a in assistants if a["name"] == assistant_name
+        )
         session_id = session_id or secrets.token_hex(8)
+        artifact_server = await get_server(server_url="https://hypha.aicell.io", provided_token=user_token)
+        await artifact_manager.setup(artifact_server, user_id, session_id, "public/artifact-manager")
 
         # Listen to the `stream` event
         async def stream_callback(message):
             if message.type in ["function_call", "text"]:
-                if message.session.id == session_id:
+                try:
                     await status_callback(message.model_dump())
+                except Exception as exc:
+                    message.session.stop = True
+                    raise RuntimeError("The status callback returned an error.") from exc
 
         event_bus.on("stream", stream_callback)
 
         # Listen to the `store_put` event
-        async def store_put_callback(store_obj):
-            if store_obj["type"] == "file" and store_obj["name"].endswith(".html"):
-                summary_website = store_obj["value"]
-                url = data_store.get_url(store_obj["id"])
-                await artefact_callback(summary_website, url)
+        async def store_put_callback(file_name):
+            if file_name.endswith(".html"):
+                summary_website = await artifact_manager.get(file_name)
+                url = await artifact_manager.get_url(file_name)
+                await artifact_callback(summary_website, url)
 
         event_bus.on("store_put", store_put_callback)
 
         try:
             response = await assistant.handle(
                 Message(
-                    content="", data=user_message, role="User", session_id=session_id
+                    content="",
+                    data=user_message,
+                    role="User",
+                    session_id=session_id,
                 )
             )
         except Exception as e:
@@ -395,7 +456,9 @@ async def register_chat_service(server):
             version = pkg_resources.get_distribution("aria_agents").version
             chat_his_dict = {
                 "conversations": user_message.chat_history,
-                "timestamp": str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                "timestamp": str(
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ),
                 "user": user_message.context.get("user"),
                 "assistant_name": assistant_name,
                 "version": version,
@@ -409,17 +472,17 @@ async def register_chat_service(server):
     async def chat(
         text,
         chat_history,
-        user_profile=None,
         status_callback=None,
-        artefact_callback=None,
+        artifact_callback=None,
         session_id=None,
+        user_id=None,
+        user_token=None,
         extensions=None,
-        state_prompt=None,
         assistant_name="Aria",
         context=None,
     ):
         if login_required and context and context.get("user"):
-            logger.info(f"User: {context.get('user')}, Message: {text}")
+            logger.info("User: %s, Message: %s", context.get("user"), text)
             assert check_permission(
                 context.get("user")
             ), "You don't have permission to use the chatbot, please sign up and wait for approval"
@@ -440,7 +503,9 @@ async def register_chat_service(server):
                 )
             # Remove the @name part from the text
             text = re.sub(r"@(\w+)", "", text, 1).strip()
-            assistant_name = assistants[assistant_names.index(assistant_name)]["name"]
+            assistant_name = assistants[assistant_names.index(assistant_name)][
+                "name"
+            ]
             cross_assistant = True
         else:
             cross_assistant = False
@@ -448,18 +513,18 @@ async def register_chat_service(server):
         m = QuestionWithHistory(
             question=text,
             chat_history=chat_history,
-            user_profile=UserProfile.model_validate(user_profile),
             chatbot_extensions=extensions,
-            state_prompt=state_prompt,
             context=context,
         )
 
         return await talk_to_assistant(
             assistant_name,
             session_id,
+            user_id,
+            user_token,
             m,
             status_callback,
-            artefact_callback,
+            artifact_callback,
             context.get("user"),
             cross_assistant,
         )
@@ -480,7 +545,7 @@ async def register_chat_service(server):
         "code_interpreter",
     ]
     version = pkg_resources.get_distribution("aria_agents").version
-    hypha_service_info = await server.register_service(
+    await server.register_service(
         {
             "name": "Aria Agents",
             "id": "aria-agents",
@@ -495,24 +560,21 @@ async def register_chat_service(server):
         }
     )
 
-    server_info = await server.get_connection_info()
+    await serve_frontend(server, "aria-agents-chat")
 
-    server_url = server.config["public_base_url"]
-
-    service_id = hypha_service_info["id"]
+    public_base_url = server.config["public_base_url"]
     print("=============================\n")
-    if server_url.startswith("http://localhost") or server_url.startswith(
-        "http://127.0.0.1"
-    ):
-        print(f"To test the Aria Assistant locally, visit: {server_url}/chat")
-    print(
-        # f"\nThe chat client are available publicly at: https://bioimage.io/chat?server={server_url}&service_id={service_id}\n"
-        "\n=============================\n"
-    )
+    if public_base_url.startswith(
+        "http://localhost"
+    ) or public_base_url.startswith("http://127.0.0.1"):
+        print(
+            f"To test the Aria Assistant locally, visit: {public_base_url}/chat"
+        )
+    print("\n=============================\n")
 
 
 if __name__ == "__main__":
-    server_url = """https://ai.imjoy.io"""
+    imjoy_server_url = """https://ai.imjoy.io"""
     loop = asyncio.get_event_loop()
-    loop.create_task(connect_server(server_url))
+    loop.create_task(connect_server(imjoy_server_url))
     loop.run_forever()

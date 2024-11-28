@@ -1,13 +1,11 @@
-import dotenv
-
-dotenv.load_dotenv()
 import argparse
 import asyncio
 import json
 import os
+import shutil
 import uuid
 from typing import Callable, Dict, List, Union
-
+import dotenv
 from llama_index.core import load_index_from_storage
 from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.core.storage import StorageContext
@@ -16,18 +14,19 @@ from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
 from tqdm.auto import tqdm
-
 from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
     create_query_function,
     write_website,
 )
-from aria_agents.hypha_store import HyphaDataStore
+from aria_agents.artifact_manager import ArtifactManager
+
+dotenv.load_dotenv()
 
 # Load the configuration file
 this_dir = os.path.dirname(os.path.abspath(__file__))
 config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r") as file:
+with open(config_file, "r", encoding="utf-8") as file:
     CONFIG = json.load(file)
 
 
@@ -52,7 +51,10 @@ class ExperimentalProtocol(BaseModel):
 
     protocol_title: str = Field(..., description="The title of the protocol")
     # steps : List[str] = Field(..., description="A list of steps that must be followed in order to carry out the experiment. This string MUST be in markdown format and should contain no irregular characters.")
-    equipment: List[str] = Field(..., description="A list of equipment, materials, reagents, and devices needed for the entire protocol.")
+    equipment: List[str] = Field(
+        ...,
+        description="A list of equipment, materials, reagents, and devices needed for the entire protocol.",
+    )
     sections: List[ProtocolSection] = Field(
         ...,
         description="A list of sections that must be followed in order to carry out the experiment.",
@@ -90,7 +92,7 @@ async def get_protocol_feedback(
     else:
         pf = existing_feedback
     async with create_session_context(
-        id=session_id, role_setting=protocol_manager._setting
+        id=session_id, role_setting=protocol_manager.role_setting
     ):
         res = await protocol_manager.aask(
             [
@@ -143,29 +145,34 @@ async def write_protocol(
     role: Role,
     session_id: str = None,
 ) -> ExperimentalProtocol:
-    async with create_session_context(id=session_id, role_setting=role._setting):
+    async with create_session_context(
+        id=session_id, role_setting=role.role_setting
+    ):
         if isinstance(protocol, SuggestedStudy):
-            prompt = f"""Take the following suggested study and use it to produce a detailed protocol telling a student exactly what steps they should follow in the lab to collect data. Do not include any data analysis or conclusion-drawing steps, only data collection."""
+            prompt = """Take the following suggested study and use it to produce a detailed protocol telling a student exactly what steps they should follow in the lab to collect data. Do not include any data analysis or conclusion-drawing steps, only data collection."""
             messages = [prompt, protocol]
             protocol_updated = await role.aask(
                 messages, output_schema=ExperimentalProtocol
             )
         else:
-            prompt = f"""You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
+            prompt = """You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
             messages = [prompt, protocol, feedback]
             query_messages = [x for x in messages] + [
                 "Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."
             ]
-            queries = await role.aask(query_messages, output_schema=CorpusQueries)
+            queries = await role.aask(
+                query_messages, output_schema=CorpusQueries
+            )
             queries_responses = CorpusQueriesResponses(
                 responses={
-                    query: await query_function(query) for query in queries.queries
+                    query: await query_function(query)
+                    for query in queries.queries
                 }
             )
             protocol_messages = [x for x in messages] + [
-                f"You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
+                "You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
                 queries_responses,
-                f"Use these protocol corpus query responses to update and revise your protocol according to the feedback. Save the queries you used into the running list of previous queries. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io",
+                "Use these protocol corpus query responses to update and revise your protocol according to the feedback. Save the queries you used into the running list of previous queries. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io",
             ]
             protocol_updated = await role.aask(
                 protocol_messages, output_schema=ExperimentalProtocol
@@ -173,7 +180,9 @@ async def write_protocol(
     return protocol_updated
 
 
-def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Callable:
+def create_experiment_compiler_function(
+    artifact_manager: ArtifactManager = None,
+) -> Callable:
     @schema_tool
     async def run_experiment_compiler(
         project_name: str = Field(
@@ -191,38 +200,33 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
         """Generate an investigation from a suggested study"""
         pre_session = current_session.get()
         session_id = pre_session.id if pre_session else str(uuid.uuid4())
+        event_bus = None
+        project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
+        project_folder = os.path.abspath(
+            os.path.join(project_folders, project_name)
+        )
+        query_index_dir = None
 
-        if data_store is None:
-            project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-            project_folder = os.path.abspath(
-                os.path.join(project_folders, project_name)
-            )
-            event_bus = None
-        else:
-            event_bus = data_store.get_event_bus()
-
-        if data_store is None:
-            # Load the suggested study from a JSON file
-            suggested_study_file = os.path.join(project_folder, "suggested_study.json")
-            suggested_study = SuggestedStudy(
-                **json.loads(open(suggested_study_file).read())
-            )
-
-            # Set the query index directory to the project folder
+        if artifact_manager is None:
             query_index_dir = os.path.join(project_folder, "query_index")
+            # Load the suggested study from a JSON file
+            suggested_study_file = os.path.join(
+                project_folder, "suggested_study.json"
+            )
+            with open(suggested_study_file, encoding="utf-8") as ss_file:
+                suggested_study = SuggestedStudy(**json.load(ss_file))
         else:
-            # TODO: Find a better way to get the suggested study from the datastore
-            for obj in data_store.storage.values():
-                if obj["name"] == f"{project_name}:suggested_study.json":
-                    # Load the suggested study from the HyphaDataStore
-                    suggested_study = SuggestedStudy(**obj["value"])
-                if obj["name"] == f"{project_name}:pubmed_index_dir":
-                    # Set the query index directory to the project folder
-                    query_index_dir = obj["value"]
+            query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
+            event_bus = artifact_manager.get_event_bus()
+            suggested_study_json_str = await artifact_manager.get(f"{project_name}:suggested_study.json")
+            suggested_study_json = json.loads(suggested_study_json_str)
+            suggested_study = SuggestedStudy(**suggested_study_json)
 
+        os.makedirs(query_index_dir, exist_ok=True)
         query_storage_context = StorageContext.from_defaults(
             persist_dir=query_index_dir
         )
+            
         query_index = load_index_from_storage(query_storage_context)
         query_engine = CitationQueryEngine.from_args(
             query_index,
@@ -252,7 +256,6 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
             model=CONFIG["llm_model"],
         )
 
-
         protocol = await write_protocol(
             protocol=suggested_study,
             feedback=None,
@@ -260,7 +263,6 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
             role=protocol_writer,
             session_id=session_id,
         )
-
 
         protocol_feedback = await get_protocol_feedback(
             protocol, protocol_manager, session_id=session_id
@@ -276,36 +278,41 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
                 role=protocol_writer,
                 session_id=session_id,
             )
-            
+
             protocol_feedback = await get_protocol_feedback(
-                protocol, protocol_manager, protocol_feedback, session_id=session_id
+                protocol,
+                protocol_manager,
+                protocol_feedback,
+                session_id=session_id,
             )
             revisions += 1
             pbar.update(1)
         pbar.close()
 
-        if data_store is None:
+        if artifact_manager is None:
             # Save the suggested study to a JSON file
-            protocol_file = os.path.join(project_folder, "experimental_protocol.json")
-            with open(protocol_file, "w") as f:
+            protocol_file = os.path.join(
+                project_folder, "experimental_protocol.json"
+            )
+            with open(protocol_file, "w", encoding="utf-8") as f:
                 json.dump(protocol.dict(), f, indent=4)
             protocol_url = "file://" + protocol_file
-            
+
         else:
-            # Save the suggested study to the HyphaDataStore
-            protocol_id = data_store.put(
-                obj_type="json",
-                value=protocol.dict(),
+            # Save the suggested study to the Artifact Manager
+            protocol_id = await artifact_manager.put(
+                value=protocol.model_dump_json(),
                 name=f"{project_name}:experimental_protocol.json",
             )
-            protocol_url = data_store.get_url(protocol_id)
-            
-        
+            protocol_url = await artifact_manager.get_url(protocol_id)
 
         summary_website_url = await write_website(
-            protocol, event_bus, data_store, "experimental_protocol", project_folder
+            protocol,
+            event_bus,
+            artifact_manager,
+            "experimental_protocol",
+            project_folder,
         )
-        
 
         return {
             "summary_website_url": summary_website_url,
@@ -318,7 +325,10 @@ def create_experiment_compiler_function(data_store: HyphaDataStore = None) -> Ca
 async def main():
     parser = argparse.ArgumentParser(description="Generate an investigation")
     parser.add_argument(
-        "--project_name", type=str, help="The name of the project", default="test"
+        "--project_name",
+        type=str,
+        help="The name of the project",
+        default="test",
     )
     parser.add_argument(
         "--max_revisions",
@@ -341,5 +351,5 @@ async def main():
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except Exception as e:
+    except (RuntimeError, ValueError, IOError) as e:
         print(e)
