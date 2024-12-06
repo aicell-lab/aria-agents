@@ -113,7 +113,7 @@ function ChatHistory({ chatHistory, isSending }) {
 						</div>
 					)}
 			</div>
-			{isSending && chat.status === "in_progress" && (
+			{isSending && index == (chatArray.length-1) && (
 				<div className="absolute inset-0 flex items-center justify-center">
 					<div className="spinner"></div>
 				</div>
