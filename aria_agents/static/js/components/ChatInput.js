@@ -100,7 +100,7 @@ function ChatInput({
 								htmlFor="fileUpload"
 								className="cursor-pointer"
 							>
-								Drag & drop files, or click to browse
+								Drag & drop tabular files (e.g. .csv, .xls, .txt), or click to browse
 							</label>
 						</div>
 					)}
