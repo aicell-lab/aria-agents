@@ -223,6 +223,39 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
         await f.write(chat_history_json)
 
 
+async def add_probes(server):
+    async def is_available(service_id):
+        try:
+            svc = await server.get_service(service_id)
+            return svc is not None
+        except Exception:
+            return False
+        
+    
+    def check_readiness():
+        services_are_available = asyncio.gather(
+            is_available("public/artifact-manager"),
+            is_available("aria-agents-chat"),
+            is_available("aria-agents"),
+        )
+        if all(services_are_available):
+            return {"status": "ok"}
+        
+        return {"status": "not ready", "message": "Some services are not available"}
+    
+    def check_liveness():
+        try:
+            asyncio.get_running_loop()
+            return {"status": "ok"}
+        except RuntimeError:
+            return {"status": "error", "message": "Event loop not running"}
+    
+    await server.register_probe({
+        "readiness": check_readiness,
+        "liveness": check_liveness,
+    })
+
+
 async def get_server(server_url, workspace_name=None, provided_token=None):
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
 
@@ -247,6 +280,7 @@ async def connect_server(server_url):
     workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
     token = os.environ.get("WORKSPACE_TOKEN")
     chat_server = await get_server(server_url, workspace_name, token)
+    await add_probes(chat_server)
     await register_chat_service(chat_server)
 
 async def serve_frontend(server, service_id):
