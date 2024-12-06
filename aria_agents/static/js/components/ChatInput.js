@@ -12,13 +12,17 @@ function ChatInput({
 }) {
 	return (<>
 		<div className="flex flex-row items-center">
-			<input
+			<textarea
 				type="text"
 				placeholder={placeholder}
 				value={question}
 				onChange={(e) => setQuestion(e.target.value)}
-				className="flex-grow p-3 border border-gray-300 rounded mb-2 mr-2 text-lg"
-				onKeyPress={(e) => e.key === "Enter" && handleSend()}
+				onInput={(e) => {
+					e.target.style.height = 'auto';
+					e.target.style.height = `${e.target.scrollHeight}px`;
+				}}
+				className="flex-grow p-3 border border-gray-300 rounded mb-2 text-lg overflow-hidden resize-none"
+				rows="1"
 			/>
 			{shareChat &&
 				<button onClick={shareChat} className="p-3 border border-gray-300 mb-2 rounded text-lg">
