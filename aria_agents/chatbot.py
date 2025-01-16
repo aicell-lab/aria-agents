@@ -280,6 +280,7 @@ async def connect_server(server_url):
     workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
     token = os.environ.get("WORKSPACE_TOKEN")
     chat_server = await get_server(server_url, workspace_name, token)
+    await add_probes(chat_server)
     await register_chat_service(chat_server)
 
 async def serve_frontend(server, service_id):
@@ -308,7 +309,6 @@ async def serve_frontend(server, service_id):
 async def register_chat_service(server):
     """Hypha startup function."""
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
-    await add_probes(server)
     event_bus = EventBus(name="AriaAgents")
     artifact_manager = ArtifactManager(event_bus)
     builtin_extensions = get_builtin_extensions(artifact_manager)
