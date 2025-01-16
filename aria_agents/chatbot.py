@@ -250,7 +250,7 @@ async def add_probes(server):
         except RuntimeError:
             return {"status": "error", "message": "Event loop not running"}
     
-    await server.register_probe({
+    await server.register_probes({
         "readiness": check_readiness,
         "liveness": check_liveness,
     })
