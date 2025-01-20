@@ -179,7 +179,11 @@ function App() {
 				parent_id: `${artifactWorkspace}/aria-agents-chats`,
 				alias: `aria-agents-chats:${sessionId}`,
 				manifest: datasetManifest,
-				...(permissions && { config: permissions }),
+				...(permissions && {
+					config: {
+						permissions: permissions
+					}
+				}),
 				_rkwargs: true
 			});
 		} catch {
@@ -187,7 +191,11 @@ function App() {
 			await artifactManager.edit({
 				artifact_id: chatId,
 				manifest: datasetManifest,
-				...(permissions && { config: permissions }),
+				...(permissions && {
+					config: {
+						permissions: permissions
+					}
+				}),
 				_rkwargs: true
 			});
 			await artifactManager.commit(chatId);
