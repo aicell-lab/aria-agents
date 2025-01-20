@@ -59,7 +59,7 @@ class StudyWithDiagram(BaseModel):
         description="The diagram illustrating the workflow for the suggested study"
     )
 
-
+# TODO: improve relevancy and usefulness of citations
 def create_study_suggester_function(
     artifact_manager: ArtifactManager = None,
 ) -> Callable:
