@@ -2,7 +2,7 @@ from aria_agents.chatbot_extensions.experiment_compiler import (
     create_experiment_compiler_function,
 )
 from aria_agents.chatbot_extensions.study_suggester import (
-    create_study_suggester_function,
+    create_study_suggester_function, create_pubmed_query_function, run_study_with_diagram, create_summary_website_function
 )
 from aria_agents.chatbot_extensions.analyzers import (
     create_explore_data
@@ -23,6 +23,9 @@ def get_extension(artifact_manager: ArtifactManager = None) -> ChatbotExtension:
             study_suggester=create_study_suggester_function(artifact_manager),
             experiment_compiler=create_experiment_compiler_function(artifact_manager),
             data_analyzer = create_explore_data(artifact_manager),
+            query_pubmed = create_pubmed_query_function(artifact_manager),
+            run_study_with_diagram = run_study_with_diagram,
+            create_summary_website = create_summary_website_function(artifact_manager)
         ),
     )
 
