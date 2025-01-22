@@ -31,16 +31,16 @@ with open(config_file, "r", encoding="utf-8") as file:
 
 
 class ProtocolSection(BaseModel):
-    """A section of an experimental protocol encompassing a specific set of steps falling under a coherent theme. The steps should be taken from existing protocols"""
+    """A section of an experimental protocol encompassing a specific set of steps falling under a coherent theme. The steps should be taken from existing protocols. When a step is taken from a reference protocol, you MUST include an inline citation. For example, in a section you might have the step `2. Wash cells in buffer for 30 minutes [2]` where `[2]` cites the reference protocol."""
 
     section_name: str = Field(..., description="The name of the section")
     steps: List[str] = Field(
         ...,
-        description="A list of steps that must be followed in order to carry out the experiment.",
+        description="A list of steps that must be followed in order to carry out the experiment. If you have used a reference for a step, you MUST link to the reference that you specifically used for this step.",
     )
     references: List[str] = Field(
         ...,
-        description="A list of references to existing protocols that the steps were taken from. These references should be in the form of URLs to the original protocol.",
+        description="A list of references to existing protocols that the steps were taken from. These references should be in numbered link forms of URLs to the original protocol. For example the link text should be something like `[2]` and the link content should link to the reference. The numbers should be consistent with how they are cited in other sections of this generated protocol.",
     )
 
 

@@ -35,15 +35,15 @@ class SummaryWebsite(BaseModel):
             "The html code for a single page website summarizing the information in the"
             " suggested study or experimental protocol appropriately including any"
             " diagrams. Make sure to include the original user request as well if"
-            " available. References should appear as links"
+            " available. References should appear as numbered links"
             " (e.g. a url`https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11129507/` can"
-            " appear as a link with the name `PMC11129507` referencing the PMCID)"
+            " appear as a link with link text `[1]` referencing the link). Other sections of the text should refer to this reference by number"
         )
     )
 
 
 class SuggestedStudy(BaseModel):
-    """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge"""
+    """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge literature review. Any time a reference is used anywhere, it MUST be cited directly, e.g. the specific sentence that uses the reference should include an annotation to that specific reference"""
 
     user_request: str = Field(
         description="The original user request. This MUST be included."
@@ -69,7 +69,7 @@ class SuggestedStudy(BaseModel):
         )
     )
     references: List[str] = Field(
-        description="Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design."
+        description="Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design. Any time a reference is used in the other sections, the specific sentence MUST be linked specifically to one of these references. References should be numbered and numbering should be consistent with their appearances in other sections."
     )
 
 
