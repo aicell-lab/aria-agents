@@ -164,3 +164,4 @@ authorized_users.json
 *.egg-info
 .prettierrc
 eslint.config*
+*.env
