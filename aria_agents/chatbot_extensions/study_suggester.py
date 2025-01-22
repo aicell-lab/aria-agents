@@ -58,13 +58,49 @@ class StudyWithDiagram(BaseModel):
     study_diagram: StudyDiagram = Field(
         description="The diagram illustrating the workflow for the suggested study"
     )
-
-
-def create_study_suggester_function(
+    
+def create_summary_website_function(
     artifact_manager: ArtifactManager = None,
 ) -> Callable:
     @schema_tool
-    async def run_study_suggester(
+    async def create_summary_website(
+        suggested_study: SuggestedStudy = Field(
+            description="The suggested study to test a new hypothesis"
+        ),
+        study_diagram: StudyDiagram = Field(
+            description="The diagram illustrating the workflow for the suggested study"
+        ),
+        project_name: str = Field(
+            description="The name of the project, used to create a folder to store the output files"
+        ),
+        study_with_diagram: StudyWithDiagram = Field(
+            description="The suggested study with the diagram"
+        ),
+    ) -> Dict[str, str]:
+        project_folder = get_project_folder(project_name)
+        event_bus = None
+
+        if artifact_manager is None:
+            os.makedirs(project_folder, exist_ok=True)
+        else:
+            event_bus = artifact_manager.get_event_bus()
+
+        summary_website_url = await write_website(
+            study_with_diagram,
+            event_bus,
+            artifact_manager,
+            "suggested_study",
+            project_folder,
+        )
+
+        return summary_website_url,
+    return create_summary_website
+
+def create_pubmed_query_function(
+    artifact_manager: ArtifactManager = None,
+) -> Callable:
+    @schema_tool
+    async def query_pubmed(
         user_request: str = Field(
             description="The user's request to create a study around, framed in terms of a scientific question"
         ),
@@ -76,7 +112,6 @@ def create_study_suggester_function(
             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
         ),
     ) -> Dict[str, str]:
-        """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
         pre_session = current_session.get()
         session_id = pre_session.id if pre_session else str(uuid.uuid4())
 
@@ -87,7 +122,7 @@ def create_study_suggester_function(
             os.makedirs(project_folder, exist_ok=True)
         else:
             event_bus = artifact_manager.get_event_bus()
-
+        
         ncbi_querier = Role(
             name="NCBI Querier",
             instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
@@ -117,6 +152,80 @@ def create_study_suggester_function(
                     ),
                 ],
             )
+            
+        return corpus_context
+    return query_pubmed
+
+@schema_tool
+async def run_study_with_diagram(
+    suggested_study: SuggestedStudy = Field(
+        description="The suggested study to test a new hypothesis"
+    ),
+    role_setting: Dict[str, str] = Field(
+        description="The role setting for the study diagrammer"
+    ),
+) -> Dict[str, str]:
+    pre_session = current_session.get()
+    session_id = pre_session.id if pre_session else str(uuid.uuid4())
+    event_bus = None
+    
+    diagrammer = Role(
+        name="Diagrammer",
+        instructions="You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
+        icon="🤖",
+        constraints=None,
+        event_bus=event_bus,
+        register_default_events=True,
+        model=CONFIG["llm_model"],
+    )
+    async with create_session_context(
+        id=session_id, role_setting=role_setting
+    ):
+        study_diagram = await diagrammer.aask(
+            [
+                f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
+                suggested_study,
+            ],
+            StudyDiagram,
+        )
+    study_with_diagram = StudyWithDiagram(
+        suggested_study=suggested_study, study_diagram=study_diagram
+    )
+    
+    return study_with_diagram
+
+# TODO: improve relevancy and usefulness of citations
+def create_study_suggester_function(
+    artifact_manager: ArtifactManager = None,
+) -> Callable:
+    @schema_tool
+    async def run_study_suggester(
+        user_request: str = Field(
+            description="The user's request to create a study around, framed in terms of a scientific question"
+        ),
+        project_name: str = Field(
+            description="The name of the project, used to create a folder to store the output files"
+        ),
+        constraints: str = Field(
+            "",
+            description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
+        ),
+        corpus_context: Dict = Field(
+            {},
+            description="The context for the corpus of papers to be used for the study suggestion",
+        ),
+    ) -> Dict[str, str]:
+        """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
+        pre_session = current_session.get()
+        session_id = pre_session.id if pre_session else str(uuid.uuid4())
+
+        project_folder = get_project_folder(project_name)
+        event_bus = None
+
+        if artifact_manager is None:
+            os.makedirs(project_folder, exist_ok=True)
+        else:
+            event_bus = artifact_manager.get_event_bus()
 
         study_suggester = Role(
             name="Study Suggester",
@@ -127,6 +236,7 @@ def create_study_suggester_function(
             register_default_events=True,
             model=CONFIG["llm_model"],
         )
+        
         query_function = create_query_function(corpus_context["query_engine"])
         async with create_session_context(
             id=session_id, role_setting=study_suggester.role_setting
@@ -156,41 +266,7 @@ def create_study_suggester_function(
                 name=suggested_study_id
             )
 
-        diagrammer = Role(
-            name="Diagrammer",
-            instructions="You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
-            icon="🤖",
-            constraints=None,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=CONFIG["llm_model"],
-        )
-        async with create_session_context(
-            id=session_id, role_setting=study_suggester.role_setting
-        ):
-            study_diagram = await diagrammer.aask(
-                [
-                    f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
-                    suggested_study,
-                ],
-                StudyDiagram,
-            )
-        study_with_diagram = StudyWithDiagram(
-            suggested_study=suggested_study, study_diagram=study_diagram
-        )
-
-        summary_website_url = await write_website(
-            study_with_diagram,
-            event_bus,
-            artifact_manager,
-            "suggested_study",
-            project_folder,
-        )
-
-        return {
-            "summary_website_url": summary_website_url,
-            "suggested_study_url": suggested_study_url,
-        }
+        return suggested_study_url
 
     return run_study_suggester
 
