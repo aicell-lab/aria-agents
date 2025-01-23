@@ -9,7 +9,7 @@ pip install -r requirements_test.txt
 pip install -e .
 
 # Prompt the user for the OpenAI API key
-read -p "Please enter your OpenAI API key: " api_key
+read -s -p "Please enter your OpenAI API key: " api_key
 
 # Create the .env file with the provided API key
 cat <<EOT > aria_agents/.env
