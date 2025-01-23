@@ -143,9 +143,6 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# Visual Studio Code
-.vscode/
-
 # Node
 node_modules/
 package-lock.json
@@ -164,3 +161,5 @@ authorized_users.json
 *.egg-info
 .prettierrc
 eslint.config*
+bin/minio
+bin/mc

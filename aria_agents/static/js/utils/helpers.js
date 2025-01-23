@@ -25,11 +25,9 @@ function getServerUrl() {
 	return getUrlParam("server") || window.location.origin;
 }
 
-async function getServer(token, providedUrl = null) {
-	const serverUrl = providedUrl || getServerUrl();
-	// method_timeout: 500 (8.3 minutes) is arbitrary number. Must be at least a few minutes due to slow functions
+async function getServer(token) {
 	return await hyphaWebsocketClient.connectToServer({
-		server_url: serverUrl,
+		server_url: getServerUrl(),
 		token: token,
 		method_timeout: 500,
 	});

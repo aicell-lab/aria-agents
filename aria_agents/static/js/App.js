@@ -219,15 +219,14 @@ function App() {
 
 	const setServices = async (token) => {
 		const server = await getServer(token);
-		const artifactServer = await getServer(token, "https://hypha.aicell.io");
-		const configUserId = artifactServer.config.user.id;
+		const configUserId = server.config.user.id;
 		setUserId(configUserId);
 		setArtifactWorkspace(`ws-user-${configUserId}`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
 		const artifactManagerService = await getService(
-			artifactServer, "public/artifact-manager");
+			server, "public/artifact-manager");
 
 		try {
 			await ariaAgentsService.ping();

@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: connect-server",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "aria_agents",
+            "justMyCode": false,
+            "env": {
+                "JWT_SECRET": "1337",
+                "OPENAI_API_MODEL": "gpt-4o-2024-08-06",
+                "BIOIMAGEIO_DEBUG": "true",
+            },
+            "args": [
+                "connect-server",
+                "--server-url=https://hypha.aicell.io",
+                "--login-required"
+            ]
+        },
+        {
+            "name": "Python: start-server",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "aria_agents",
+            "justMyCode": false,
+            "preLaunchTask": "Start MinIO",
+            "env": {
+                "JWT_SECRET": "1337",
+                "OPENAI_API_MODEL": "gpt-4o-2024-08-06",
+                "BIOIMAGEIO_DEBUG": "true",
+            },
+            "args": [
+                "start-server",
+                "--port=9527",
+                "--login-required"
+            ]
+        },
+    ]
+}
