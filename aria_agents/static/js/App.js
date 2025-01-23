@@ -54,9 +54,12 @@ function App() {
 	const [userId, setUserId] = useState("");
 	const [userToken, setUserToken] = useState("");
 
-	useEffect(() => {
+	useEffect(async () => {
 		// Automatically generate a session ID
 		setSessionId(generateSessionID());
+		if (localStorage.getItem("token")) {
+			await handleLogin();
+		}
 	}, []);
 
 	useEffect(() => {
