@@ -7,7 +7,7 @@ Aria Agents is a Python package designed to empower autonomous scientific discov
 To install Aria Agents automatically, run the following command:
 
 ```bash
-python setup.py install
+bash setup_dev.sh
 ```
 
 ## Manual Installation
