@@ -434,7 +434,7 @@ async def register_chat_service(server):
                     await status_callback(message.model_dump())
                 except Exception as exc:
                     message.session.stop = True
-                    raise RuntimeError("The status callback returned an error.") from exc
+                    raise RuntimeError(f"The status callback returned an error: {exc}") from exc
 
         event_bus.on("stream", stream_callback)
 

@@ -2,13 +2,8 @@ import argparse
 import asyncio
 import json
 import os
-import shutil
-import uuid
 from typing import Callable, Dict, List, Union
 import dotenv
-from llama_index.core import load_index_from_storage
-from llama_index.core.query_engine import CitationQueryEngine
-from llama_index.core.storage import StorageContext
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
@@ -16,19 +11,12 @@ from schema_agents.utils.common import current_session
 from tqdm.auto import tqdm
 from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
-    create_query_function,
     write_website,
 )
 from aria_agents.artifact_manager import ArtifactManager
+from aria_agents.utils import load_config, get_session_id, get_project_folder, get_query_index_dir, get_query_function
 
 dotenv.load_dotenv()
-
-# Load the configuration file
-this_dir = os.path.dirname(os.path.abspath(__file__))
-config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r", encoding="utf-8") as file:
-    CONFIG = json.load(file)
-
 
 class ProtocolSection(BaseModel):
     """A section of an experimental protocol encompassing a specific set of steps falling under a coherent theme. The steps should be taken from existing protocols"""
@@ -180,9 +168,22 @@ async def write_protocol(
     return protocol_updated
 
 
+async def get_suggested_study(artifact_manager, project_folder, project_name):
+    if artifact_manager is None:
+        suggested_study_file = os.path.join(project_folder, "suggested_study.json")
+        with open(suggested_study_file, encoding="utf-8") as ss_file:
+            return SuggestedStudy(**json.load(ss_file))
+    else:
+        suggested_study_json_str = await artifact_manager.get(f"{project_name}:suggested_study.json")
+        suggested_study_json = json.loads(suggested_study_json_str)
+        return SuggestedStudy(**suggested_study_json)
+
+
 def create_experiment_compiler_function(
     artifact_manager: ArtifactManager = None,
 ) -> Callable:
+    config = load_config()
+    max_revisions = config["experiment_compiler"]["max_revisions"]
     @schema_tool
     async def run_experiment_compiler(
         project_name: str = Field(
@@ -193,47 +194,17 @@ def create_experiment_compiler_function(
             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
         ),
         max_revisions: int = Field(
-            CONFIG["experiment_compiler"]["max_revisions"],
+            default=max_revisions,
             description="The maximum number of protocol revision rounds to allow",
         ),
     ) -> Dict[str, str]:
         """Generate an investigation from a suggested study"""
-        pre_session = current_session.get()
-        session_id = pre_session.id if pre_session else str(uuid.uuid4())
-        event_bus = None
-        project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-        project_folder = os.path.abspath(
-            os.path.join(project_folders, project_name)
-        )
-        query_index_dir = None
-
-        if artifact_manager is None:
-            query_index_dir = os.path.join(project_folder, "query_index")
-            # Load the suggested study from a JSON file
-            suggested_study_file = os.path.join(
-                project_folder, "suggested_study.json"
-            )
-            with open(suggested_study_file, encoding="utf-8") as ss_file:
-                suggested_study = SuggestedStudy(**json.load(ss_file))
-        else:
-            query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
-            event_bus = artifact_manager.get_event_bus()
-            suggested_study_json_str = await artifact_manager.get(f"{project_name}:suggested_study.json")
-            suggested_study_json = json.loads(suggested_study_json_str)
-            suggested_study = SuggestedStudy(**suggested_study_json)
-
-        os.makedirs(query_index_dir, exist_ok=True)
-        query_storage_context = StorageContext.from_defaults(
-            persist_dir=query_index_dir
-        )
-            
-        query_index = load_index_from_storage(query_storage_context)
-        query_engine = CitationQueryEngine.from_args(
-            query_index,
-            similarity_top_k=CONFIG["aux"]["similarity_top_k"],
-            citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
-        )
-        query_function = create_query_function(query_engine)
+        session_id = get_session_id(current_session.get())
+        event_bus = artifact_manager.get_event_bus() if artifact_manager else None
+        project_folder = get_project_folder(project_name)
+        suggested_study = await get_suggested_study(artifact_manager, project_folder, project_name)
+        query_index_dir = get_query_index_dir(artifact_manager, project_folder)
+        query_function = get_query_function(query_index_dir, config)
 
         protocol_writer = Role(
             name="Protocol Writer",
@@ -243,7 +214,7 @@ def create_experiment_compiler_function(
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=CONFIG["llm_model"],
+            model=config["llm_model"],
         )
 
         protocol_manager = Role(
@@ -253,7 +224,7 @@ def create_experiment_compiler_function(
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=CONFIG["llm_model"],
+            model=config["llm_model"],
         )
 
         protocol = await write_protocol(
@@ -324,6 +295,7 @@ def create_experiment_compiler_function(
 
 async def main():
     parser = argparse.ArgumentParser(description="Generate an investigation")
+    config = load_config()
     parser.add_argument(
         "--project_name",
         type=str,
@@ -334,7 +306,7 @@ async def main():
         "--max_revisions",
         type=int,
         help="The maximum number of protocol agent revisions to allow",
-        default=CONFIG["experiment_compiler"]["max_revisions"],
+        default=config["experiment_compiler"]["max_revisions"],
     )
     parser.add_argument(
         "--constraints",

@@ -295,9 +295,12 @@ function App() {
 
 		const currentSessionId = getUrlParam("sessionId") ?? sessionId;
 		const currentIsPaused = getUrlParam("isPaused") === "true";
-
 		if (id !== currentSessionId || currentIsPaused) {
-			throw new Error("User has terminated this session.");
+			throw new Error(`User has terminated this session.
+				URL param session ID: ${getUrlParam('sessionId')} and
+				saved sessionId: ${sessionId}.
+				One of these should match message session ID: ${id}.
+				isPaused: ${currentIsPaused}`);
 		}
 
 		const { name: roleName, icon: roleIcon } = roleSetting || {};

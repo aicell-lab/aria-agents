@@ -1,10 +1,16 @@
 import os
+import uuid
 from typing import Any, Callable, Dict, Optional, _UnionGenericAlias
 from inspect import signature
+from contextvars import ContextVar
+import json
 import requests
 import dotenv
 from tqdm import tqdm
 from pydantic import BaseModel, Field
+from llama_index.core import load_index_from_storage
+from llama_index.core.query_engine import CitationQueryEngine
+from llama_index.core.storage import StorageContext
 from schema_agents import schema_tool
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 
@@ -28,6 +34,57 @@ def download_file(url, filename):
             # Update the progress bar
             progress.update(len(data))
             f.write(data)
+
+
+def get_query_index_dir(artifact_manager, project_folder):
+    if artifact_manager is None:
+        query_index_dir = os.path.join(project_folder, "query_index")
+    else:
+        query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
+        
+    os.makedirs(query_index_dir, exist_ok=True)
+    return query_index_dir
+
+
+def create_query_function(query_engine: CitationQueryEngine) -> Callable:
+    @schema_tool
+    def query_corpus(
+        question: str = Field(
+            ...,
+            description="The query statement the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.",
+        )
+    ) -> str:
+        """Given a corpus of papers created from a PubMedCentral search, queries the corpus and returns the response from the LLM agent"""
+        response = query_engine.query(question)
+        response_str = f"""The following query was run for the literature review:\n```{question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\n\nThe citations refer to the following papers:"""
+        for i_node, node in enumerate(response.source_nodes):
+            response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
+        print(response_str)
+        return response_str
+
+    return query_corpus
+
+
+def get_query_function(query_index_dir, config):
+    query_storage_context = StorageContext.from_defaults(
+        persist_dir=query_index_dir
+    )
+        
+    query_index = load_index_from_storage(query_storage_context)
+    query_engine = CitationQueryEngine.from_args(
+        query_index,
+        similarity_top_k=config["aux"]["similarity_top_k"],
+        citation_chunk_size=config["aux"]["citation_chunk_size"],
+    )
+    return create_query_function(query_engine)
+
+
+def load_config():
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    config_file = os.path.join(this_dir, "chatbot_extensions/config.json")
+    with open(config_file, "r", encoding="utf-8") as file:
+        config = json.load(file)
+    return config
 
 
 def extract_schemas(function):
@@ -74,6 +131,11 @@ class LegacyChatbotExtension(BaseModel):
     schema_class: Optional[BaseModel] = Field(
         None, description="The schema class for the extension"
     )
+    
+def get_session_id(session: ContextVar) -> str:
+    pre_session = session.get()
+    session_id = pre_session.id if pre_session else str(uuid.uuid4())
+    return session_id
 
 def get_project_folder(project_name: str):
     dotenv.load_dotenv()
