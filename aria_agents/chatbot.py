@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 import dotenv
+dotenv.load_dotenv()
 import pkg_resources
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
@@ -31,8 +32,6 @@ from aria_agents.utils import (
     LegacyChatbotExtension,
     legacy_extension_to_tool,
 )
-
-dotenv.load_dotenv()
 
 logger = logging.getLogger("bioimageio-chatbot")
 # set logger level
@@ -426,8 +425,7 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
-        artifact_server = await get_server(server_url="https://hypha.aicell.io", provided_token=user_token)
-        await artifact_manager.setup(artifact_server, user_id, session_id, "public/artifact-manager")
+        await artifact_manager.setup(server, user_id, session_id, "public/artifact-manager")
 
         # Listen to the `stream` event
         async def stream_callback(message):
