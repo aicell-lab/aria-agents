@@ -7,28 +7,18 @@ version = "0.1.0"
 readme = "README.md"
 description = "Empowering autonomous scientific discovery."
 dependencies = [
-  "schema-agents>=0.1.50",
-  "imjoy-rpc>=0.5.48.post2",
-  "requests",
-  "pypdf",
-  "pillow",
-  "matplotlib",
-  "hypha>=0.15.50",
-  "tqdm",
-  "aiofiles",
-  "langchain>=0.1.6",
-  "beautifulsoup4",
-  "pandas",
-  # "duckduckgo-search>=5.1.0",
-  "rank-bm25",
-  "langchain-openai",
-  "langchain-core>=0.1.31",
-  "langchain-community>=0.0.27",
-  "html2text",
-  "isatools",
-  "llama_index",
-  "langchain-experimental",
-  "llama-index-readers-papers",
+  "schema-agents==0.1.61",
+  "httpx==0.28.1",
+  "hypha==0.20.47.post1",
+  "hypha-rpc==0.20.47",
+  "aiofiles==23.2.1",
+  "pandas==1.5.3",
+  "setuptools==70.0.0",
+  "llama_index==0.12.1",
+  "llama-index-readers-papers==0.3.0",
+  "pandasai==2.3.0",
+  "botocore==1.36.3",
+  "aiobotocore==2.19.0"
 ]
 
 [tool.setuptools]

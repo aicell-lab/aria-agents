@@ -3,11 +3,10 @@ import uuid
 from typing import Callable, List
 import urllib
 import xml.etree.ElementTree as xml
-import requests
 import asyncio
 
+import httpx
 from llama_index.core import Settings, VectorStoreIndex
-from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from llama_index.readers.papers import PubmedReader
@@ -92,7 +91,7 @@ class PMCQuery(BaseModel):
 
 
 @schema_tool
-def test_pmc_query_hits(
+async def test_pmc_query_hits(
     pmc_query: PMCQuery = Field(
         ..., description="The query to search the NCBI PubMed Central Database."
     )
@@ -107,12 +106,14 @@ def test_pmc_query_hits(
         "retmax": config["aux"]["paper_limit"],
     }
     try:
-        resp = requests.get(
-            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
-            params=parameters,
-            timeout=500,
-        )
-    except requests.RequestException as e:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+                params=parameters,
+                timeout=500,
+            )
+            resp.raise_for_status()
+    except Exception as e:
         return f"Failed to execute query: {e}"
 
     # Parse the XML response

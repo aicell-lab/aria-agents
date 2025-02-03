@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
-from tqdm.auto import tqdm
 from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
     write_website,
@@ -239,7 +238,6 @@ def create_experiment_compiler_function(
             protocol, protocol_manager, session_id=session_id
         )
         revisions = 0
-        pbar = tqdm(total=max_revisions)
 
         while not protocol_feedback.complete and revisions < max_revisions:
             protocol = await write_protocol(
@@ -257,8 +255,6 @@ def create_experiment_compiler_function(
                 session_id=session_id,
             )
             revisions += 1
-            pbar.update(1)
-        pbar.close()
 
         if artifact_manager is None:
             # Save the suggested study to a JSON file
