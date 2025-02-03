@@ -425,7 +425,8 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
-        await artifact_manager.setup(server, user_id, session_id, "public/artifact-manager")
+        artifact_server = await get_server(server_url="https://hypha.aicell.io", provided_token=user_token)
+        await artifact_manager.setup(artifact_server, user_id, session_id, "public/artifact-manager")
 
         # Listen to the `stream` event
         async def stream_callback(message):
