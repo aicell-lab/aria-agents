@@ -1,15 +1,12 @@
-import json
 import os
-import shutil
 import uuid
 from typing import Callable, List
 import urllib
 import xml.etree.ElementTree as xml
-import requests
 import asyncio
 
+import httpx
 from llama_index.core import Settings, VectorStoreIndex
-from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from llama_index.readers.papers import PubmedReader
@@ -19,12 +16,7 @@ from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
 
 from aria_agents.artifact_manager import ArtifactManager
-
-# Load the configuration file
-this_dir = os.path.dirname(os.path.abspath(__file__))
-config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r", encoding="utf-8") as file:
-    CONFIG = json.load(file)
+from aria_agents.utils import load_config
 
 
 class SummaryWebsite(BaseModel):
@@ -99,27 +91,29 @@ class PMCQuery(BaseModel):
 
 
 @schema_tool
-def test_pmc_query_hits(
+async def test_pmc_query_hits(
     pmc_query: PMCQuery = Field(
         ..., description="The query to search the NCBI PubMed Central Database."
     )
 ) -> str:
     """Tests the `PMCQuery` to see how many hits it returns in the PubMed Central database."""
-
+    config = load_config()
     parameters = {
         "tool": "tool",
         "email": "email",
         "db": "pmc",
         "term": pmc_query.query,
-        "retmax": CONFIG["aux"]["paper_limit"],
+        "retmax": config["aux"]["paper_limit"],
     }
     try:
-        resp = requests.get(
-            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
-            params=parameters,
-            timeout=500,
-        )
-    except requests.RequestException as e:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+                params=parameters,
+                timeout=500,
+            )
+            resp.raise_for_status()
+    except Exception as e:
         return f"Failed to execute query: {e}"
 
     # Parse the XML response
@@ -130,19 +124,14 @@ def test_pmc_query_hits(
 
     return f"The query `{pmc_query.query}` returned {n_hits} hits."
 
-async def save_query_index(context, query_index_dir, documents):
+async def save_query_index(query_index_dir, documents):
     query_index = VectorStoreIndex.from_documents(documents)
     query_index.storage_context.persist(query_index_dir)
-    # Create a citation query engine object
-    context["query_engine"] = CitationQueryEngine.from_args(
-        query_index,
-        similarity_top_k=CONFIG["aux"]["similarity_top_k"],
-        citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
-    )
 
 def create_corpus_function(
-    context: dict, project_folder: str, artifact_manager: ArtifactManager = None
+    project_folder: str, artifact_manager: ArtifactManager = None
 ) -> Callable:
+    config = load_config()
     @schema_tool
     def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
@@ -160,13 +149,13 @@ def create_corpus_function(
         # print(test_pmc_query_hits(pmc_query))
         documents = loader.load_data(
             search_query=pmc_query.query,
-            max_results=CONFIG["aux"]["paper_limit"],
+            max_results=config["aux"]["paper_limit"],
         )
         if len(documents) == 0:
             return "No papers were found in the PubMed Central database for the given query. Please try different terms for the query."
-        Settings.llm = OpenAI(model=CONFIG["llm_model"])
+        Settings.llm = OpenAI(model=config["llm_model"])
         Settings.embed_model = OpenAIEmbedding(
-            model=CONFIG["aux"]["embedding_model"]
+            model=config["aux"]["embedding_model"]
         )
         print("Document loading complete")
 
@@ -176,33 +165,15 @@ def create_corpus_function(
         else:
             query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
         
-        asyncio.create_task(save_query_index(context, query_index_dir, documents))
+        asyncio.create_task(save_query_index(query_index_dir, documents))
         
         return f"Pubmed corpus with {len(documents)} papers has been created."
 
     return create_pubmed_corpus
 
 
-def create_query_function(query_engine: CitationQueryEngine) -> Callable:
-    @schema_tool
-    def query_corpus(
-        question: str = Field(
-            ...,
-            description="The query statement the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.",
-        )
-    ) -> str:
-        """Given a corpus of papers created from a PubMedCentral search, queries the corpus and returns the response from the LLM agent"""
-        response = query_engine.query(question)
-        response_str = f"""The following query was run for the literature review:\n```{question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\n\nThe citations refer to the following papers:"""
-        for i_node, node in enumerate(response.source_nodes):
-            response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
-        print(response_str)
-        return response_str
-
-    return query_corpus
-
-
 def load_template(template_filename):
+    this_dir = os.path.dirname(os.path.abspath(__file__))
     template_file = os.path.join(this_dir, f"html_templates/{template_filename}")
     with open(template_file, "r", encoding="utf-8") as t_file:
         return t_file.read()
@@ -216,6 +187,7 @@ async def write_website(
     project_folder: str,
 ) -> SummaryWebsite:
     """Writes a summary website for the suggested study or experimental protocol"""
+    config = load_config()
     website_writer = Role(
         name="Website Writer",
         instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
@@ -223,7 +195,7 @@ async def write_website(
         constraints=None,
         event_bus=event_bus,
         register_default_events=True,
-        model=CONFIG["llm_model"],
+        model=config["llm_model"],
     )
     
     website_prompt = None

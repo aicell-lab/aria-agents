@@ -9,3 +9,9 @@ services:
     env_file:
       - minio.env
     command: server /data --console-address ":9001"
+    networks:
+      - minio_network
+
+networks:
+  minio_network:
+    driver: bridge
