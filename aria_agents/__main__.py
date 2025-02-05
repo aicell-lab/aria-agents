@@ -4,11 +4,15 @@ import asyncio
 import subprocess
 import os
 from dotenv import load_dotenv
+from aria_agents.chatbot import connect_server
 
 dotenv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'minio.env')
 load_dotenv(dotenv_path)
 
-def start_server(args):
+def run_locally(args):
+    # TODO: if server is running on {args.server_url}, then:
+    #   connect_to_server(args)
+    
     if args.login_required:
         os.environ["BIOIMAGEIO_LOGIN_REQUIRED"] = "true"
     else:
@@ -35,7 +39,6 @@ def start_server(args):
     subprocess.run(command)
 
 def connect_to_server(args):
-    from aria_agents.chatbot import connect_server
     if args.login_required:
         os.environ["BIOIMAGEIO_LOGIN_REQUIRED"] = "true"
     else:
@@ -52,15 +55,15 @@ def main():
     subparsers = parser.add_subparsers()
 
     # Start server command
-    parser_start_server = subparsers.add_parser("start-server")
-    parser_start_server.add_argument("--host", type=str, default="0.0.0.0")
+    parser_start_server = subparsers.add_parser("local")
+    parser_start_server.add_argument("--server-url", type=str, default="0.0.0.0")
     parser_start_server.add_argument("--port", type=int, default=9000)
     parser_start_server.add_argument("--public-base-url", type=str, default="")
     parser_start_server.add_argument("--login-required", action="store_true")
-    parser_start_server.set_defaults(func=start_server)
+    parser_start_server.set_defaults(func=run_locally)
     
     # Connect server command
-    parser_connect_server = subparsers.add_parser("connect-server")
+    parser_connect_server = subparsers.add_parser("remote")
     parser_connect_server.add_argument("--server-url", default="https://ai.imjoy.io")
     parser_connect_server.add_argument("--login-required", action="store_true")
     parser_connect_server.set_defaults(func=connect_to_server)

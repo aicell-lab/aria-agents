@@ -39,4 +39,4 @@ RUN pip install .
 USER aria_agents
 
 # Entry point for the application
-ENTRYPOINT ["python", "-m", "aria_agents", "connect-server"]
+ENTRYPOINT ["python", "-m", "aria_agents", "remote"]

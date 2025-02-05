@@ -4,8 +4,14 @@
         {
             "label": "Start MinIO",
             "type": "shell",
-            "command": "docker-compose up -d minio",
-            "problemMatcher": []
+            "command": "docker-compose -f docker/docker-compose.yml up -d --no-recreate minio",
+            "problemMatcher": [],
+        },
+        {
+            "label": "Stop",
+            "type": "shell",
+            "command": "docker-compose -f docker/docker-compose.yml down",
+            "problemMatcher": [],
         }
     ]
 }

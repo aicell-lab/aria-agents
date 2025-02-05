@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: connect-server",
+            "name": "Connect to remote",
             "type": "debugpy",
             "request": "launch",
             "module": "aria_agents",
@@ -13,13 +13,13 @@
                 "BIOIMAGEIO_DEBUG": "true",
             },
             "args": [
-                "connect-server",
+                "remote",
                 "--server-url=https://hypha.aicell.io",
                 "--login-required"
             ]
         },
         {
-            "name": "Python: start-server",
+            "name": "Run locally",
             "type": "debugpy",
             "request": "launch",
             "module": "aria_agents",
@@ -31,7 +31,7 @@
                 "BIOIMAGEIO_DEBUG": "true",
             },
             "args": [
-                "start-server",
+                "local",
                 "--port=9527",
                 "--login-required"
             ]

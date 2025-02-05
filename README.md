@@ -44,4 +44,4 @@ Replace `<your_openai_api_key>` with your OpenAI API key (or get a new one at th
 
 ### Running in VSCode
 
-Go to "Run and Debug" and select "Python: start-server" as the debug configuration. Press run.
+Go to "Run and Debug" and select "Run locally" as the debug configuration. Press run.

@@ -10,8 +10,8 @@ services:
       - minio.env
     command: server /data --console-address ":9001"
     networks:
-      - minio_network
+      - hypha_services_network
 
 networks:
-  minio_network:
+  hypha_services_network:
     driver: bridge
