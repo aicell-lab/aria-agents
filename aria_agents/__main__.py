@@ -24,7 +24,7 @@ def run_locally(args):
         sys.executable,
         "-m",
         "hypha.server",
-        f"--host={args.host}",
+        f"--host={args.server_url}",
         f"--port={args.port}",
         f"--public-base-url={args.public_base_url}",
         f"--static-mounts=/chat:{current_dir}/static",
@@ -55,18 +55,18 @@ def main():
     subparsers = parser.add_subparsers()
 
     # Start server command
-    parser_start_server = subparsers.add_parser("local")
-    parser_start_server.add_argument("--server-url", type=str, default="0.0.0.0")
-    parser_start_server.add_argument("--port", type=int, default=9000)
-    parser_start_server.add_argument("--public-base-url", type=str, default="")
-    parser_start_server.add_argument("--login-required", action="store_true")
-    parser_start_server.set_defaults(func=run_locally)
+    parser_local = subparsers.add_parser("local")
+    parser_local.add_argument("--server-url", type=str, default="localhost")
+    parser_local.add_argument("--port", type=int, default=9000)
+    parser_local.add_argument("--public-base-url", type=str, default="")
+    parser_local.add_argument("--login-required", action="store_true")
+    parser_local.set_defaults(func=run_locally)
     
     # Connect server command
-    parser_connect_server = subparsers.add_parser("remote")
-    parser_connect_server.add_argument("--server-url", default="https://ai.imjoy.io")
-    parser_connect_server.add_argument("--login-required", action="store_true")
-    parser_connect_server.set_defaults(func=connect_to_server)
+    parser_remote = subparsers.add_parser("remote")
+    parser_remote.add_argument("--server-url", default="https://ai.imjoy.io")
+    parser_remote.add_argument("--login-required", action="store_true")
+    parser_remote.set_defaults(func=connect_to_server)
 
     
     args = parser.parse_args()
