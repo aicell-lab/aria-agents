@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 import dotenv
+dotenv.load_dotenv()
 import pkg_resources
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
@@ -31,8 +32,6 @@ from aria_agents.utils import (
     LegacyChatbotExtension,
     legacy_extension_to_tool,
 )
-
-dotenv.load_dotenv()
 
 logger = logging.getLogger("bioimageio-chatbot")
 # set logger level
@@ -232,27 +231,20 @@ async def add_probes(server):
             return False
         
     
-    def check_readiness():
-        services_are_available = asyncio.gather(
+    async def is_alive():
+        services_are_available = await asyncio.gather(
             is_available("public/artifact-manager"),
             is_available("aria-agents-chat"),
             is_available("aria-agents"),
         )
         if all(services_are_available):
-            return {"status": "ok"}
+            return {"status": "ok", "message": "All services are available"}
         
-        return {"status": "not ready", "message": "Some services are not available"}
-    
-    def check_liveness():
-        try:
-            asyncio.get_running_loop()
-            return {"status": "ok"}
-        except RuntimeError:
-            return {"status": "error", "message": "Event loop not running"}
+        raise RuntimeError(f"Some services are not available: {services_are_available}")
     
     await server.register_probes({
-        "readiness": check_readiness,
-        "liveness": check_liveness,
+        "readiness": is_alive,
+        "liveness": is_alive,
     })
 
 
@@ -436,7 +428,7 @@ async def register_chat_service(server):
                     await status_callback(message.model_dump())
                 except Exception as exc:
                     message.session.stop = True
-                    raise RuntimeError("The status callback returned an error.") from exc
+                    raise RuntimeError(f"The status callback returned an error: {exc}") from exc
 
         event_bus.on("stream", stream_callback)
 

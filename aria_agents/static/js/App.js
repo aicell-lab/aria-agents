@@ -54,9 +54,12 @@ function App() {
 	const [userId, setUserId] = useState("");
 	const [userToken, setUserToken] = useState("");
 
-	useEffect(() => {
+	useEffect(async () => {
 		// Automatically generate a session ID
 		setSessionId(generateSessionID());
+		if (localStorage.getItem("token")) {
+			await handleLogin();
+		}
 	}, []);
 
 	useEffect(() => {
@@ -219,15 +222,14 @@ function App() {
 
 	const setServices = async (token) => {
 		const server = await getServer(token);
-		const artifactServer = await getServer(token, "https://hypha.aicell.io");
-		const configUserId = artifactServer.config.user.id;
+		const configUserId = server.config.user.id;
 		setUserId(configUserId);
 		setArtifactWorkspace(`ws-user-${configUserId}`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
 		const artifactManagerService = await getService(
-			artifactServer, "public/artifact-manager");
+			server, "public/artifact-manager");
 
 		try {
 			await ariaAgentsService.ping();
@@ -293,9 +295,12 @@ function App() {
 
 		const currentSessionId = getUrlParam("sessionId") ?? sessionId;
 		const currentIsPaused = getUrlParam("isPaused") === "true";
-
 		if (id !== currentSessionId || currentIsPaused) {
-			throw new Error("User has terminated this session.");
+			throw new Error(`User has terminated this session.
+				URL param session ID: ${getUrlParam('sessionId')} and
+				saved sessionId: ${sessionId}.
+				One of these should match message session ID: ${id}.
+				isPaused: ${currentIsPaused}`);
 		}
 
 		const { name: roleName, icon: roleIcon } = roleSetting || {};

@@ -5,7 +5,6 @@ import json
 import uuid
 from io import StringIO
 from typing import List, Callable, Dict
-import dotenv
 from pydantic import BaseModel, Field
 import pandas as pd
 from pandas.errors import EmptyDataError
@@ -13,19 +12,11 @@ from pandasai.llm import OpenAI as PaiOpenAI
 from pandasai import Agent as PaiAgent
 from schema_agents import schema_tool, Role
 from schema_agents.role import create_session_context
-from schema_agents.utils.common import current_session
-from schema_agents.utils.common import EventBus
-from aria_agents.utils import get_project_folder
+from schema_agents.utils.common import current_session, EventBus
+from aria_agents.utils import get_project_folder, get_session_id, load_config
 from aria_agents.artifact_manager import ArtifactManager
-dotenv.load_dotenv()
 
 AGENT_MAX_RETRIES = 5
-
-# Load the configuration file
-this_dir = os.path.dirname(os.path.abspath(__file__))
-config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r", encoding="utf-8") as file:
-    CONFIG = json.load(file)
 
 async def read_df(file_path: str, content: str = None) -> pd.DataFrame:
     def _read_file(path, content = None):
@@ -49,11 +40,6 @@ async def read_df(file_path: str, content: str = None) -> pd.DataFrame:
             raise ValueError(f"Unable to open file {path} as tabular file: {str(e)}") from e
 
     return await asyncio.get_event_loop().run_in_executor(None, _read_file, file_path, content)
-
-def get_session_id() -> str:
-    pre_session = current_session.get()
-    session_id = pre_session.id if pre_session else str(uuid.uuid4())
-    return session_id
 
 class PlotPaths(BaseModel):
     """A list of file paths to the plots (or any .png files) created by the data analysis bot"""
@@ -152,7 +138,7 @@ async def get_or_create_agent(agent_dict, session_id, create_agent_func, *args):
     
     return agent
 
-def create_explore_data(artifact_manager: ArtifactManager = None) -> Callable:
+def create_explore_data(artifact_manager: ArtifactManager = None, llm_model: str = "gpt2") -> Callable:
     summarizer_agents = {}
     pai_agents = {}
 
@@ -178,9 +164,9 @@ def create_explore_data(artifact_manager: ArtifactManager = None) -> Callable:
         and their meanings. Each function call creates at most one output plot, so if multiple plots are required the function must be once for each desired output plot"""
 
         event_bus = artifact_manager.get_event_bus() if artifact_manager else None
-        session_id = get_session_id()
+        session_id = get_session_id(current_session)
         pai_agent = await get_or_create_agent(pai_agents, session_id, get_pai_agent, project_name, data_files, artifact_manager)
-        summarizer_agent = await get_or_create_agent(summarizer_agents, session_id, get_summarizer_agent, constraints, CONFIG["llm_model"], event_bus)
+        summarizer_agent = await get_or_create_agent(summarizer_agents, session_id, get_summarizer_agent, constraints, llm_model, event_bus)
         
         response, explanation, pai_logs = query_pai_agent(pai_agent, explore_request)
         plot_paths = await get_plot_paths(response=response,
@@ -220,7 +206,9 @@ async def main():
     )
     args = parser.parse_args()
     artifact_manager = None
-    run_data_analyzer = create_explore_data(artifact_manager)
+    config = load_config()
+    llm_model = config["llm_model"]
+    run_data_analyzer = create_explore_data(artifact_manager, llm_model)
     await run_data_analyzer(**vars(args))
 
 if __name__ == "__main__":
