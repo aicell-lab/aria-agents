@@ -53,6 +53,7 @@ function App() {
 	const [artifactWorkspace, setArtifactWorkspace] = useState("");
 	const [userId, setUserId] = useState("");
 	const [userToken, setUserToken] = useState("");
+	const [viewedArtifacts, setViewedArtifacts] = useState(new Set());
 
 	useEffect(async () => {
 		// Automatically generate a session ID
@@ -75,7 +76,7 @@ function App() {
 		window.history.replaceState({}, '', newUrl);
 	}, [isPaused]);
 
-	
+
 	useEffect(() => {
 		if (chatContainerRef.current && isNearBottom) {
 			requestAnimationFrame(() => {
@@ -561,6 +562,15 @@ function App() {
 		awaitUserResponse();
 	}
 
+	const hasUnseenArtifacts = () => {
+		return artifacts.length > viewedArtifacts.size;
+	};
+
+	const handleArtifactsPanelOpen = () => {
+		setIsArtifactsPanelOpen(true);
+		setViewedArtifacts(new Set(artifacts.map((_, index) => index)));
+	};
+
 	return (
 		<div className="min-h-screen flex flex-col">
 			<button
@@ -647,9 +657,7 @@ function App() {
 			</div>
 			{isArtifactsPanelOpen ? (
 				<ArtifactsPanel
-					onClose={() =>
-						setIsArtifactsPanelOpen(!isArtifactsPanelOpen)
-					}
+					onClose={() => setIsArtifactsPanelOpen(false)}
 					artifacts={artifacts}
 					currentArtifactIndex={currentArtifactIndex}
 					onPrev={() => {
@@ -664,14 +672,17 @@ function App() {
 					}}
 				/>
 			) : (
-				<button
-					onClick={() =>
-						setIsArtifactsPanelOpen(!isArtifactsPanelOpen)
-					}
-					className="button fixed top-0 right-0 mt-4 mr-4"
-				>
-					Artifacts
-				</button>
+				<div className="relative">
+					<button
+						onClick={handleArtifactsPanelOpen}
+						className="button fixed top-0 right-0 mt-4 mr-4"
+					>
+						Artifacts
+						{hasUnseenArtifacts() && (
+							<span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+						)}
+					</button>
+				</div>
 			)}
 			{isLoading && (
 				<div

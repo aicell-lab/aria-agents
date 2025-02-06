@@ -156,6 +156,13 @@ def create_study_suggester_function(
                 tools=[query_function],
                 output_schema=SuggestedStudy,
             )
+            
+        await write_website(
+            suggested_study,
+            artifact_manager,
+            "suggested_study",
+            project_name,
+        )
 
         return await save_file("suggested_study.json", suggested_study.model_dump_json(), project_name, artifact_manager)
 
@@ -199,6 +206,13 @@ def create_create_diagram_function(
             )
         study_with_diagram = StudyWithDiagram(
             suggested_study=suggested_study, study_diagram=study_diagram
+        )
+        
+        await write_website(
+            study_with_diagram,
+            artifact_manager,
+            "study_with_diagram",
+            project_name,
         )
         
         return await save_file("study_with_diagram.json", study_with_diagram.model_dump_json(), project_name, artifact_manager)
