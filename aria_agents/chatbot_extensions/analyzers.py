@@ -14,7 +14,7 @@ from schema_agents import schema_tool, Role
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session, EventBus
 from aria_agents.utils import get_project_folder, get_session_id, load_config
-from aria_agents.artifact_manager import ArtifactManager
+from aria_agents.artifact_manager import AriaArtifacts
 
 AGENT_MAX_RETRIES = 5
 
@@ -67,7 +67,7 @@ async def get_plot_paths(response: str,
         )
     return res
 
-async def upload_plots(plot_paths: PlotPaths, project_name: str, artifact_manager: ArtifactManager) -> Dict[str, str]:
+async def upload_plots(plot_paths: PlotPaths, project_name: str, artifact_manager: AriaArtifacts) -> Dict[str, str]:
     plot_urls = {}
     for plot_path in plot_paths.plot_paths:
         with open(plot_path, "rb") as image_file:
@@ -82,7 +82,7 @@ async def upload_plots(plot_paths: PlotPaths, project_name: str, artifact_manage
         
     return plot_urls
 
-async def get_data_files_dfs(data_file_names: List[str], artifact_manager: ArtifactManager = None) -> List[pd.DataFrame]:
+async def get_data_files_dfs(data_file_names: List[str], artifact_manager: AriaArtifacts = None) -> List[pd.DataFrame]:
     if artifact_manager is None:
         return await asyncio.gather(*[read_df(file_path) for file_path in data_file_names])
     
@@ -93,7 +93,7 @@ async def get_data_files_dfs(data_file_names: List[str], artifact_manager: Artif
         
     return await asyncio.gather(*[read_df(file_path, file_content) for (file_path, file_content) in data_files])
 
-async def get_pai_agent(project_name: str, data_file_names: List[str], artifact_manager: ArtifactManager = None) -> tuple[PaiAgent, Role]:
+async def get_pai_agent(project_name: str, data_file_names: List[str], artifact_manager: AriaArtifacts = None) -> tuple[PaiAgent, Role]:
     data_files_dfs = await get_data_files_dfs(data_file_names, artifact_manager)
     project_folder = get_project_folder(project_name)
     pai_llm = PaiOpenAI()
@@ -138,7 +138,7 @@ async def get_or_create_agent(agent_dict, session_id, create_agent_func, *args):
     
     return agent
 
-def create_explore_data(artifact_manager: ArtifactManager = None, llm_model: str = "gpt2") -> Callable:
+def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str = "gpt2") -> Callable:
     summarizer_agents = {}
     pai_agents = {}
 

@@ -41,9 +41,12 @@ def connect_to_server(args):
     else:
         os.environ["BIOIMAGEIO_LOGIN_REQUIRED"] = "false"
     server_url = args.server_url
-    loop = asyncio.get_event_loop()
-    loop.create_task(connect_server(server_url))
-    loop.run_forever()
+    
+    try:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(connect_server(server_url))
+    finally:
+        loop.close()
 
 
 def main():

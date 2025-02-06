@@ -11,7 +11,46 @@ from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.core.storage import StorageContext
 from schema_agents import schema_tool
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
+from aria_agents.artifact_manager import AriaArtifacts
 
+
+def save_locally(filename: str, content: str, project_folder: str):
+    file_path = os.path.join(project_folder, filename)
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return "file://" + file_path
+
+
+async def save_to_artifact_manager(filename: str, content: str, artifact_manager: AriaArtifacts, project_name: str):
+    file_id = await artifact_manager.put(
+                value=content,
+                name=f"{project_name}:{filename}",
+            )
+    file_url = await artifact_manager.get_url(
+        name=file_id
+    )
+    return file_url
+
+
+async def get_file(filename: str, project_name: str, artifact_manager: AriaArtifacts):
+    project_folder = get_project_folder(project_name)
+    if artifact_manager is None:
+        file_content = os.path.join(project_folder, filename)
+        with open(file_content, encoding="utf-8") as loaded_file:
+            return json.load(loaded_file)
+    else:
+        file_content = await artifact_manager.get(f"{project_name}:{filename}")
+        return json.loads(file_content)
+
+
+async def save_file(filename: str, content: str, project_name: str, artifact_manager: AriaArtifacts = None):
+    if artifact_manager is None:
+        project_folder = get_project_folder(project_name)
+        file_url = save_locally(filename, content, project_folder)
+    else:
+        file_url = await save_to_artifact_manager(filename, content, artifact_manager, project_name)
+    
+    return file_url
 
 def get_query_index_dir(artifact_manager, project_folder):
     if artifact_manager is None:

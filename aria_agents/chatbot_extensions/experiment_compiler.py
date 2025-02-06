@@ -12,8 +12,16 @@ from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
     write_website,
 )
-from aria_agents.artifact_manager import ArtifactManager
-from aria_agents.utils import load_config, get_session_id, get_project_folder, get_query_index_dir, get_query_function
+from aria_agents.artifact_manager import AriaArtifacts
+from aria_agents.utils import (
+    load_config,
+    get_session_id,
+    get_project_folder,
+    get_query_index_dir,
+    get_query_function,
+    save_file,
+    get_file
+)
 
 dotenv.load_dotenv()
 
@@ -101,10 +109,10 @@ QUERY_TOOL_TIP = """Queries MUST not be of the form of a question, but rather in
 - `supernatent was aspirated and cells were washed with PBS`
 - `cells were lysed with RIPA buffer`
 - `sample was centrifuged at 1000g for 5 minutes`
-- `All tissue samples were pulverized using a ball mill (MM400, Retsch) with precooled beakers and stainless-steel balls for 30 s at the highest frequency (30 Hz)`
+- `All tissue samples were pulverized using a ball mill (MM400, Retsch) with precooled beakers and stainless-steel balls for 30 s at the highest frequency (30 Hz)`
 - `pulverized and frozen samples were extracted using the indicated solvents and subsequent steps of the respective protocol`
-- `After a final centrifugation step the solvent extract of the protocols 100IPA, IPA/ACN and MeOH/ACN were transferred into a new 1.5 ml tube (Eppendorf) and snap-frozen until kit preparation.` 
-- `The remaining protocols were dried using an Eppendorf Concentrator Plus set to no heat, stored at −80°C and reconstituted in 60 µL isopropanol (30 µL of 100% isopropanol, followed by 30 µL of 30% isopropanol in water) before the measurement.`"""
+- `After a final centrifugation step the solvent extract of the protocols 100IPA, IPA/ACN and MeOH/ACN were transferred into a new 1.5 ml tube (Eppendorf) and snap-frozen until kit preparation.` 
+- `The remaining protocols were dried using an Eppendorf Concentrator Plus set to no heat, stored at -80°C and reconstituted in 60 µL isopropanol (30 µL of 100% isopropanol, followed by 30 µL of 30% isopropanol in water) before the measurement.`"""
 
 
 class CorpusQueries(BaseModel):
@@ -179,7 +187,7 @@ async def get_suggested_study(artifact_manager, project_folder, project_name):
 
 
 def create_experiment_compiler_function(
-    artifact_manager: ArtifactManager = None,
+    artifact_manager: AriaArtifacts = None,
 ) -> Callable:
     config = load_config()
     max_revisions = config["experiment_compiler"]["max_revisions"]
@@ -199,11 +207,12 @@ def create_experiment_compiler_function(
     ) -> Dict[str, str]:
         """Generate an investigation from a suggested study"""
         session_id = get_session_id(current_session.get())
-        event_bus = artifact_manager.get_event_bus() if artifact_manager else None
         project_folder = get_project_folder(project_name)
-        suggested_study = await get_suggested_study(artifact_manager, project_folder, project_name)
+        suggested_study_content = await get_file("suggested_study.json", project_name, artifact_manager)
+        suggested_study = SuggestedStudy(**suggested_study_content)
         query_index_dir = get_query_index_dir(artifact_manager, project_folder)
         query_function = get_query_function(query_index_dir, config)
+        event_bus = artifact_manager.get_event_bus()
 
         protocol_writer = Role(
             name="Protocol Writer",
@@ -255,30 +264,14 @@ def create_experiment_compiler_function(
                 session_id=session_id,
             )
             revisions += 1
-
-        if artifact_manager is None:
-            # Save the suggested study to a JSON file
-            protocol_file = os.path.join(
-                project_folder, "experimental_protocol.json"
-            )
-            with open(protocol_file, "w", encoding="utf-8") as f:
-                json.dump(protocol.dict(), f, indent=4)
-            protocol_url = "file://" + protocol_file
-
-        else:
-            # Save the suggested study to the Artifact Manager
-            protocol_id = await artifact_manager.put(
-                value=protocol.model_dump_json(),
-                name=f"{project_name}:experimental_protocol.json",
-            )
-            protocol_url = await artifact_manager.get_url(protocol_id)
+            
+        protocol_url = await save_file("experimental_protocol.json", protocol.model_dump_json(), project_name, artifact_manager)
 
         summary_website_url = await write_website(
             protocol,
-            event_bus,
             artifact_manager,
             "experimental_protocol",
-            project_folder,
+            project_name,
         )
 
         return {

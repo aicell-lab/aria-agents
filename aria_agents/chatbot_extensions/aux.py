@@ -3,7 +3,6 @@ import uuid
 from typing import Callable, List
 import urllib
 import xml.etree.ElementTree as xml
-import asyncio
 
 import httpx
 from llama_index.core import Settings, VectorStoreIndex
@@ -15,8 +14,8 @@ from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
 
-from aria_agents.artifact_manager import ArtifactManager
-from aria_agents.utils import load_config
+from aria_agents.artifact_manager import AriaArtifacts
+from aria_agents.utils import load_config, save_file, get_query_index_dir
 
 
 class SummaryWebsite(BaseModel):
@@ -129,11 +128,11 @@ async def save_query_index(query_index_dir, documents):
     query_index.storage_context.persist(query_index_dir)
 
 def create_corpus_function(
-    project_folder: str, artifact_manager: ArtifactManager = None
+    project_folder: str, artifact_manager: AriaArtifacts = None
 ) -> Callable:
     config = load_config()
     @schema_tool
-    def create_pubmed_corpus(
+    async def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
             ...,
             description="The query to search the NCBI PubMed Central Database.",
@@ -158,14 +157,10 @@ def create_corpus_function(
             model=config["aux"]["embedding_model"]
         )
         print("Document loading complete")
-
-        query_index_dir = None
-        if artifact_manager is None:
-            query_index_dir = os.path.join(project_folder, "query_index")
-        else:
-            query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
         
-        asyncio.create_task(save_query_index(query_index_dir, documents))
+        query_index_dir = get_query_index_dir(artifact_manager, project_folder)
+        
+        await save_query_index(query_index_dir, documents)
         
         return f"Pubmed corpus with {len(documents)} papers has been created."
 
@@ -181,13 +176,13 @@ def load_template(template_filename):
 
 async def write_website(
     input_model: BaseModel,
-    event_bus,
-    artifact_manager,
+    artifact_manager: AriaArtifacts,
     website_type: str,
-    project_folder: str,
+    project_name: str,
 ) -> SummaryWebsite:
     """Writes a summary website for the suggested study or experimental protocol"""
     config = load_config()
+    event_bus = artifact_manager.get_event_bus()
     website_writer = Role(
         name="Website Writer",
         instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
@@ -234,21 +229,6 @@ async def write_website(
             SummaryWebsite,
         )
 
-    if artifact_manager is None:
-        # Save the summary website to a HTML file
-        summary_website_file = os.path.join(
-            project_folder, f"{website_type}.html"
-        )
-        with open(summary_website_file, "w", encoding="utf-8") as f:
-            f.write(summary_website.html_code)
-        summary_website_url = "file://" + summary_website_file
-    else:
-        # Save the summary website to the Artifact Manager
-        project_name = os.path.basename(project_folder)
-        summary_website_id = await artifact_manager.put(
-            value=summary_website.html_code,
-            name=f"{project_name}:{website_type}.html",
-        )
-        summary_website_url = await artifact_manager.get_url(summary_website_id)
+    summary_website_url = await save_file(f"{website_type}.html", summary_website.html_code, project_name, artifact_manager)
 
     return summary_website_url
