@@ -1,7 +1,6 @@
 import argparse
 import os
 import asyncio
-import json
 import uuid
 from io import StringIO
 from typing import List, Callable, Dict
@@ -11,8 +10,8 @@ from pandas.errors import EmptyDataError
 from pandasai.llm import OpenAI as PaiOpenAI
 from pandasai import Agent as PaiAgent
 from schema_agents import schema_tool, Role
-from schema_agents.role import create_session_context
-from schema_agents.utils.common import current_session, EventBus
+from schema_agents.utils.common import current_session
+from aria_agents.chatbot_extensions.aux import ask_agent
 from aria_agents.utils import get_project_folder, get_session_id, load_config
 from aria_agents.artifact_manager import AriaArtifacts
 
@@ -46,26 +45,6 @@ class PlotPaths(BaseModel):
     plot_paths: List[str] = Field(description="A list of paths to the .png files created by the data analysis bot")
     plot_meanings: List[str] = Field(description="A list of meanings of the plots, why they were created and what they show")
 
-async def get_plot_paths(response: str,
-                        explanation: str,
-                        pai_logs: List[Dict[str, str]],
-                        summarizer_agent: Role,
-                        session_id: str = None) -> PlotPaths:
-    """Extracts the urls to the plots from the data analysis bot's response (if any were created by the bot) and includes an explanation for each plot"""
-    response_with_explanation = f"Response: {response}\n\nExplanation: {explanation}"
-    async with create_session_context(id=session_id, role_setting=summarizer_agent.role_setting):
-        res = await summarizer_agent.aask(
-            ["""Extract the paths to the plots or any .png files created by the data analysis bot.
-             Get this information from the data analysis bot's final response, explanation, and logs.
-             When creating your own explanations for the plots, refer to the input files used for the plots by their file names.
-             If no plots were created, return an empty list. The bot's response and explanation is the following:""",
-             response_with_explanation,
-             "The bot's logs are the following:",
-             str(pai_logs),
-            ],
-            output_schema=PlotPaths,
-        )
-    return res
 
 async def upload_plots(plot_paths: PlotPaths, project_name: str, artifact_manager: AriaArtifacts) -> Dict[str, str]:
     plot_urls = {}
@@ -93,7 +72,7 @@ async def get_data_files_dfs(data_file_names: List[str], artifact_manager: AriaA
         
     return await asyncio.gather(*[read_df(file_path, file_content) for (file_path, file_content) in data_files])
 
-async def get_pai_agent(project_name: str, data_file_names: List[str], artifact_manager: AriaArtifacts = None) -> tuple[PaiAgent, Role]:
+async def get_pai_agent(project_name: str, data_file_names: List[str], artifact_manager: AriaArtifacts = None) -> PaiAgent:
     data_files_dfs = await get_data_files_dfs(data_file_names, artifact_manager)
     project_folder = get_project_folder(project_name)
     pai_llm = PaiOpenAI()
@@ -107,17 +86,6 @@ async def get_pai_agent(project_name: str, data_file_names: List[str], artifact_
     
     return pai_agent
 
-def get_summarizer_agent(constraints: str, llm_model: str, event_bus: EventBus = None) -> Role:
-    return Role(
-        name="Analysis summarizer",
-        instructions="You are a data science manager. You read the responses from a data science bot performing analysis and make sure it is suitable to pass on to the end-user as serializable output.",
-        icon="🤖",
-        constraints=constraints,
-        event_bus=event_bus,
-        register_default_events=True,
-        model=llm_model,
-    )
-
 def query_pai_agent(pai_agent: PaiAgent, query: str) -> str:
     request = f"""Analyze the data files and respond to the following request: ```{query}```
         
@@ -130,18 +98,7 @@ def query_pai_agent(pai_agent: PaiAgent, query: str) -> str:
     logs = pai_agent.logs
     return response, explanation, logs
 
-async def get_or_create_agent(agent_dict, session_id, create_agent_func, *args):
-    agent = agent_dict.get(session_id)
-    if agent is None:
-        agent = await create_agent_func(*args) if asyncio.iscoroutinefunction(create_agent_func) else create_agent_func(*args)
-        agent_dict[session_id] = agent
-    
-    return agent
-
 def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str = "gpt2") -> Callable:
-    summarizer_agents = {}
-    pai_agents = {}
-
     @schema_tool
     async def explore_data(
         explore_request: str = Field(
@@ -165,15 +122,27 @@ def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str =
 
         event_bus = artifact_manager.get_event_bus() if artifact_manager else None
         session_id = get_session_id(current_session)
-        pai_agent = await get_or_create_agent(pai_agents, session_id, get_pai_agent, project_name, data_files, artifact_manager)
-        summarizer_agent = await get_or_create_agent(summarizer_agents, session_id, get_summarizer_agent, constraints, llm_model, event_bus)
+        pai_agent = await get_pai_agent(project_name, data_files, artifact_manager)
         
         response, explanation, pai_logs = query_pai_agent(pai_agent, explore_request)
-        plot_paths = await get_plot_paths(response=response,
-                                        explanation=explanation,
-                                        pai_logs=pai_logs,
-                                        summarizer_agent=summarizer_agent,
-                                        session_id=session_id)
+        plot_paths = await ask_agent(
+            name="Analysis summarizer",
+            instructions="You are a data science manager. You read the responses from a data science bot performing analysis and make sure it is suitable to pass on to the end-user as serializable output.",
+            messages=[
+                """Extract the paths to the plots or any .png files created by the data analysis bot.
+                 Get this information from the data analysis bot's final response, explanation, and logs.
+                 When creating your own explanations for the plots, refer to the input files used for the plots by their file names.
+                 If no plots were created, return an empty list. The bot's response and explanation is the following:""",
+                f"Response: {response}\n\nExplanation: {explanation}",
+                "The bot's logs are the following:",
+                str(pai_logs),
+            ],
+            output_schema=PlotPaths,
+            session_id=session_id,
+            llm_model=llm_model,
+            event_bus=event_bus,
+            constraints=constraints,
+        )
         
         plot_urls = plot_paths.plot_paths if artifact_manager is None else await upload_plots(plot_paths, project_name, artifact_manager)
 
