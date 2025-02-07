@@ -167,11 +167,40 @@ def create_corpus_function(
     return create_pubmed_corpus
 
 
+async def ask_agent(name, instructions, messages, output_schema, session_id, llm_model, event_bus = None, constraints = None):
+    agent = Role(
+        name=name,
+        instructions=instructions,
+        icon="🤖",
+        constraints=constraints,
+        event_bus=event_bus,
+        register_default_events=True,
+        model=llm_model,
+    )
+    async with create_session_context(
+        id=session_id, role_setting=agent.role_setting
+    ):
+        return await agent.aask(
+            messages,
+            output_schema=output_schema,
+        )
+
+
 def load_template(template_filename):
     this_dir = os.path.dirname(os.path.abspath(__file__))
     template_file = os.path.join(this_dir, f"html_templates/{template_filename}")
     with open(template_file, "r", encoding="utf-8") as t_file:
         return t_file.read()
+
+
+def get_website_prompt(object_type):
+    website_template = load_template(f"{object_type}_template.html")
+    object_name = object_type.replace("_", " ").capitalize()
+    return (
+        f"Create a single-page website summarizing the information in the {object_name} using the following template:"
+        f"\n{website_template}"
+        f"\nWhere the appropriate fields are filled in with the information from the {object_name}."
+    )
 
 
 async def write_website(
@@ -183,51 +212,19 @@ async def write_website(
     """Writes a summary website for the suggested study or experimental protocol"""
     config = load_config()
     event_bus = artifact_manager.get_event_bus()
-    website_writer = Role(
-        name="Website Writer",
-        instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
-        icon="🤖",
-        constraints=None,
-        event_bus=event_bus,
-        register_default_events=True,
-        model=config["llm_model"],
-    )
-    
-    website_prompt = None
-    if website_type == "suggested_study":
-        suggested_study_template = load_template(
-            "suggested_study_template.html"
-        )
-        
-        website_prompt = (
-            "Create a single-page website summarizing the information in the"
-            " suggested study using the following template:"
-            f"\n{suggested_study_template}"
-            "\nWhere the appropriate fields are filled in with the information from"
-            " the suggested study."
-        )
-    elif website_type == "experimental_protocol":
-        exp_protocol_template = load_template(
-            "experimental_protocol_template.html"
-        )
-        website_prompt = (
-            "Create a single-page website summarizing the information in the experimental protocol"
-            "website_prompt using the following template:"
-            f"\n{exp_protocol_template}"
-            "\nWhere the appropriate fields are filled in with the information from the experimental"
-            "protocol."
-        )
-
+    website_prompt = get_website_prompt(website_type)
     pre_session = current_session.get()
     session_id = pre_session.id if pre_session else str(uuid.uuid4())
-
-    async with create_session_context(
-        id=session_id, role_setting=website_writer.role_setting
-    ):
-        summary_website = await website_writer.aask(
-            [website_prompt, input_model],
-            SummaryWebsite,
-        )
+        
+    summary_website = await ask_agent(
+        name="Website Writer",
+        instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
+        messages=[website_prompt, input_model],
+        output_schema=SummaryWebsite,
+        session_id=session_id,
+        llm_model=config["llm_model"],
+        event_bus=event_bus,
+    )
 
     summary_website_url = await save_file(f"{website_type}.html", summary_website.html_code, project_name, artifact_manager)
 

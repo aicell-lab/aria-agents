@@ -11,6 +11,7 @@ from aria_agents.chatbot_extensions.aux import (
     test_pmc_query_hits,
     create_corpus_function,
     write_website,
+    ask_agent,
 )
 from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.utils import (
@@ -164,7 +165,11 @@ def create_study_suggester_function(
             project_name,
         )
 
-        return await save_file("suggested_study.json", suggested_study.model_dump_json(), project_name, artifact_manager)
+        suggested_study_url = await save_file("suggested_study.json", suggested_study.model_dump_json(), project_name, artifact_manager)
+        
+        return {
+            "suggested_study_url": suggested_study_url,
+        }
 
     return run_study_suggester
 
@@ -185,25 +190,19 @@ def create_create_diagram_function(
         """BEFORE USING THIS FUNCTION YOU NEED TO GET A SUGGESTED STUDY FROM THE `run_study_suggester` TOOL. Create a diagram illustrating the workflow for the suggested study."""
         session_id = get_session_id(current_session)
         event_bus = artifact_manager.get_event_bus() if artifact_manager else None
-        diagrammer = Role(
+        study_diagram = await ask_agent(
             name="Diagrammer",
             instructions="You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
-            icon="🤖",
-            constraints=None,
+            messages=[
+                f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
+                suggested_study,
+            ],
+            output_schema=StudyDiagram,
+            session_id=session_id,
+            llm_model=llm_model,
             event_bus=event_bus,
-            register_default_events=True,
-            model=llm_model,
         )
-        async with create_session_context(
-            id=session_id, role_setting=diagrammer.role_setting
-        ):
-            study_diagram = await diagrammer.aask(
-                [
-                    f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
-                    suggested_study,
-                ],
-                StudyDiagram,
-            )
+        
         study_with_diagram = StudyWithDiagram(
             suggested_study=suggested_study, study_diagram=study_diagram
         )
@@ -211,11 +210,15 @@ def create_create_diagram_function(
         await write_website(
             study_with_diagram,
             artifact_manager,
-            "study_with_diagram",
+            "suggested_study",
             project_name,
         )
         
-        return await save_file("study_with_diagram.json", study_with_diagram.model_dump_json(), project_name, artifact_manager)
+        study_with_diagram_url = await save_file("study_with_diagram.json", study_with_diagram.model_dump_json(), project_name, artifact_manager)   
+        
+        return {
+            "study_with_diagram_url": study_with_diagram_url,
+        }
     return create_diagram
 
 
@@ -238,7 +241,9 @@ def create_summary_website_function(
             project_name,
         )
 
-        return summary_website_url,
+        return {
+            "summary_website_url": summary_website_url,
+        }
     return create_summary_website
 
 

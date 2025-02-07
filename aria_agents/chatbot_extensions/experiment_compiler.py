@@ -152,7 +152,7 @@ async def write_protocol(
         else:
             prompt = """You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
             messages = [prompt, protocol, feedback]
-            query_messages = [x for x in messages] + [
+            query_messages = list(messages) + [
                 "Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."
             ]
             queries = await role.aask(
@@ -164,7 +164,7 @@ async def write_protocol(
                     for query in queries.queries
                 }
             )
-            protocol_messages = [x for x in messages] + [
+            protocol_messages = list(messages) + [
                 "You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
                 queries_responses,
                 "Use these protocol corpus query responses to update and revise your protocol according to the feedback. Save the queries you used into the running list of previous queries. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io",
@@ -173,17 +173,6 @@ async def write_protocol(
                 protocol_messages, output_schema=ExperimentalProtocol
             )
     return protocol_updated
-
-
-async def get_suggested_study(artifact_manager, project_folder, project_name):
-    if artifact_manager is None:
-        suggested_study_file = os.path.join(project_folder, "suggested_study.json")
-        with open(suggested_study_file, encoding="utf-8") as ss_file:
-            return SuggestedStudy(**json.load(ss_file))
-    else:
-        suggested_study_json_str = await artifact_manager.get(f"{project_name}:suggested_study.json")
-        suggested_study_json = json.loads(suggested_study_json_str)
-        return SuggestedStudy(**suggested_study_json)
 
 
 def create_experiment_compiler_function(
