@@ -55,7 +55,7 @@ async def upload_plots(plot_paths: PlotPaths, project_name: str, artifact_manage
         plot_name_base = f"plot_{str(uuid.uuid4())}"
         plot_id = await artifact_manager.put(
             value=plot_content,
-            name=f"{project_name}:{plot_name_base}.png",
+            name=f"{plot_name_base}.png",
         )
         plot_urls[plot_path] = await artifact_manager.get_url(plot_id)
         
@@ -72,9 +72,9 @@ async def get_data_files_dfs(data_file_names: List[str], artifact_manager: AriaA
         
     return await asyncio.gather(*[read_df(file_path, file_content) for (file_path, file_content) in data_files])
 
-async def get_pai_agent(project_name: str, data_file_names: List[str], artifact_manager: AriaArtifacts = None) -> PaiAgent:
+async def get_pai_agent(session_id: str, data_file_names: List[str], artifact_manager: AriaArtifacts = None) -> tuple[PaiAgent, Role]:
     data_files_dfs = await get_data_files_dfs(data_file_names, artifact_manager)
-    project_folder = get_project_folder(project_name)
+    project_folder = get_project_folder(session_id)
     pai_llm = PaiOpenAI()
     pai_agent_config = {
         'llm': pai_llm,
@@ -107,9 +107,6 @@ def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str =
         data_files: List[str] = Field(
             description="List of file names or file paths of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
         ),
-        project_name: str = Field(
-            description="The name of the project, used to create a folder to store the output files",
-        ),
         constraints: str = Field(
             "",
             description="Specify any constraints that should be applied to the data analysis",
@@ -122,7 +119,7 @@ def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str =
 
         event_bus = artifact_manager.get_event_bus() if artifact_manager else None
         session_id = get_session_id(current_session)
-        pai_agent = await get_pai_agent(project_name, data_files, artifact_manager)
+        pai_agent = await get_pai_agent(session_id, data_files, artifact_manager)
         
         response, explanation, pai_logs = query_pai_agent(pai_agent, explore_request)
         plot_paths = await ask_agent(
@@ -144,7 +141,9 @@ def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str =
             constraints=constraints,
         )
         
-        plot_urls = plot_paths.plot_paths if artifact_manager is None else await upload_plots(plot_paths, project_name, artifact_manager)
+        plot_urls = plot_paths.plot_paths if artifact_manager is None else await upload_plots(plot_paths, artifact_manager)
+
+        
 
         return {
             "data_analysis_agent_final_response": str(response),
@@ -160,12 +159,6 @@ async def main():
         type=str,
         help="The user request to create a study around",
         required=True,
-    )
-    parser.add_argument(
-        "--project_name",
-        type=str,
-        help="The name of the project, used to create a folder to store the output files",
-        default="test",
     )
     parser.add_argument(
         "--constraints",
