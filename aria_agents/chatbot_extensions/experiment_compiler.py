@@ -1,7 +1,5 @@
 import argparse
 import asyncio
-import json
-import os
 from typing import Callable, Dict, List, Union
 import dotenv
 from pydantic import BaseModel, Field
@@ -15,12 +13,11 @@ from aria_agents.chatbot_extensions.aux import (
 from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.utils import (
     load_config,
-    get_session_id,
-    get_project_folder,
     get_query_index_dir,
     get_query_function,
     save_file,
-    get_file
+    get_file,
+    get_session_id,
 )
 
 dotenv.load_dotenv()
@@ -138,8 +135,8 @@ async def write_protocol(
     feedback: ProtocolFeedback,
     query_function: Callable,
     role: Role,
-    session_id: str = None,
 ) -> ExperimentalProtocol:
+    session_id = get_session_id(current_session)
     async with create_session_context(
         id=session_id, role_setting=role.role_setting
     ):
@@ -176,15 +173,13 @@ async def write_protocol(
 
 
 def create_experiment_compiler_function(
+    config: Dict,
     artifact_manager: AriaArtifacts = None,
 ) -> Callable:
-    config = load_config()
+    llm_model = config["llm_model"]
     max_revisions = config["experiment_compiler"]["max_revisions"]
     @schema_tool
     async def run_experiment_compiler(
-        project_name: str = Field(
-            description="The name of the project, used to create a folder to store the output files and to read input files from the study suggester run"
-        ),
         constraints: str = Field(
             "",
             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
@@ -194,12 +189,10 @@ def create_experiment_compiler_function(
             description="The maximum number of protocol revision rounds to allow",
         ),
     ) -> Dict[str, str]:
-        """Generate an investigation from a suggested study"""
-        session_id = get_session_id(current_session.get())
-        project_folder = get_project_folder(project_name)
-        suggested_study_content = await get_file("suggested_study.json", project_name, artifact_manager)
+        """BEFORE USING THIS FUNCTION YOU NEED TO GET A STUDY SUGGESTION FROM THE AriaStudySuggester TOOL. Generate an investigation from a suggested study"""
+        suggested_study_content = await get_file("suggested_study.json", artifact_manager)
         suggested_study = SuggestedStudy(**suggested_study_content)
-        query_index_dir = get_query_index_dir(artifact_manager, project_folder)
+        query_index_dir = get_query_index_dir(artifact_manager)
         query_function = get_query_function(query_index_dir, config)
         event_bus = artifact_manager.get_event_bus()
 
@@ -211,7 +204,7 @@ def create_experiment_compiler_function(
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=config["llm_model"],
+            model=llm_model,
         )
 
         protocol_manager = Role(
@@ -221,7 +214,7 @@ def create_experiment_compiler_function(
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=config["llm_model"],
+            model=llm_model,
         )
 
         protocol = await write_protocol(
@@ -229,11 +222,10 @@ def create_experiment_compiler_function(
             feedback=None,
             query_function=query_function,
             role=protocol_writer,
-            session_id=session_id,
         )
 
         protocol_feedback = await get_protocol_feedback(
-            protocol, protocol_manager, session_id=session_id
+            protocol, protocol_manager
         )
         revisions = 0
 
@@ -243,24 +235,22 @@ def create_experiment_compiler_function(
                 feedback=protocol_feedback,
                 query_function=query_function,
                 role=protocol_writer,
-                session_id=session_id,
             )
 
             protocol_feedback = await get_protocol_feedback(
                 protocol,
                 protocol_manager,
                 protocol_feedback,
-                session_id=session_id,
             )
             revisions += 1
             
-        protocol_url = await save_file("experimental_protocol.json", protocol.model_dump_json(), project_name, artifact_manager)
+        protocol_url = await save_file("experimental_protocol.json", protocol.model_dump_json(), artifact_manager)
 
         summary_website_url = await write_website(
             protocol,
             artifact_manager,
             "experimental_protocol",
-            project_name,
+            llm_model,
         )
 
         return {
@@ -275,12 +265,6 @@ async def main():
     parser = argparse.ArgumentParser(description="Generate an investigation")
     config = load_config()
     parser.add_argument(
-        "--project_name",
-        type=str,
-        help="The name of the project",
-        default="test",
-    )
-    parser.add_argument(
         "--max_revisions",
         type=int,
         help="The maximum number of protocol agent revisions to allow",
@@ -294,7 +278,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    run_experiment_compiler = create_experiment_compiler_function()
+    run_experiment_compiler = create_experiment_compiler_function(config)
     await run_experiment_compiler(**vars(args))
 
 

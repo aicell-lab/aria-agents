@@ -22,12 +22,12 @@ def get_extension(artifact_manager: AriaArtifacts = None) -> ChatbotExtension:
             " analyzing data."
         ),
         tools={
-            "study_suggester": create_study_suggester_function(artifact_manager, llm_model),
-            "experiment_compiler": create_experiment_compiler_function(artifact_manager),
-            "data_analyzer": create_explore_data(artifact_manager),
+            "study_suggester": create_study_suggester_function(config, artifact_manager),
+            "experiment_compiler": create_experiment_compiler_function(config, artifact_manager),
+            "data_analyzer": create_explore_data(artifact_manager, llm_model),
             "query_pubmed": create_pubmed_query_function(artifact_manager, llm_model),
             "run_study_with_diagram": create_create_diagram_function(artifact_manager, llm_model),
-            "create_summary_website": create_summary_website_function(artifact_manager)
+            "create_summary_website": create_summary_website_function(artifact_manager, llm_model)
         },
     )
 
@@ -43,13 +43,12 @@ if __name__ == "__main__":
                     "I'm interested in designing a study about the metabolomics"
                     " of U2OS cells"
                 ),
-                project_name="test",
                 constraints="",
             )
         )
         print(
             await extension.tools["experiment_compiler"](
-                project_name="test", max_revisions=3, constraints=""
+                max_revisions=3, constraints=""
             )
         )
 

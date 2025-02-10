@@ -1,5 +1,4 @@
 import os
-import uuid
 from typing import Callable, List
 import urllib
 import xml.etree.ElementTree as xml
@@ -10,12 +9,9 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from llama_index.readers.papers import PubmedReader
 from pydantic import BaseModel, Field
-from schema_agents import Role, schema_tool
-from schema_agents.role import create_session_context
-from schema_agents.utils.common import current_session
-
+from schema_agents import schema_tool
 from aria_agents.artifact_manager import AriaArtifacts
-from aria_agents.utils import load_config, save_file, get_query_index_dir
+from aria_agents.utils import load_config, save_file, get_query_index_dir, ask_agent
 
 
 class SummaryWebsite(BaseModel):
@@ -128,7 +124,7 @@ async def save_query_index(query_index_dir, documents):
     query_index.storage_context.persist(query_index_dir)
 
 def create_corpus_function(
-    project_folder: str, artifact_manager: AriaArtifacts = None
+    artifact_manager: AriaArtifacts = None
 ) -> Callable:
     config = load_config()
     @schema_tool
@@ -158,32 +154,13 @@ def create_corpus_function(
         )
         print("Document loading complete")
         
-        query_index_dir = get_query_index_dir(artifact_manager, project_folder)
+        query_index_dir = get_query_index_dir(artifact_manager)
         
         await save_query_index(query_index_dir, documents)
         
         return f"Pubmed corpus with {len(documents)} papers has been created."
 
     return create_pubmed_corpus
-
-
-async def ask_agent(name, instructions, messages, output_schema, session_id, llm_model, event_bus = None, constraints = None):
-    agent = Role(
-        name=name,
-        instructions=instructions,
-        icon="🤖",
-        constraints=constraints,
-        event_bus=event_bus,
-        register_default_events=True,
-        model=llm_model,
-    )
-    async with create_session_context(
-        id=session_id, role_setting=agent.role_setting
-    ):
-        return await agent.aask(
-            messages,
-            output_schema=output_schema,
-        )
 
 
 def load_template(template_filename):
@@ -207,25 +184,21 @@ async def write_website(
     input_model: BaseModel,
     artifact_manager: AriaArtifacts,
     website_type: str,
-    project_name: str,
+    llm_model: str = "gpt2",
 ) -> SummaryWebsite:
     """Writes a summary website for the suggested study or experimental protocol"""
-    config = load_config()
     event_bus = artifact_manager.get_event_bus()
     website_prompt = get_website_prompt(website_type)
-    pre_session = current_session.get()
-    session_id = pre_session.id if pre_session else str(uuid.uuid4())
         
     summary_website = await ask_agent(
         name="Website Writer",
         instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
         messages=[website_prompt, input_model],
         output_schema=SummaryWebsite,
-        session_id=session_id,
-        llm_model=config["llm_model"],
+        llm_model=llm_model,
         event_bus=event_bus,
     )
 
-    summary_website_url = await save_file(f"{website_type}.html", summary_website.html_code, project_name, artifact_manager)
+    summary_website_url = await save_file(f"{website_type}.html", summary_website.html_code, artifact_manager)
 
     return summary_website_url
