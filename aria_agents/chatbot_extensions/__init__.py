@@ -3,12 +3,12 @@ import pkgutil
 import re
 from pydantic import BaseModel
 from schema_agents import schema_tool
-from aria_agents.artifact_manager import ArtifactManager
+from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 from aria_agents.utils import ChatbotExtension
 
 
-def get_builtin_extensions(artifact_manager: ArtifactManager):
+def get_builtin_extensions(artifact_manager: AriaArtifacts):
     extensions = []
     for module in pkgutil.walk_packages(__path__, __name__ + "."):
         if module.name.endswith("_extension"):
@@ -78,7 +78,7 @@ async def extension_to_tools(extension: ChatbotExtension):
 
 
 async def main():
-    artifact_manager = ArtifactManager()
+    artifact_manager = AriaArtifacts()
 
     extensions = get_builtin_extensions(artifact_manager)
     tools = []
