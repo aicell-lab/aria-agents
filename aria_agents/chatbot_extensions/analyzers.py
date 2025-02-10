@@ -11,8 +11,7 @@ from pandasai.llm import OpenAI as PaiOpenAI
 from pandasai import Agent as PaiAgent
 from schema_agents import schema_tool, Role
 from schema_agents.utils.common import current_session
-from aria_agents.chatbot_extensions.aux import ask_agent
-from aria_agents.utils import get_project_folder, get_session_id, load_config
+from aria_agents.utils import get_project_folder, get_session_id, load_config, save_to_artifact_manager, ask_agent
 from aria_agents.artifact_manager import AriaArtifacts
 
 AGENT_MAX_RETRIES = 5
@@ -46,18 +45,17 @@ class PlotPaths(BaseModel):
     plot_meanings: List[str] = Field(description="A list of meanings of the plots, why they were created and what they show")
 
 
-async def upload_plots(plot_paths: PlotPaths, project_name: str, artifact_manager: AriaArtifacts) -> Dict[str, str]:
+async def upload_plots(plot_paths: PlotPaths, artifact_manager: AriaArtifacts) -> Dict[str, str]:
+    if artifact_manager is None:
+        return plot_paths.plot_paths
+    
     plot_urls = {}
     for plot_path in plot_paths.plot_paths:
         with open(plot_path, "rb") as image_file:
             plot_content = image_file.read()
-    
-        plot_name_base = f"plot_{str(uuid.uuid4())}"
-        plot_id = await artifact_manager.put(
-            value=plot_content,
-            name=f"{plot_name_base}.png",
-        )
-        plot_urls[plot_path] = await artifact_manager.get_url(plot_id)
+        
+        plot_name = f"plot_{str(uuid.uuid4())}.png"
+        plot_urls[plot_path] = await save_to_artifact_manager(plot_name, plot_content, artifact_manager)
         
     return plot_urls
 
@@ -112,7 +110,7 @@ def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str =
             description="Specify any constraints that should be applied to the data analysis",
         ),
     ) -> Dict[str, str]:
-        """Analyzes or explores data files using a PandasAI data analysis agent, initializing it if necessary. 
+        """Analyzes or explores data files using a PandasAI data analysis agent. 
         Returns the agent's final response, explanation, logs, and plot urls. Make sure to look at the logs and plot 
         urls to get the full picture of the bot's work. If the bot created any plots, make sure to include the plot urls 
         and their meanings. Each function call creates at most one output plot, so if multiple plots are required the function must be once for each desired output plot"""
@@ -135,15 +133,12 @@ def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str =
                 str(pai_logs),
             ],
             output_schema=PlotPaths,
-            session_id=session_id,
             llm_model=llm_model,
             event_bus=event_bus,
             constraints=constraints,
         )
         
-        plot_urls = plot_paths.plot_paths if artifact_manager is None else await upload_plots(plot_paths, artifact_manager)
-
-        
+        plot_urls = await upload_plots(plot_paths, artifact_manager)
 
         return {
             "data_analysis_agent_final_response": str(response),

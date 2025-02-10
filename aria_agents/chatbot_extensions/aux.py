@@ -163,25 +163,6 @@ def create_corpus_function(
     return create_pubmed_corpus
 
 
-async def ask_agent(name, instructions, messages, output_schema, session_id, llm_model, event_bus = None, constraints = None):
-    agent = Role(
-        name=name,
-        instructions=instructions,
-        icon="🤖",
-        constraints=constraints,
-        event_bus=event_bus,
-        register_default_events=True,
-        model=llm_model,
-    )
-    async with create_session_context(
-        id=session_id, role_setting=agent.role_setting
-    ):
-        return await agent.aask(
-            messages,
-            output_schema=output_schema,
-        )
-
-
 def load_template(template_filename):
     this_dir = os.path.dirname(os.path.abspath(__file__))
     template_file = os.path.join(this_dir, f"html_templates/{template_filename}")
