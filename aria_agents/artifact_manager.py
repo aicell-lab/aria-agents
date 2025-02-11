@@ -1,5 +1,4 @@
 import httpx
-import asyncio
 
 class AriaArtifacts:
     def __init__(self, server=None, event_bus=None):
