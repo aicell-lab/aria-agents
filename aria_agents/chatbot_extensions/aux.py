@@ -44,7 +44,7 @@ class SuggestedStudy(BaseModel):
     )
     # experiment_protocol : List[str] = Field(description = "The protocol steps for the experiment")
     experiment_workflow: str = Field(
-        description="A high-level description of the workflow for the experiment"
+        description="A high-level description of the workflow for the experiment. The steps should cite the references in the format of `[1]`, `[2]`, etc."
     )
     experiment_hypothesis: str = Field(
         description="The hypothesis to be tested by the experiment"
