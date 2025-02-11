@@ -1,16 +1,16 @@
 import httpx
 
-class ArtifactManager:
-    def __init__(self, event_bus=None):
-        self.storage = {}
+class AriaArtifacts:
+    def __init__(self, server=None, event_bus=None):
+        self.server = server
+        self._event_bus = event_bus
         self._svc = None
         self._artifact_id = None
         self.user_id = None
         self.session_id = None
-        self._event_bus = event_bus
 
-    async def setup(self, server, user_id, session_id, service_id="public/artifact-manager"):
-        self._svc = await server.get_service(service_id)
+    async def setup(self, user_id, session_id, service_id="public/artifact-manager"):
+        self._svc = await self.server.get_service(service_id)
         self.user_id = user_id
         self.session_id = session_id
         self._artifact_id = f"ws-user-{user_id}/aria-agents-chats:{session_id}"
@@ -29,10 +29,9 @@ class ArtifactManager:
                 response = await client.put(put_url, data=value, timeout=500)
             response.raise_for_status()
         except Exception as e:
-            print(f"File upload failed: {e}")
             raise RuntimeError(f"File upload failed: {e}") from e
         
-        self._svc.commit(self._artifact_id)
+        await self._svc.commit(self._artifact_id)
         
         self._event_bus.emit("store_put", name)
         return name

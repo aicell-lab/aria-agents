@@ -9,13 +9,13 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 import dotenv
-dotenv.load_dotenv()
 import pkg_resources
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from hypha_rpc import connect_to_server, login
 from pydantic import BaseModel, Field
+dotenv.load_dotenv()
 from schema_agents import Message, Role
 from schema_agents.utils.common import EventBus
 
@@ -25,7 +25,7 @@ from aria_agents.chatbot_extensions import (
     extension_to_tools,
     get_builtin_extensions,
 )
-from aria_agents.artifact_manager import ArtifactManager
+from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.quota import QuotaManager
 from aria_agents.utils import (
     ChatbotExtension,
@@ -302,7 +302,7 @@ async def register_chat_service(server):
     """Hypha startup function."""
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
     event_bus = EventBus(name="AriaAgents")
-    artifact_manager = ArtifactManager(event_bus)
+    artifact_manager = AriaArtifacts(server, event_bus)
     builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
@@ -418,8 +418,7 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
-        artifact_server = await get_server(server_url="https://hypha.aicell.io", provided_token=user_token)
-        await artifact_manager.setup(artifact_server, user_id, session_id, "public/artifact-manager")
+        await artifact_manager.setup(user_id, session_id)
 
         # Listen to the `stream` event
         async def stream_callback(message):
