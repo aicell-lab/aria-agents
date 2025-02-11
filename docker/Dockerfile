@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y \
 # Create a non-root user
 RUN groupadd -r aria_agents && useradd -r -g aria_agents aria_agents
 
+# Upgrade pip
+RUN pip install --upgrade pip
 
 # Set the working directory
 WORKDIR /app/
@@ -29,11 +31,9 @@ RUN git config --global --add safe.directory /app
 # Remove all files matching .gitignore patterns and .git directory
 RUN git clean -fdX && rm -rf .git
 
-# Upgrade pip
-RUN pip install --upgrade pip
 # Install the required Python packages
 RUN pip install -r requirements.txt
-RUN pip install .
+RUN pip install fastapi hypha_rpc uvicorn .
 
 # Switch to the non-root user
 USER aria_agents
