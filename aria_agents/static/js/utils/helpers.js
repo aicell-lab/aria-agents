@@ -22,7 +22,7 @@ function urlPlusParam(param_dict) {
 }
 
 function getServerUrl() {
-	return getUrlParam("server") || window.location.origin;
+	return getUrlParam("server") || "https://hypha.aicell.io";
 }
 
 async function getServer(token, providedUrl = null) {

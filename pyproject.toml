@@ -13,7 +13,7 @@ dependencies = [
   "pypdf",
   "pillow",
   "matplotlib",
-  "hypha>=0.15.50",
+  "hypha>=0.20.47.post1",
   "tqdm",
   "aiofiles",
   "langchain>=0.1.6",
