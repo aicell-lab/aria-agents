@@ -593,7 +593,7 @@ async def register_chat_service(server):
         "http://localhost"
     ) or public_base_url.startswith("http://127.0.0.1"):
         print(
-            f"To test the Aria Assistant locally, visit: {public_base_url}/chat"
+            f"To test the Aria Assistant locally, visit: {public_base_url}/chat?server_url={public_base_url}"
         )
     print("\n=============================\n")
 

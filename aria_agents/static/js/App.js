@@ -70,9 +70,9 @@ function App() {
 	}, []);
 
 	useEffect(() => {
-		const newUrl = urlPlusParam({
-			"isPaused": isPaused,
-		});
+		const newUrl = isPaused ? 
+			urlPlusParam({ "isPaused": true }) :
+			urlMinusParam("isPaused");
 		window.history.replaceState({}, '', newUrl);
 	}, [isPaused]);
 
