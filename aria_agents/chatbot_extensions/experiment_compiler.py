@@ -1,46 +1,38 @@
 import argparse
 import asyncio
-import json
-import os
-import shutil
-import uuid
 from typing import Callable, Dict, List, Union
 import dotenv
-from llama_index.core import load_index_from_storage
-from llama_index.core.query_engine import CitationQueryEngine
-from llama_index.core.storage import StorageContext
 from pydantic import BaseModel, Field
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from schema_agents.utils.common import current_session
-from tqdm.auto import tqdm
 from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
-    create_query_function,
     write_website,
 )
-from aria_agents.artifact_manager import ArtifactManager
+from aria_agents.artifact_manager import AriaArtifacts
+from aria_agents.utils import (
+    load_config,
+    get_query_index_dir,
+    get_query_function,
+    save_file,
+    get_file,
+    get_session_id,
+)
 
 dotenv.load_dotenv()
 
-# Load the configuration file
-this_dir = os.path.dirname(os.path.abspath(__file__))
-config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r", encoding="utf-8") as file:
-    CONFIG = json.load(file)
-
-
 class ProtocolSection(BaseModel):
-    """A section of an experimental protocol encompassing a specific set of steps falling under a coherent theme. The steps should be taken from existing protocols"""
+    """A section of an experimental protocol encompassing a specific set of steps falling under a coherent theme. The steps should be taken from existing protocols. When a step is taken from a reference protocol, you MUST include an inline citation. For example, in a section you might have the step `2. Wash cells in buffer for 30 minutes [2]` where `[2]` cites the reference protocol."""
 
     section_name: str = Field(..., description="The name of the section")
     steps: List[str] = Field(
         ...,
-        description="A list of steps that must be followed in order to carry out the experiment.",
+        description="A list of steps that must be followed in order to carry out the experiment. If you have used a reference for a step, you MUST link to the reference that you specifically used for this step.",
     )
     references: List[str] = Field(
         ...,
-        description="A list of references to existing protocols that the steps were taken from. These references should be in the form of URLs to the original protocol.",
+        description="A list of references to existing protocols that the steps were taken from. These references should be in numbered link forms of URLs to the original protocol. For example the link text should be something like `[2]` and the link content should link to the reference. The numbers should be consistent with how they are cited in other sections of this generated protocol.",
     )
 
 
@@ -114,10 +106,10 @@ QUERY_TOOL_TIP = """Queries MUST not be of the form of a question, but rather in
 - `supernatent was aspirated and cells were washed with PBS`
 - `cells were lysed with RIPA buffer`
 - `sample was centrifuged at 1000g for 5 minutes`
-- `All tissue samples were pulverized using a ball mill (MM400, Retsch) with precooled beakers and stainless-steel balls for 30 s at the highest frequency (30 Hz)`
+- `All tissue samples were pulverized using a ball mill (MM400, Retsch) with precooled beakers and stainless-steel balls for 30 s at the highest frequency (30 Hz)`
 - `pulverized and frozen samples were extracted using the indicated solvents and subsequent steps of the respective protocol`
-- `After a final centrifugation step the solvent extract of the protocols 100IPA, IPA/ACN and MeOH/ACN were transferred into a new 1.5 ml tube (Eppendorf) and snap-frozen until kit preparation.` 
-- `The remaining protocols were dried using an Eppendorf Concentrator Plus set to no heat, stored at −80°C and reconstituted in 60 µL isopropanol (30 µL of 100% isopropanol, followed by 30 µL of 30% isopropanol in water) before the measurement.`"""
+- `After a final centrifugation step the solvent extract of the protocols 100IPA, IPA/ACN and MeOH/ACN were transferred into a new 1.5 ml tube (Eppendorf) and snap-frozen until kit preparation.` 
+- `The remaining protocols were dried using an Eppendorf Concentrator Plus set to no heat, stored at -80°C and reconstituted in 60 µL isopropanol (30 µL of 100% isopropanol, followed by 30 µL of 30% isopropanol in water) before the measurement.`"""
 
 
 class CorpusQueries(BaseModel):
@@ -143,8 +135,8 @@ async def write_protocol(
     feedback: ProtocolFeedback,
     query_function: Callable,
     role: Role,
-    session_id: str = None,
 ) -> ExperimentalProtocol:
+    session_id = get_session_id(current_session)
     async with create_session_context(
         id=session_id, role_setting=role.role_setting
     ):
@@ -157,7 +149,7 @@ async def write_protocol(
         else:
             prompt = """You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
             messages = [prompt, protocol, feedback]
-            query_messages = [x for x in messages] + [
+            query_messages = list(messages) + [
                 "Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."
             ]
             queries = await role.aask(
@@ -169,7 +161,7 @@ async def write_protocol(
                     for query in queries.queries
                 }
             )
-            protocol_messages = [x for x in messages] + [
+            protocol_messages = list(messages) + [
                 "You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
                 queries_responses,
                 "Use these protocol corpus query responses to update and revise your protocol according to the feedback. Save the queries you used into the running list of previous queries. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io",
@@ -181,59 +173,28 @@ async def write_protocol(
 
 
 def create_experiment_compiler_function(
-    artifact_manager: ArtifactManager = None,
+    config: Dict,
+    artifact_manager: AriaArtifacts = None,
 ) -> Callable:
+    llm_model = config["llm_model"]
+    max_revisions = config["experiment_compiler"]["max_revisions"]
     @schema_tool
     async def run_experiment_compiler(
-        project_name: str = Field(
-            description="The name of the project, used to create a folder to store the output files and to read input files from the study suggester run"
-        ),
         constraints: str = Field(
             "",
             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
         ),
         max_revisions: int = Field(
-            CONFIG["experiment_compiler"]["max_revisions"],
+            default=max_revisions,
             description="The maximum number of protocol revision rounds to allow",
         ),
     ) -> Dict[str, str]:
-        """Generate an investigation from a suggested study"""
-        pre_session = current_session.get()
-        session_id = pre_session.id if pre_session else str(uuid.uuid4())
-        event_bus = None
-        project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-        project_folder = os.path.abspath(
-            os.path.join(project_folders, project_name)
-        )
-        query_index_dir = None
-
-        if artifact_manager is None:
-            query_index_dir = os.path.join(project_folder, "query_index")
-            # Load the suggested study from a JSON file
-            suggested_study_file = os.path.join(
-                project_folder, "suggested_study.json"
-            )
-            with open(suggested_study_file, encoding="utf-8") as ss_file:
-                suggested_study = SuggestedStudy(**json.load(ss_file))
-        else:
-            query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
-            event_bus = artifact_manager.get_event_bus()
-            suggested_study_json_str = await artifact_manager.get(f"{project_name}:suggested_study.json")
-            suggested_study_json = json.loads(suggested_study_json_str)
-            suggested_study = SuggestedStudy(**suggested_study_json)
-
-        os.makedirs(query_index_dir, exist_ok=True)
-        query_storage_context = StorageContext.from_defaults(
-            persist_dir=query_index_dir
-        )
-            
-        query_index = load_index_from_storage(query_storage_context)
-        query_engine = CitationQueryEngine.from_args(
-            query_index,
-            similarity_top_k=CONFIG["aux"]["similarity_top_k"],
-            citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
-        )
-        query_function = create_query_function(query_engine)
+        """BEFORE USING THIS FUNCTION YOU NEED TO GET A STUDY SUGGESTION FROM THE AriaStudySuggester TOOL. Generate an investigation from a suggested study"""
+        suggested_study_content = await get_file("suggested_study.json", artifact_manager)
+        suggested_study = SuggestedStudy(**suggested_study_content)
+        query_index_dir = get_query_index_dir(artifact_manager)
+        query_function = get_query_function(query_index_dir, config)
+        event_bus = artifact_manager.get_event_bus()
 
         protocol_writer = Role(
             name="Protocol Writer",
@@ -243,7 +204,7 @@ def create_experiment_compiler_function(
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=CONFIG["llm_model"],
+            model=llm_model,
         )
 
         protocol_manager = Role(
@@ -253,7 +214,7 @@ def create_experiment_compiler_function(
             constraints=constraints,
             event_bus=event_bus,
             register_default_events=True,
-            model=CONFIG["llm_model"],
+            model=llm_model,
         )
 
         protocol = await write_protocol(
@@ -261,14 +222,12 @@ def create_experiment_compiler_function(
             feedback=None,
             query_function=query_function,
             role=protocol_writer,
-            session_id=session_id,
         )
 
         protocol_feedback = await get_protocol_feedback(
-            protocol, protocol_manager, session_id=session_id
+            protocol, protocol_manager
         )
         revisions = 0
-        pbar = tqdm(total=max_revisions)
 
         while not protocol_feedback.complete and revisions < max_revisions:
             protocol = await write_protocol(
@@ -276,42 +235,22 @@ def create_experiment_compiler_function(
                 feedback=protocol_feedback,
                 query_function=query_function,
                 role=protocol_writer,
-                session_id=session_id,
             )
 
             protocol_feedback = await get_protocol_feedback(
                 protocol,
                 protocol_manager,
                 protocol_feedback,
-                session_id=session_id,
             )
             revisions += 1
-            pbar.update(1)
-        pbar.close()
-
-        if artifact_manager is None:
-            # Save the suggested study to a JSON file
-            protocol_file = os.path.join(
-                project_folder, "experimental_protocol.json"
-            )
-            with open(protocol_file, "w", encoding="utf-8") as f:
-                json.dump(protocol.dict(), f, indent=4)
-            protocol_url = "file://" + protocol_file
-
-        else:
-            # Save the suggested study to the Artifact Manager
-            protocol_id = await artifact_manager.put(
-                value=protocol.model_dump_json(),
-                name=f"{project_name}:experimental_protocol.json",
-            )
-            protocol_url = await artifact_manager.get_url(protocol_id)
+            
+        protocol_url = await save_file("experimental_protocol.json", protocol.model_dump_json(), artifact_manager)
 
         summary_website_url = await write_website(
             protocol,
-            event_bus,
             artifact_manager,
             "experimental_protocol",
-            project_folder,
+            llm_model,
         )
 
         return {
@@ -324,17 +263,12 @@ def create_experiment_compiler_function(
 
 async def main():
     parser = argparse.ArgumentParser(description="Generate an investigation")
-    parser.add_argument(
-        "--project_name",
-        type=str,
-        help="The name of the project",
-        default="test",
-    )
+    config = load_config()
     parser.add_argument(
         "--max_revisions",
         type=int,
         help="The maximum number of protocol agent revisions to allow",
-        default=CONFIG["experiment_compiler"]["max_revisions"],
+        default=config["experiment_compiler"]["max_revisions"],
     )
     parser.add_argument(
         "--constraints",
@@ -344,7 +278,7 @@ async def main():
     )
     args = parser.parse_args()
 
-    run_experiment_compiler = create_experiment_compiler_function()
+    run_experiment_compiler = create_experiment_compiler_function(config)
     await run_experiment_compiler(**vars(args))
 
 

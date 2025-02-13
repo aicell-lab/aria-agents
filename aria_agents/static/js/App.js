@@ -53,10 +53,14 @@ function App() {
 	const [artifactWorkspace, setArtifactWorkspace] = useState("");
 	const [userId, setUserId] = useState("");
 	const [userToken, setUserToken] = useState("");
+	const [viewedArtifacts, setViewedArtifacts] = useState(new Set());
 
-	useEffect(() => {
+	useEffect(async () => {
 		// Automatically generate a session ID
 		setSessionId(generateSessionID());
+		if (localStorage.getItem("token")) {
+			await handleLogin();
+		}
 	}, []);
 
 	useEffect(() => {
@@ -72,7 +76,7 @@ function App() {
 		window.history.replaceState({}, '', newUrl);
 	}, [isPaused]);
 
-	
+
 	useEffect(() => {
 		if (chatContainerRef.current && isNearBottom) {
 			requestAnimationFrame(() => {
@@ -179,7 +183,11 @@ function App() {
 				parent_id: `${artifactWorkspace}/aria-agents-chats`,
 				alias: `aria-agents-chats:${sessionId}`,
 				manifest: datasetManifest,
-				...(permissions && { config: permissions }),
+				...(permissions && {
+					config: {
+						permissions: permissions
+					}
+				}),
 				_rkwargs: true
 			});
 		} catch {
@@ -187,7 +195,11 @@ function App() {
 			await artifactManager.edit({
 				artifact_id: chatId,
 				manifest: datasetManifest,
-				...(permissions && { config: permissions }),
+				...(permissions && {
+					config: {
+						permissions: permissions
+					}
+				}),
 				_rkwargs: true
 			});
 			await artifactManager.commit(chatId);
@@ -211,15 +223,14 @@ function App() {
 
 	const setServices = async (token) => {
 		const server = await getServer(token);
-		const artifactServer = await getServer(token, "https://hypha.aicell.io");
-		const configUserId = artifactServer.config.user.id;
+		const configUserId = server.config.user.id;
 		setUserId(configUserId);
 		setArtifactWorkspace(`ws-user-${configUserId}`);
 
 		const ariaAgentsService = await getService(
 			server, "aria-agents/aria-agents", "public/aria-agents");
 		const artifactManagerService = await getService(
-			artifactServer, "public/artifact-manager");
+			server, "public/artifact-manager");
 
 		try {
 			await ariaAgentsService.ping();
@@ -285,9 +296,12 @@ function App() {
 
 		const currentSessionId = getUrlParam("sessionId") ?? sessionId;
 		const currentIsPaused = getUrlParam("isPaused") === "true";
-
 		if (id !== currentSessionId || currentIsPaused) {
-			throw new Error("User has terminated this session.");
+			throw new Error(`User has terminated this session.
+				URL param session ID: ${getUrlParam('sessionId')} and
+				saved sessionId: ${sessionId}.
+				One of these should match message session ID: ${id}.
+				isPaused: ${currentIsPaused}`);
 		}
 
 		const { name: roleName, icon: roleIcon } = roleSetting || {};
@@ -548,6 +562,15 @@ function App() {
 		awaitUserResponse();
 	}
 
+	const hasUnseenArtifacts = () => {
+		return artifacts.length > viewedArtifacts.size;
+	};
+
+	const handleArtifactsPanelOpen = () => {
+		setIsArtifactsPanelOpen(true);
+		setViewedArtifacts(new Set(artifacts.map((_, index) => index)));
+	};
+
 	return (
 		<div className="min-h-screen flex flex-col">
 			<button
@@ -634,9 +657,7 @@ function App() {
 			</div>
 			{isArtifactsPanelOpen ? (
 				<ArtifactsPanel
-					onClose={() =>
-						setIsArtifactsPanelOpen(!isArtifactsPanelOpen)
-					}
+					onClose={() => setIsArtifactsPanelOpen(false)}
 					artifacts={artifacts}
 					currentArtifactIndex={currentArtifactIndex}
 					onPrev={() => {
@@ -651,14 +672,17 @@ function App() {
 					}}
 				/>
 			) : (
-				<button
-					onClick={() =>
-						setIsArtifactsPanelOpen(!isArtifactsPanelOpen)
-					}
-					className="button fixed top-0 right-0 mt-4 mr-4"
-				>
-					Artifacts
-				</button>
+				<div className="relative">
+					<button
+						onClick={handleArtifactsPanelOpen}
+						className="button fixed top-0 right-0 mt-4 mr-4"
+					>
+						Artifacts
+						{hasUnseenArtifacts() && (
+							<span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+						)}
+					</button>
+				</div>
 			)}
 			{isLoading && (
 				<div

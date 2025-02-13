@@ -1,32 +1,23 @@
 import argparse
 import asyncio
-import json
-import os
-import uuid
 from typing import Callable, Dict
-import dotenv
 from pydantic import BaseModel, Field
-from aria_agents.utils import get_project_folder
-from schema_agents import Role, schema_tool
-from schema_agents.role import create_session_context
-from schema_agents.utils.common import current_session
+from schema_agents import schema_tool
 from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
     test_pmc_query_hits,
     create_corpus_function,
-    create_query_function,
     write_website,
+    ask_agent,
 )
-from aria_agents.artifact_manager import ArtifactManager
-
-dotenv.load_dotenv()
-
-# Load the configuration file
-this_dir = os.path.dirname(os.path.abspath(__file__))
-config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r", encoding="utf-8") as file:
-    CONFIG = json.load(file)
-
+from aria_agents.artifact_manager import AriaArtifacts
+from aria_agents.utils import (
+    get_query_index_dir,
+    get_query_function,
+    save_file,
+    get_file,
+    call_agent,
+)
 
 class StudyDiagram(BaseModel):
     """A diagram written in mermaid.js showing the workflow for the study and what expected data from the study will look like. An example:
@@ -59,140 +50,156 @@ class StudyWithDiagram(BaseModel):
         description="The diagram illustrating the workflow for the suggested study"
     )
 
-
-def create_study_suggester_function(
-    artifact_manager: ArtifactManager = None,
+def create_pubmed_query_function(
+    artifact_manager: AriaArtifacts = None,
+    llm_model: str = "gpt2",
 ) -> Callable:
+    @schema_tool
+    async def query_pubmed(
+        user_request: str = Field(
+            description="The user's request to create a study around, framed in terms of a scientific question"
+        ),
+        constraints: str = Field(
+            "",
+            description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
+        ),
+    ) -> str:
+        """Create a corpus of papers from PubMed Central based on the user's request."""
+        event_bus = artifact_manager.get_event_bus() if artifact_manager else None
+        
+        await call_agent(
+            name="NCBI Querier",
+            instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
+            messages=[
+                """Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. 
+                Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. 
+                If no queries return hits, adjust the queries to be more general (for example, by removing the `[Title/Abstract]` field specifications from search terms), and try again.
+                Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.""",
+                user_request,
+            ],
+            llm_model=llm_model,
+            event_bus=event_bus,
+            constraints=constraints,
+            tools=[test_pmc_query_hits, create_corpus_function(artifact_manager)],
+        )
+        
+        return "query_function created."
+    return query_pubmed
+
+
+# TODO: improve relevance and usefulness of citations
+def create_study_suggester_function(
+    config: Dict,
+    artifact_manager: AriaArtifacts = None,
+) -> Callable:
+    llm_model = config["llm_model"]
     @schema_tool
     async def run_study_suggester(
         user_request: str = Field(
             description="The user's request to create a study around, framed in terms of a scientific question"
-        ),
-        project_name: str = Field(
-            description="The name of the project, used to create a folder to store the output files"
         ),
         constraints: str = Field(
             "",
             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
         ),
     ) -> Dict[str, str]:
-        """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
-        pre_session = current_session.get()
-        session_id = pre_session.id if pre_session else str(uuid.uuid4())
+        """BEFORE USING THIS FUNCTION YOU NEED TO CREATE A QUERY_FUNCTION FROM THE `query_pubmed` TOOL. Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
+        event_bus = artifact_manager.get_event_bus() if artifact_manager else None
+        query_index_dir = get_query_index_dir(artifact_manager)
+        query_function = get_query_function(query_index_dir, config)
 
-        project_folder = get_project_folder(project_name)
-        event_bus = None
-
-        if artifact_manager is None:
-            os.makedirs(project_folder, exist_ok=True)
-        else:
-            event_bus = artifact_manager.get_event_bus()
-
-        ncbi_querier = Role(
-            name="NCBI Querier",
-            instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
-            icon="🤖",
-            constraints=constraints,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=CONFIG["llm_model"],
-        )
-
-        corpus_context = {}
-        async with create_session_context(
-            id=session_id, role_setting=ncbi_querier.role_setting
-        ):
-            await ncbi_querier.acall(
-                [
-                    """Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. 
-                    Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. 
-                    If no queries return hits, adjust the queries to be more general (for example, by removing the `[Title/Abstract]` field specifications from search terms), and try again.
-                    Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.""",
-                    user_request,
-                ],
-                tools=[
-                    test_pmc_query_hits,
-                    create_corpus_function(
-                        corpus_context, project_folder, artifact_manager
-                    ),
-                ],
-            )
-
-        study_suggester = Role(
+        suggested_study = await call_agent(
             name="Study Suggester",
             instructions="You are the study suggester. You suggest a study to test a new hypothesis based on the cutting-edge information from the literature review.",
-            icon="🤖",
+            messages=[
+                f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
+                "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
+            ],
+            tools=[query_function],
+            output_schema=SuggestedStudy,
+            llm_model=llm_model,
+            event_bus=event_bus,
             constraints=constraints,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=CONFIG["llm_model"],
         )
-        query_function = create_query_function(corpus_context["query_engine"])
-        async with create_session_context(
-            id=session_id, role_setting=study_suggester.role_setting
-        ):
-            suggested_study = await study_suggester.acall(
-                [
-                    f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
-                    "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
-                ],
-                tools=[query_function],
-                output_schema=SuggestedStudy,
-            )
-        if artifact_manager is None:
-            # Save the suggested study to a JSON file
-            suggested_study_file = os.path.join(
-                project_folder, "suggested_study.json"
-            )
-            with open(suggested_study_file, "w", encoding="utf-8") as f:
-                json.dump(suggested_study.dict(), f, indent=4)
-            suggested_study_url = "file://" + suggested_study_file
-        else:
-            suggested_study_id = await artifact_manager.put(
-                value=suggested_study.json(),
-                name=f"{project_name}:suggested_study.json",
-            )
-            suggested_study_url = await artifact_manager.get_url(
-                name=suggested_study_id
-            )
-
-        diagrammer = Role(
-            name="Diagrammer",
-            instructions="You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
-            icon="🤖",
-            constraints=None,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=CONFIG["llm_model"],
-        )
-        async with create_session_context(
-            id=session_id, role_setting=study_suggester.role_setting
-        ):
-            study_diagram = await diagrammer.aask(
-                [
-                    f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
-                    suggested_study,
-                ],
-                StudyDiagram,
-            )
-        study_with_diagram = StudyWithDiagram(
-            suggested_study=suggested_study, study_diagram=study_diagram
-        )
-
-        summary_website_url = await write_website(
-            study_with_diagram,
-            event_bus,
+            
+        await write_website(
+            suggested_study,
             artifact_manager,
             "suggested_study",
-            project_folder,
+            llm_model,
         )
 
+        suggested_study_url = await save_file("suggested_study.json", suggested_study.model_dump_json(), artifact_manager)
+        
         return {
-            "summary_website_url": summary_website_url,
             "suggested_study_url": suggested_study_url,
         }
 
     return run_study_suggester
+
+
+def create_create_diagram_function(
+    artifact_manager: AriaArtifacts = None,
+    llm_model: str = "gpt2",
+) -> Callable:
+    @schema_tool
+    async def create_diagram(
+        suggested_study: SuggestedStudy = Field(
+            description="The suggested study to test a new hypothesis. Generated by the `AriaStudySuggester` tool."
+        ),
+    ) -> Dict[str, str]:
+        """BEFORE USING THIS FUNCTION YOU NEED TO GET A SUGGESTED STUDY FROM THE `AriaStudySuggester` TOOL. Create a diagram illustrating the workflow for the suggested study."""
+        event_bus = artifact_manager.get_event_bus() if artifact_manager else None
+        study_diagram = await ask_agent(
+            name="Diagrammer",
+            instructions="You are the diagrammer. You create a diagram illustrating the workflow for the suggested study.",
+            messages=[
+                f"Create a diagram illustrating the workflow for the suggested study:\n`{suggested_study.experiment_name}`",
+                suggested_study,
+            ],
+            output_schema=StudyDiagram,
+            llm_model=llm_model,
+            event_bus=event_bus,
+        )
+        
+        study_with_diagram = StudyWithDiagram(
+            suggested_study=suggested_study, study_diagram=study_diagram
+        )
+        
+        await write_website(
+            study_with_diagram,
+            artifact_manager,
+            "suggested_study",
+            llm_model
+        )
+        study_with_diagram_url = await save_file("study_with_diagram.json", study_with_diagram.model_dump_json(), artifact_manager)
+        
+        return {
+            "study_with_diagram_url": study_with_diagram_url,
+        }
+    return create_diagram
+
+
+def create_summary_website_function(
+    artifact_manager: AriaArtifacts = None,
+    llm_model: str = "gpt2",
+) -> Callable:
+    @schema_tool
+    async def create_summary_website() -> Dict[str, str]:
+        """BEFORE USING THIS FUNCTION YOU NEED TO GET A STUDY DIAGRAM FROM THE `create_diagram` TOOL. Create a summary website for the suggested study."""
+        study_with_diagram_content = await get_file("study_with_diagram.json", artifact_manager)
+        study_with_diagram = StudyWithDiagram(**study_with_diagram_content)
+        summary_website_url = await write_website(
+            study_with_diagram,
+            artifact_manager,
+            "suggested_study",
+            llm_model,
+        )
+
+        return {
+            "summary_website_url": summary_website_url,
+        }
+    return create_summary_website
 
 
 async def main():
@@ -204,12 +211,6 @@ async def main():
         type=str,
         help="The user request to create a study around",
         required=True,
-    )
-    parser.add_argument(
-        "--project_name",
-        type=str,
-        help="The name of the project, used to create a folder to store the output files",
-        default="test",
     )
     parser.add_argument(
         "--constraints",

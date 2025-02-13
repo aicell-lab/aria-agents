@@ -2,16 +2,18 @@ from aria_agents.chatbot_extensions.experiment_compiler import (
     create_experiment_compiler_function,
 )
 from aria_agents.chatbot_extensions.study_suggester import (
-    create_study_suggester_function,
+    create_study_suggester_function, create_pubmed_query_function, create_summary_website_function, create_create_diagram_function
 )
 from aria_agents.chatbot_extensions.analyzers import (
     create_explore_data
 )
-from aria_agents.artifact_manager import ArtifactManager
-from aria_agents.utils import ChatbotExtension
+from aria_agents.artifact_manager import AriaArtifacts
+from aria_agents.utils import load_config, ChatbotExtension
 
-
-def get_extension(artifact_manager: ArtifactManager = None) -> ChatbotExtension:
+def get_extension(artifact_manager: AriaArtifacts = None) -> ChatbotExtension:
+    config = load_config()
+    llm_model = config["llm_model"]
+    
     return ChatbotExtension(
         id="aria",
         name="Aria",
@@ -19,11 +21,14 @@ def get_extension(artifact_manager: ArtifactManager = None) -> ChatbotExtension:
             "Utility tools for suggesting studies, compiling experiments, and"
             " analyzing data."
         ),
-        tools=dict(
-            study_suggester=create_study_suggester_function(artifact_manager),
-            experiment_compiler=create_experiment_compiler_function(artifact_manager),
-            data_analyzer = create_explore_data(artifact_manager),
-        ),
+        tools={
+            "study_suggester": create_study_suggester_function(config, artifact_manager),
+            "experiment_compiler": create_experiment_compiler_function(config, artifact_manager),
+            "data_analyzer": create_explore_data(artifact_manager, llm_model),
+            "query_pubmed": create_pubmed_query_function(artifact_manager, llm_model),
+            "run_study_with_diagram": create_create_diagram_function(artifact_manager, llm_model),
+            "create_summary_website": create_summary_website_function(artifact_manager, llm_model)
+        },
     )
 
 
@@ -38,13 +43,12 @@ if __name__ == "__main__":
                     "I'm interested in designing a study about the metabolomics"
                     " of U2OS cells"
                 ),
-                project_name="test",
                 constraints="",
             )
         )
         print(
             await extension.tools["experiment_compiler"](
-                project_name="test", max_revisions=3, constraints=""
+                max_revisions=3, constraints=""
             )
         )
 

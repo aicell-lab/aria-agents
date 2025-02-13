@@ -1,30 +1,17 @@
-import json
 import os
-import shutil
-import uuid
 from typing import Callable, List
 import urllib
 import xml.etree.ElementTree as xml
-import requests
-import asyncio
 
+import httpx
 from llama_index.core import Settings, VectorStoreIndex
-from llama_index.core.query_engine import CitationQueryEngine
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from llama_index.readers.papers import PubmedReader
 from pydantic import BaseModel, Field
-from schema_agents import Role, schema_tool
-from schema_agents.role import create_session_context
-from schema_agents.utils.common import current_session
-
-from aria_agents.artifact_manager import ArtifactManager
-
-# Load the configuration file
-this_dir = os.path.dirname(os.path.abspath(__file__))
-config_file = os.path.join(this_dir, "config.json")
-with open(config_file, "r", encoding="utf-8") as file:
-    CONFIG = json.load(file)
+from schema_agents import schema_tool
+from aria_agents.artifact_manager import AriaArtifacts
+from aria_agents.utils import load_config, save_file, get_query_index_dir, ask_agent
 
 
 class SummaryWebsite(BaseModel):
@@ -35,15 +22,15 @@ class SummaryWebsite(BaseModel):
             "The html code for a single page website summarizing the information in the"
             " suggested study or experimental protocol appropriately including any"
             " diagrams. Make sure to include the original user request as well if"
-            " available. References should appear as links"
+            " available. References should appear as numbered links"
             " (e.g. a url`https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11129507/` can"
-            " appear as a link with the name `PMC11129507` referencing the PMCID)"
+            " appear as a link with link text `[1]` referencing the link). Other sections of the text should refer to this reference by number"
         )
     )
 
 
 class SuggestedStudy(BaseModel):
-    """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge"""
+    """A suggested study to test a new hypothesis relevant to the user's request based on the cutting-edge literature review. Any time a reference is used anywhere, it MUST be cited directly, e.g. the specific sentence that uses the reference should include an annotation to that specific reference"""
 
     user_request: str = Field(
         description="The original user request. This MUST be included."
@@ -57,7 +44,7 @@ class SuggestedStudy(BaseModel):
     )
     # experiment_protocol : List[str] = Field(description = "The protocol steps for the experiment")
     experiment_workflow: str = Field(
-        description="A high-level description of the workflow for the experiment"
+        description="A high-level description of the workflow for the experiment. The steps should cite the references in the format of `[1]`, `[2]`, etc."
     )
     experiment_hypothesis: str = Field(
         description="The hypothesis to be tested by the experiment"
@@ -69,7 +56,7 @@ class SuggestedStudy(BaseModel):
         )
     )
     references: List[str] = Field(
-        description="Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design."
+        description="Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design. Any time a reference is used in the other sections, the specific sentence MUST be linked specifically to one of these references. References should be numbered and numbering should be consistent with their appearances in other sections."
     )
 
 
@@ -99,27 +86,29 @@ class PMCQuery(BaseModel):
 
 
 @schema_tool
-def test_pmc_query_hits(
+async def test_pmc_query_hits(
     pmc_query: PMCQuery = Field(
         ..., description="The query to search the NCBI PubMed Central Database."
     )
 ) -> str:
     """Tests the `PMCQuery` to see how many hits it returns in the PubMed Central database."""
-
+    config = load_config()
     parameters = {
         "tool": "tool",
         "email": "email",
         "db": "pmc",
         "term": pmc_query.query,
-        "retmax": CONFIG["aux"]["paper_limit"],
+        "retmax": config["aux"]["paper_limit"],
     }
     try:
-        resp = requests.get(
-            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
-            params=parameters,
-            timeout=500,
-        )
-    except requests.RequestException as e:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+                params=parameters,
+                timeout=500,
+            )
+            resp.raise_for_status()
+    except Exception as e:
         return f"Failed to execute query: {e}"
 
     # Parse the XML response
@@ -130,21 +119,16 @@ def test_pmc_query_hits(
 
     return f"The query `{pmc_query.query}` returned {n_hits} hits."
 
-async def save_query_index(context, query_index_dir, documents):
+async def save_query_index(query_index_dir, documents):
     query_index = VectorStoreIndex.from_documents(documents)
     query_index.storage_context.persist(query_index_dir)
-    # Create a citation query engine object
-    context["query_engine"] = CitationQueryEngine.from_args(
-        query_index,
-        similarity_top_k=CONFIG["aux"]["similarity_top_k"],
-        citation_chunk_size=CONFIG["aux"]["citation_chunk_size"],
-    )
 
 def create_corpus_function(
-    context: dict, project_folder: str, artifact_manager: ArtifactManager = None
+    artifact_manager: AriaArtifacts = None
 ) -> Callable:
+    config = load_config()
     @schema_tool
-    def create_pubmed_corpus(
+    async def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
             ...,
             description="The query to search the NCBI PubMed Central Database.",
@@ -160,123 +144,61 @@ def create_corpus_function(
         # print(test_pmc_query_hits(pmc_query))
         documents = loader.load_data(
             search_query=pmc_query.query,
-            max_results=CONFIG["aux"]["paper_limit"],
+            max_results=config["aux"]["paper_limit"],
         )
         if len(documents) == 0:
             return "No papers were found in the PubMed Central database for the given query. Please try different terms for the query."
-        Settings.llm = OpenAI(model=CONFIG["llm_model"])
+        Settings.llm = OpenAI(model=config["llm_model"])
         Settings.embed_model = OpenAIEmbedding(
-            model=CONFIG["aux"]["embedding_model"]
+            model=config["aux"]["embedding_model"]
         )
         print("Document loading complete")
-
-        query_index_dir = None
-        if artifact_manager is None:
-            query_index_dir = os.path.join(project_folder, "query_index")
-        else:
-            query_index_dir = os.path.join(project_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
         
-        asyncio.create_task(save_query_index(context, query_index_dir, documents))
+        query_index_dir = get_query_index_dir(artifact_manager)
+        
+        await save_query_index(query_index_dir, documents)
         
         return f"Pubmed corpus with {len(documents)} papers has been created."
 
     return create_pubmed_corpus
 
 
-def create_query_function(query_engine: CitationQueryEngine) -> Callable:
-    @schema_tool
-    def query_corpus(
-        question: str = Field(
-            ...,
-            description="The query statement the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.",
-        )
-    ) -> str:
-        """Given a corpus of papers created from a PubMedCentral search, queries the corpus and returns the response from the LLM agent"""
-        response = query_engine.query(question)
-        response_str = f"""The following query was run for the literature review:\n```{question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\n\nThe citations refer to the following papers:"""
-        for i_node, node in enumerate(response.source_nodes):
-            response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
-        print(response_str)
-        return response_str
-
-    return query_corpus
-
-
 def load_template(template_filename):
+    this_dir = os.path.dirname(os.path.abspath(__file__))
     template_file = os.path.join(this_dir, f"html_templates/{template_filename}")
     with open(template_file, "r", encoding="utf-8") as t_file:
         return t_file.read()
 
 
+def get_website_prompt(object_type):
+    website_template = load_template(f"{object_type}_template.html")
+    object_name = object_type.replace("_", " ").capitalize()
+    return (
+        f"Create a single-page website summarizing the information in the {object_name} using the following template:"
+        f"\n{website_template}"
+        f"\nWhere the appropriate fields are filled in with the information from the {object_name}."
+    )
+
+
 async def write_website(
     input_model: BaseModel,
-    event_bus,
-    artifact_manager,
+    artifact_manager: AriaArtifacts,
     website_type: str,
-    project_folder: str,
+    llm_model: str = "gpt2",
 ) -> SummaryWebsite:
     """Writes a summary website for the suggested study or experimental protocol"""
-    website_writer = Role(
+    event_bus = artifact_manager.get_event_bus()
+    website_prompt = get_website_prompt(website_type)
+        
+    summary_website = await ask_agent(
         name="Website Writer",
         instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
-        icon="🤖",
-        constraints=None,
+        messages=[website_prompt, input_model],
+        output_schema=SummaryWebsite,
+        llm_model=llm_model,
         event_bus=event_bus,
-        register_default_events=True,
-        model=CONFIG["llm_model"],
     )
-    
-    website_prompt = None
-    if website_type == "suggested_study":
-        suggested_study_template = load_template(
-            "suggested_study_template.html"
-        )
-        
-        website_prompt = (
-            "Create a single-page website summarizing the information in the"
-            " suggested study using the following template:"
-            f"\n{suggested_study_template}"
-            "\nWhere the appropriate fields are filled in with the information from"
-            " the suggested study."
-        )
-    elif website_type == "experimental_protocol":
-        exp_protocol_template = load_template(
-            "experimental_protocol_template.html"
-        )
-        website_prompt = (
-            "Create a single-page website summarizing the information in the experimental protocol"
-            "website_prompt using the following template:"
-            f"\n{exp_protocol_template}"
-            "\nWhere the appropriate fields are filled in with the information from the experimental"
-            "protocol."
-        )
 
-    pre_session = current_session.get()
-    session_id = pre_session.id if pre_session else str(uuid.uuid4())
-
-    async with create_session_context(
-        id=session_id, role_setting=website_writer.role_setting
-    ):
-        summary_website = await website_writer.aask(
-            [website_prompt, input_model],
-            SummaryWebsite,
-        )
-
-    if artifact_manager is None:
-        # Save the summary website to a HTML file
-        summary_website_file = os.path.join(
-            project_folder, f"{website_type}.html"
-        )
-        with open(summary_website_file, "w", encoding="utf-8") as f:
-            f.write(summary_website.html_code)
-        summary_website_url = "file://" + summary_website_file
-    else:
-        # Save the summary website to the Artifact Manager
-        project_name = os.path.basename(project_folder)
-        summary_website_id = await artifact_manager.put(
-            value=summary_website.html_code,
-            name=f"{project_name}:{website_type}.html",
-        )
-        summary_website_url = await artifact_manager.get_url(summary_website_id)
+    summary_website_url = await save_file(f"{website_type}.html", summary_website.html_code, artifact_manager)
 
     return summary_website_url

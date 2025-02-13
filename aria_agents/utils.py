@@ -1,33 +1,152 @@
 import os
+import uuid
+import json
 from typing import Any, Callable, Dict, Optional, _UnionGenericAlias
 from inspect import signature
-import requests
+from contextvars import ContextVar
 import dotenv
-from tqdm import tqdm
 from pydantic import BaseModel, Field
-from schema_agents import schema_tool
+from llama_index.core import load_index_from_storage
+from llama_index.core.query_engine import CitationQueryEngine
+from llama_index.core.storage import StorageContext
+from schema_agents.utils.common import current_session
+from schema_agents import Role, schema_tool
+from schema_agents.role import create_session_context
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
+from aria_agents.artifact_manager import AriaArtifacts
 
 
-def download_file(url, filename):
-    response = requests.get(url, stream=True, timeout=500)
-    file_size = int(response.headers.get("content-length", 0))
-
-    # Initialize the progress bar
-    progress = tqdm(
-        response.iter_content(1024),
-        f"Downloading {filename}",
-        total=file_size,
-        unit="B",
-        unit_scale=True,
-        unit_divisor=1024,
+async def call_agent(name, instructions, messages, llm_model, event_bus = None, constraints = None, tools = None, output_schema = None):
+    session_id = get_session_id(current_session)
+    agent = Role(
+        name=name,
+        instructions=instructions,
+        icon="🤖",
+        constraints=constraints,
+        event_bus=event_bus,
+        register_default_events=True,
+        model=llm_model,
     )
+    
+    async with create_session_context(
+        id=session_id, role_setting=agent.role_setting
+    ):
+        return await agent.acall(
+            messages, tools=tools, output_schema=output_schema
+        )
+        
+async def ask_agent(name, instructions, messages, output_schema, llm_model, event_bus = None, constraints = None):
+    agent = Role(
+        name=name,
+        instructions=instructions,
+        icon="🤖",
+        constraints=constraints,
+        event_bus=event_bus,
+        register_default_events=True,
+        model=llm_model,
+    )
+    session_id = get_session_id(current_session)
+    async with create_session_context(
+        id=session_id, role_setting=agent.role_setting
+    ):
+        return await agent.aask(
+            messages,
+            output_schema=output_schema,
+        )
 
-    with open(filename, "wb") as f:
-        for data in progress:
-            # Update the progress bar
-            progress.update(len(data))
-            f.write(data)
+
+def save_locally(filename: str, content: str, project_folder: str):
+    file_path = os.path.join(project_folder, filename)
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return "file://" + file_path
+
+
+async def save_to_artifact_manager(filename: str, content: str, artifact_manager: AriaArtifacts):
+    file_id = await artifact_manager.put(
+        value=content,
+        name=filename,
+    )
+    file_url = await artifact_manager.get_url(
+        name=file_id
+    )
+    return file_url
+
+
+async def get_file(filename: str, artifact_manager: AriaArtifacts = None):
+    if artifact_manager is None:
+        session_id = get_session_id(current_session)
+        project_folder = get_project_folder(session_id)
+        file_content = os.path.join(project_folder, filename)
+        with open(file_content, encoding="utf-8") as loaded_file:
+            return json.load(loaded_file)
+    else:
+        file_content = await artifact_manager.get(filename)
+        return json.loads(file_content)
+
+
+async def save_file(filename: str, content: str, artifact_manager: AriaArtifacts = None):
+    if artifact_manager is None:
+        session_id = get_session_id(current_session)
+        project_folder = get_project_folder(session_id)
+        file_url = save_locally(filename, content, project_folder)
+    else:
+        file_url = await save_to_artifact_manager(filename, content, artifact_manager)
+    
+    return file_url
+
+def get_query_index_dir(artifact_manager: AriaArtifacts = None):
+    if artifact_manager is None:
+        session_id = get_session_id(current_session)
+        project_folder = get_project_folder(session_id)
+        query_index_dir = os.path.join(project_folder, "query_index")
+    else:
+        projects_folder = os.environ.get("PROJECT_FOLDERS", "./projects")
+        query_index_dir = os.path.join(projects_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
+        
+    os.makedirs(query_index_dir, exist_ok=True)
+    return query_index_dir
+
+
+def create_query_function(query_engine: CitationQueryEngine) -> Callable:
+    @schema_tool
+    def query_corpus(
+        question: str = Field(
+            ...,
+            description="The query statement the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.",
+        )
+    ) -> str:
+        """Given a corpus of papers created from a PubMedCentral search, queries the corpus and returns the response from the LLM agent"""
+        response = query_engine.query(question)
+        response_str = f"""The following query was run for the literature review:\n```{question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\n\nThe citations refer to the following papers:"""
+        for i_node, node in enumerate(response.source_nodes):
+            response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
+        print(response_str)
+        return response_str
+
+    return query_corpus
+
+
+def get_query_function(query_index_dir, config):
+    query_storage_context = StorageContext.from_defaults(
+        persist_dir=query_index_dir
+    )
+        
+    query_index = load_index_from_storage(query_storage_context)
+    query_engine = CitationQueryEngine.from_args(
+        query_index,
+        similarity_top_k=config["aux"]["similarity_top_k"],
+        citation_chunk_size=config["aux"]["citation_chunk_size"],
+    )
+    return create_query_function(query_engine)
+
+
+def load_config():
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    config_file = os.path.join(this_dir, "chatbot_extensions/config.json")
+    with open(config_file, "r", encoding="utf-8") as file:
+        config = json.load(file)
+    return config
 
 
 def extract_schemas(function):
@@ -74,12 +193,17 @@ class LegacyChatbotExtension(BaseModel):
     schema_class: Optional[BaseModel] = Field(
         None, description="The schema class for the extension"
     )
+    
+def get_session_id(session: ContextVar) -> str:
+    pre_session = session.get()
+    session_id = pre_session.id if pre_session else str(uuid.uuid4())
+    return session_id
 
-def get_project_folder(project_name: str):
+def get_project_folder(session_id: str):
     dotenv.load_dotenv()
     project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
     project_folder = os.path.abspath(
-        os.path.join(project_folders, project_name)
+        os.path.join(project_folders, session_id)
     )
     os.makedirs(project_folder, exist_ok=True)
     

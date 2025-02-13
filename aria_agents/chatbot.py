@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from hypha_rpc import connect_to_server, login
 from pydantic import BaseModel, Field
+dotenv.load_dotenv()
 from schema_agents import Message, Role
 from schema_agents.utils.common import EventBus
 
@@ -24,15 +25,13 @@ from aria_agents.chatbot_extensions import (
     extension_to_tools,
     get_builtin_extensions,
 )
-from aria_agents.artifact_manager import ArtifactManager
+from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.quota import QuotaManager
 from aria_agents.utils import (
     ChatbotExtension,
     LegacyChatbotExtension,
     legacy_extension_to_tool,
 )
-
-dotenv.load_dotenv()
 
 logger = logging.getLogger("bioimageio-chatbot")
 # set logger level
@@ -232,27 +231,20 @@ async def add_probes(server):
             return False
         
     
-    def check_readiness():
-        services_are_available = asyncio.gather(
+    async def is_alive():
+        services_are_available = await asyncio.gather(
             is_available("public/artifact-manager"),
             is_available("aria-agents-chat"),
             is_available("aria-agents"),
         )
         if all(services_are_available):
-            return {"status": "ok"}
+            return {"status": "ok", "message": "All services are available"}
         
-        return {"status": "not ready", "message": "Some services are not available"}
+        raise RuntimeError(f"Some services are not available: {services_are_available}")
     
-    def check_liveness():
-        try:
-            asyncio.get_running_loop()
-            return {"status": "ok"}
-        except RuntimeError:
-            return {"status": "error", "message": "Event loop not running"}
-    
-    await server.register_probe({
-        "readiness": check_readiness,
-        "liveness": check_liveness,
+    await server.register_probes({
+        "readiness": is_alive,
+        "liveness": is_alive,
     })
 
 
@@ -310,7 +302,7 @@ async def register_chat_service(server):
     """Hypha startup function."""
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
     event_bus = EventBus(name="AriaAgents")
-    artifact_manager = ArtifactManager(event_bus)
+    artifact_manager = AriaArtifacts(server, event_bus)
     builtin_extensions = get_builtin_extensions(artifact_manager)
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
@@ -426,8 +418,7 @@ async def register_chat_service(server):
             a["agent"] for a in assistants if a["name"] == assistant_name
         )
         session_id = session_id or secrets.token_hex(8)
-        artifact_server = await get_server(server_url="https://hypha.aicell.io", provided_token=user_token)
-        await artifact_manager.setup(artifact_server, user_id, session_id, "public/artifact-manager")
+        await artifact_manager.setup(user_id, session_id)
 
         # Listen to the `stream` event
         async def stream_callback(message):
@@ -436,7 +427,7 @@ async def register_chat_service(server):
                     await status_callback(message.model_dump())
                 except Exception as exc:
                     message.session.stop = True
-                    raise RuntimeError("The status callback returned an error.") from exc
+                    raise RuntimeError(f"The status callback returned an error: {exc}") from exc
 
         event_bus.on("stream", stream_callback)
 
