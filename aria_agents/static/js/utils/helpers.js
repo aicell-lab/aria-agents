@@ -22,7 +22,14 @@ function urlPlusParam(param_dict) {
 }
 
 function getServerUrl() {
-	return getUrlParam("server") || "https://hypha.aicell.io";
+	const urlParam = getUrlParam("server");
+	if (urlParam) {
+		return urlParam;
+	}
+	if (isUrlLocal(window.location.origin)) {
+		return window.location.origin;
+	}
+	return "https://hypha.aicell.io";
 }
 
 async function getServer(token) {
@@ -33,9 +40,13 @@ async function getServer(token) {
 	});
 }
 
+function isUrlLocal(url) {
+	return url.includes("127.0.0.1") || url.includes("localhost");
+}
+
 function isLocal() {
 	const serverUrl = getServerUrl();
-	return serverUrl.includes("127.0.0.1") || serverUrl.includes("localhost");
+	return isUrlLocal(serverUrl);
 }
 
 async function getService(server, remoteId, localId = null) {
