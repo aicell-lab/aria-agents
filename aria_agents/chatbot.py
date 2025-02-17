@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from hypha_rpc import connect_to_server, login
 from pydantic import BaseModel, Field
+
 dotenv.load_dotenv()
 from schema_agents import Message, Role
 from schema_agents.utils.common import EventBus
@@ -72,9 +73,7 @@ class RichResponse(BaseModel):
 
     text: str = Field(description="Response text")
     steps: List[ResponseStep] = Field(description="Intermediate steps")
-    remaining_quota: Optional[float] = Field(
-        None, description="Remaining quota"
-    )
+    remaining_quota: Optional[float] = Field(None, description="Remaining quota")
 
 
 def create_assistants(builtin_extensions, event_bus: EventBus):
@@ -85,10 +84,9 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
     ) -> RichResponse:
         """Response to the user's query."""
         steps = []
-        inputs = (
-            list(question_with_history.chat_history)
-            + [question_with_history.question]
-        )
+        inputs = list(question_with_history.chat_history) + [
+            question_with_history.question
+        ]
         assert question_with_history.chatbot_extensions is not None
         extensions_by_id = {ext.id: ext for ext in builtin_extensions}
         extensions_by_name = {ext.name: ext for ext in builtin_extensions}
@@ -102,11 +100,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
             elif "name" in ext and ext["name"] in extensions_by_name:
                 extension = extensions_by_name[ext["name"]]
             else:
-                if (
-                    "tools" not in ext
-                    and "execute" in ext
-                    and "get_schema" in ext
-                ):
+                if "tools" not in ext and "execute" in ext and "get_schema" in ext:
                     # legacy chatbot extension
                     extension = LegacyChatbotExtension.model_validate(ext)
                     logger.warning(
@@ -149,10 +143,7 @@ def create_assistants(builtin_extensions, event_bus: EventBus):
         tool_usage_prompt = (
             "Tool usage guidelines (* represent the prefix of a tool group):\n"
             + "\n".join(
-                [
-                    f" - {ext}:{tool_prompt}"
-                    for ext, tool_prompt in tool_prompts.items()
-                ]
+                [f" - {ext}:{tool_prompt}" for ext, tool_prompt in tool_prompts.items()]
             )
         )
         response, metadata = await role.acall(
@@ -216,9 +207,7 @@ async def save_chat_history(chat_log_full_path, chat_his_dict):
     chat_history_json = json.dumps(chat_his_dict)
 
     # Write the serialized chat history to the json file
-    async with aiofiles.open(
-        chat_log_full_path, mode="w", encoding="utf-8"
-    ) as f:
+    async with aiofiles.open(chat_log_full_path, mode="w", encoding="utf-8") as f:
         await f.write(chat_history_json)
 
 
@@ -229,8 +218,7 @@ async def add_probes(server):
             return svc is not None
         except Exception:
             return False
-        
-    
+
     async def is_alive():
         services_are_available = await asyncio.gather(
             is_available("public/artifact-manager"),
@@ -239,13 +227,15 @@ async def add_probes(server):
         )
         if all(services_are_available):
             return {"status": "ok", "message": "All services are available"}
-        
+
         raise RuntimeError(f"Some services are not available: {services_are_available}")
-    
-    await server.register_probes({
-        "readiness": is_alive,
-        "liveness": is_alive,
-    })
+
+    await server.register_probes(
+        {
+            "readiness": is_alive,
+            "liveness": is_alive,
+        }
+    )
 
 
 async def get_server(server_url, workspace_name=None, provided_token=None):
@@ -258,14 +248,17 @@ async def get_server(server_url, workspace_name=None, provided_token=None):
             token = provided_token
     else:
         token = None
-    server = await connect_to_server({
-        "server_url": server_url,
-        "token": token,
-        "method_timeout": 500,
-        **({"workspace": workspace_name} if workspace_name is not None else {})
-    })
-    
+    server = await connect_to_server(
+        {
+            "server_url": server_url,
+            "token": token,
+            "method_timeout": 500,
+            **({"workspace": workspace_name} if workspace_name is not None else {}),
+        }
+    )
+
     return server
+
 
 async def connect_server(server_url):
     """Connect to the server and register the chat service."""
@@ -274,6 +267,7 @@ async def connect_server(server_url):
     chat_server = await get_server(server_url, workspace_name, token)
     await add_probes(chat_server)
     await register_chat_service(chat_server)
+
 
 async def serve_frontend(server, service_id):
     app = FastAPI(root_path=f"/aria-agents/apps/{service_id}")
@@ -308,9 +302,7 @@ async def register_chat_service(server):
     chat_logs_path = os.environ.get("BIOIMAGEIO_CHAT_LOGS_PATH", "./chat_logs")
     default_quota = float(os.environ.get("BIOIMAGEIO_DEFAULT_QUOTA", "inf"))
     reset_period = os.environ.get("BIOIMAGEIO_DEFAULT_RESET_PERIOD", "hourly")
-    quota_database_path = os.environ.get(
-        "BIOIMAGEIO_QUOTA_DATABASE_PATH", ":memory:"
-    )
+    quota_database_path = os.environ.get("BIOIMAGEIO_QUOTA_DATABASE_PATH", ":memory:")
     quota_manager = QuotaManager(
         db_file=quota_database_path,
         vip_list=[],
@@ -334,9 +326,7 @@ async def register_chat_service(server):
                 "ARIA_AGENTS_AUTHORIZED_USERS_PATH",
                 "aria_agents_authorized_users.json",
             )
-            authorized_users_path = os.path.join(
-                this_dir, authorized_users_file_name
-            )
+            authorized_users_path = os.path.join(this_dir, authorized_users_file_name)
             if authorized_users_path:
                 assert os.path.exists(
                     authorized_users_path
@@ -344,9 +334,7 @@ async def register_chat_service(server):
                 with open(authorized_users_path, "r", encoding="utf-8") as f:
                     authorized_users = json.load(f)["users"]
                 authorized_emails = [
-                    user["email"]
-                    for user in authorized_users
-                    if "email" in user
+                    user["email"] for user in authorized_users if "email" in user
                 ]
             else:
                 authorized_emails = None
@@ -376,9 +364,7 @@ async def register_chat_service(server):
             "feedback": user_report["feedback"],
             "conversations": user_report["messages"],
             "session_id": user_report["session_id"],
-            "timestamp": str(
-                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ),
+            "timestamp": str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "user": context.get("user"),
             "version": version,
         }
@@ -414,9 +400,7 @@ async def register_chat_service(server):
             assistant_name in assistant_names
         ), f"Assistant {assistant_name} is not found."
         # find assistant by name
-        assistant = next(
-            a["agent"] for a in assistants if a["name"] == assistant_name
-        )
+        assistant = next(a["agent"] for a in assistants if a["name"] == assistant_name)
         session_id = session_id or secrets.token_hex(8)
         await artifact_manager.setup(user_id, session_id)
 
@@ -427,7 +411,9 @@ async def register_chat_service(server):
                     await status_callback(message.model_dump())
                 except Exception as exc:
                     message.session.stop = True
-                    raise RuntimeError(f"The status callback returned an error: {exc}") from exc
+                    raise RuntimeError(
+                        f"The status callback returned an error: {exc}"
+                    ) from exc
 
         event_bus.on("stream", stream_callback)
 
@@ -481,9 +467,7 @@ async def register_chat_service(server):
             version = pkg_resources.get_distribution("aria_agents").version
             chat_his_dict = {
                 "conversations": user_message.chat_history,
-                "timestamp": str(
-                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                ),
+                "timestamp": str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                 "user": user_message.context.get("user"),
                 "assistant_name": assistant_name,
                 "version": version,
@@ -528,9 +512,7 @@ async def register_chat_service(server):
                 )
             # Remove the @name part from the text
             text = re.sub(r"@(\w+)", "", text, 1).strip()
-            assistant_name = assistants[assistant_names.index(assistant_name)][
-                "name"
-            ]
+            assistant_name = assistants[assistant_names.index(assistant_name)]["name"]
             cross_assistant = True
         else:
             cross_assistant = False
@@ -589,12 +571,10 @@ async def register_chat_service(server):
 
     public_base_url = server.config["public_base_url"]
     print("=============================\n")
-    if public_base_url.startswith(
-        "http://localhost"
-    ) or public_base_url.startswith("http://127.0.0.1"):
-        print(
-            f"To test the Aria Assistant locally, visit: {public_base_url}/chat?server_url={public_base_url}"
-        )
+    if public_base_url.startswith("http://localhost") or public_base_url.startswith(
+        "http://127.0.0.1"
+    ):
+        print(f"To test the Aria Assistant locally, visit: {public_base_url}/chat")
     print("\n=============================\n")
 
 
