@@ -19,6 +19,7 @@ from aria_agents.utils import (
     call_agent,
 )
 
+
 class StudyDiagram(BaseModel):
     """A diagram written in mermaid.js showing the workflow for the study and what expected data from the study will look like. An example:
     ```
@@ -50,6 +51,7 @@ class StudyWithDiagram(BaseModel):
         description="The diagram illustrating the workflow for the suggested study"
     )
 
+
 def create_pubmed_query_function(
     artifact_manager: AriaArtifacts = None,
     llm_model: str = "gpt2",
@@ -66,7 +68,7 @@ def create_pubmed_query_function(
     ) -> str:
         """Create a corpus of papers from PubMed Central based on the user's request."""
         event_bus = artifact_manager.get_event_bus() if artifact_manager else None
-        
+
         await call_agent(
             name="NCBI Querier",
             instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
@@ -82,8 +84,9 @@ def create_pubmed_query_function(
             constraints=constraints,
             tools=[test_pmc_query_hits, create_corpus_function(artifact_manager)],
         )
-        
+
         return "query_function created."
+
     return query_pubmed
 
 
@@ -93,6 +96,7 @@ def create_study_suggester_function(
     artifact_manager: AriaArtifacts = None,
 ) -> Callable:
     llm_model = config["llm_model"]
+
     @schema_tool
     async def run_study_suggester(
         user_request: str = Field(
@@ -114,6 +118,7 @@ def create_study_suggester_function(
             messages=[
                 f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
                 "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
+                "After generating the study, you will make a call to CompleteUserQuery. You should call that function with schema {'response': <SuggestedStudy>}.",
             ],
             tools=[query_function],
             output_schema=SuggestedStudy,
@@ -121,17 +126,20 @@ def create_study_suggester_function(
             event_bus=event_bus,
             constraints=constraints,
         )
-            
-        await write_website(
+
+        summary_website_url = await write_website(
             suggested_study,
             artifact_manager,
             "suggested_study",
             llm_model,
         )
 
-        suggested_study_url = await save_file("suggested_study.json", suggested_study.model_dump_json(), artifact_manager)
-        
+        suggested_study_url = await save_file(
+            "suggested_study.json", suggested_study.model_dump_json(), artifact_manager
+        )
+
         return {
+            "summary_website_url": summary_website_url,
             "suggested_study_url": suggested_study_url,
         }
 
@@ -161,22 +169,25 @@ def create_create_diagram_function(
             llm_model=llm_model,
             event_bus=event_bus,
         )
-        
+
         study_with_diagram = StudyWithDiagram(
             suggested_study=suggested_study, study_diagram=study_diagram
         )
-        
-        await write_website(
-            study_with_diagram,
-            artifact_manager,
-            "suggested_study",
-            llm_model
+
+        summary_website_url = await write_website(
+            study_with_diagram, artifact_manager, "suggested_study", llm_model
         )
-        study_with_diagram_url = await save_file("study_with_diagram.json", study_with_diagram.model_dump_json(), artifact_manager)
-        
+        study_with_diagram_url = await save_file(
+            "study_with_diagram.json",
+            study_with_diagram.model_dump_json(),
+            artifact_manager,
+        )
+
         return {
+            "summary_website_url": summary_website_url,
             "study_with_diagram_url": study_with_diagram_url,
         }
+
     return create_diagram
 
 
@@ -187,7 +198,9 @@ def create_summary_website_function(
     @schema_tool
     async def create_summary_website() -> Dict[str, str]:
         """BEFORE USING THIS FUNCTION YOU NEED TO GET A STUDY DIAGRAM FROM THE `create_diagram` TOOL. Create a summary website for the suggested study."""
-        study_with_diagram_content = await get_file("study_with_diagram.json", artifact_manager)
+        study_with_diagram_content = await get_file(
+            "study_with_diagram.json", artifact_manager
+        )
         study_with_diagram = StudyWithDiagram(**study_with_diagram_content)
         summary_website_url = await write_website(
             study_with_diagram,
@@ -199,13 +212,12 @@ def create_summary_website_function(
         return {
             "summary_website_url": summary_website_url,
         }
+
     return create_summary_website
 
 
 async def main():
-    parser = argparse.ArgumentParser(
-        description="Run the study suggester pipeline"
-    )
+    parser = argparse.ArgumentParser(description="Run the study suggester pipeline")
     parser.add_argument(
         "--user_request",
         type=str,

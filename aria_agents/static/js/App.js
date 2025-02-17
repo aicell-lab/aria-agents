@@ -138,18 +138,18 @@ function App() {
 
 	const loadChats = async() => {
 		try {
-			let prevChatObjects = await artifactManager.list({
+			let prevChatArtifacts = await artifactManager.list({
 				parent_id: `${artifactWorkspace}/aria-agents-chats`,
 				_rkwargs: true,
 			});
-			prevChatObjects = prevChatObjects.map((chat) => chat.manifest);
-			const invalidChats = prevChatObjects.filter((chat) => chat.name === "");
-			invalidChats.forEach(deleteChat);
-			const validChats =  prevChatObjects.filter((chat) => chat.name !== "");
-			setPrevChats(validChats);
+			const prevChatManifests = prevChatArtifacts.map((chat) => chat.manifest);
+			const unnamedChats = prevChatManifests.filter((chat) => chat.name === "");
+			unnamedChats.forEach(deleteChat);
+			const namedChats =  prevChatManifests.filter((chat) => chat.name !== "");
+			setPrevChats(namedChats);
 		}
-		catch {
-			console.log("No previous chats.");
+		catch (e) {
+			console.log("Chats couldn't be loaded. Error: ", e);
 		}
 	}
 	
@@ -552,7 +552,7 @@ function App() {
 			window.history.replaceState({}, '', urlMinusParam("sessionId"));
 			setSessionId(generateSessionID());
 		}
-		const chatMap = new Map(Object.entries(chat.conversations || {}));
+		const chatMap = new Map(Object.entries(chat.conversations || {})); // TODO: does this cause chat loading issue?
 		setChatHistory(chatMap);
 		setChatTitle(chat.name || "");
 		setArtifacts(chat.artifacts || []);

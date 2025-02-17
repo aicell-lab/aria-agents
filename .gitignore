@@ -163,3 +163,5 @@ authorized_users.json
 eslint.config*
 bin/minio
 bin/mc
+cache/
+notes*.md
