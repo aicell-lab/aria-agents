@@ -16,7 +16,16 @@ from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 from aria_agents.artifact_manager import AriaArtifacts
 
 
-async def call_agent(name, instructions, messages, llm_model, event_bus = None, constraints = None, tools = None, output_schema = None):
+async def call_agent(
+    name,
+    instructions,
+    messages,
+    llm_model,
+    event_bus=None,
+    constraints=None,
+    tools=None,
+    output_schema=None,
+):
     session_id = get_session_id(current_session)
     agent = Role(
         name=name,
@@ -27,15 +36,20 @@ async def call_agent(name, instructions, messages, llm_model, event_bus = None, 
         register_default_events=True,
         model=llm_model,
     )
-    
-    async with create_session_context(
-        id=session_id, role_setting=agent.role_setting
-    ):
-        return await agent.acall(
-            messages, tools=tools, output_schema=output_schema
-        )
-        
-async def ask_agent(name, instructions, messages, output_schema, llm_model, event_bus = None, constraints = None):
+
+    async with create_session_context(id=session_id, role_setting=agent.role_setting):
+        return await agent.acall(messages, tools=tools, output_schema=output_schema)
+
+
+async def ask_agent(
+    name,
+    instructions,
+    messages,
+    output_schema,
+    llm_model,
+    event_bus=None,
+    constraints=None,
+):
     agent = Role(
         name=name,
         instructions=instructions,
@@ -46,9 +60,7 @@ async def ask_agent(name, instructions, messages, output_schema, llm_model, even
         model=llm_model,
     )
     session_id = get_session_id(current_session)
-    async with create_session_context(
-        id=session_id, role_setting=agent.role_setting
-    ):
+    async with create_session_context(id=session_id, role_setting=agent.role_setting):
         return await agent.aask(
             messages,
             output_schema=output_schema,
@@ -62,14 +74,14 @@ def save_locally(filename: str, content: str, project_folder: str):
     return "file://" + file_path
 
 
-async def save_to_artifact_manager(filename: str, content: str, artifact_manager: AriaArtifacts):
+async def save_to_artifact_manager(
+    filename: str, content: str, artifact_manager: AriaArtifacts
+):
     file_id = await artifact_manager.put(
         value=content,
         name=filename,
     )
-    file_url = await artifact_manager.get_url(
-        name=file_id
-    )
+    file_url = await artifact_manager.get_url(name=file_id)
     return file_url
 
 
@@ -85,15 +97,18 @@ async def get_file(filename: str, artifact_manager: AriaArtifacts = None):
         return json.loads(file_content)
 
 
-async def save_file(filename: str, content: str, artifact_manager: AriaArtifacts = None):
+async def save_file(
+    filename: str, content: str, artifact_manager: AriaArtifacts = None
+):
     if artifact_manager is None:
         session_id = get_session_id(current_session)
         project_folder = get_project_folder(session_id)
         file_url = save_locally(filename, content, project_folder)
     else:
         file_url = await save_to_artifact_manager(filename, content, artifact_manager)
-    
+
     return file_url
+
 
 def get_query_index_dir(artifact_manager: AriaArtifacts = None):
     if artifact_manager is None:
@@ -102,8 +117,11 @@ def get_query_index_dir(artifact_manager: AriaArtifacts = None):
         query_index_dir = os.path.join(project_folder, "query_index")
     else:
         projects_folder = os.environ.get("PROJECT_FOLDERS", "./projects")
-        query_index_dir = os.path.join(projects_folder, f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index")
-        
+        query_index_dir = os.path.join(
+            projects_folder,
+            f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index",
+        )
+
     os.makedirs(query_index_dir, exist_ok=True)
     return query_index_dir
 
@@ -128,10 +146,8 @@ def create_query_function(query_engine: CitationQueryEngine) -> Callable:
 
 
 def get_query_function(query_index_dir, config):
-    query_storage_context = StorageContext.from_defaults(
-        persist_dir=query_index_dir
-    )
-        
+    query_storage_context = StorageContext.from_defaults(persist_dir=query_index_dir)
+
     query_index = load_index_from_storage(query_storage_context)
     query_engine = CitationQueryEngine.from_args(
         query_index,
@@ -187,26 +203,24 @@ class LegacyChatbotExtension(BaseModel):
     get_schema: Optional[Callable] = Field(
         None, description="A function that returns the schema for the extension"
     )
-    execute: Callable = Field(
-        ..., description="The extension's execution function"
-    )
+    execute: Callable = Field(..., description="The extension's execution function")
     schema_class: Optional[BaseModel] = Field(
         None, description="The schema class for the extension"
     )
-    
+
+
 def get_session_id(session: ContextVar) -> str:
     pre_session = session.get()
     session_id = pre_session.id if pre_session else str(uuid.uuid4())
     return session_id
 
+
 def get_project_folder(session_id: str):
     dotenv.load_dotenv()
     project_folders = os.environ.get("PROJECT_FOLDERS", "./projects")
-    project_folder = os.path.abspath(
-        os.path.join(project_folders, session_id)
-    )
+    project_folder = os.path.abspath(os.path.join(project_folders, session_id))
     os.makedirs(project_folder, exist_ok=True)
-    
+
     return project_folder
 
 
@@ -247,9 +261,7 @@ async def legacy_extension_to_tool(extension: LegacyChatbotExtension):
     if not execute.__doc__:
         # if extension.execute is partial
         if hasattr(extension.execute, "func"):
-            execute.__doc__ = (
-                extension.execute.func.__doc__ or extension.description
-            )
+            execute.__doc__ = extension.execute.func.__doc__ or extension.description
         else:
             execute.__doc__ = extension.execute.__doc__ or extension.description
     return schema_tool(execute)

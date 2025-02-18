@@ -13,7 +13,6 @@ import pkg_resources
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from hypha_rpc import connect_to_server, login
 from pydantic import BaseModel, Field
 
 dotenv.load_dotenv()
@@ -33,6 +32,7 @@ from aria_agents.utils import (
     LegacyChatbotExtension,
     legacy_extension_to_tool,
 )
+from aria_agents.server import get_server
 
 logger = logging.getLogger("bioimageio-chatbot")
 # set logger level
@@ -238,28 +238,6 @@ async def add_probes(server):
     )
 
 
-async def get_server(server_url, workspace_name=None, provided_token=None):
-    login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
-
-    if login_required:
-        if provided_token is None:
-            token = await login({"server_url": server_url})
-        else:
-            token = provided_token
-    else:
-        token = None
-    server = await connect_to_server(
-        {
-            "server_url": server_url,
-            "token": token,
-            "method_timeout": 500,
-            **({"workspace": workspace_name} if workspace_name is not None else {}),
-        }
-    )
-
-    return server
-
-
 async def connect_server(server_url):
     """Connect to the server and register the chat service."""
     workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
@@ -402,7 +380,7 @@ async def register_chat_service(server):
         # find assistant by name
         assistant = next(a["agent"] for a in assistants if a["name"] == assistant_name)
         session_id = session_id or secrets.token_hex(8)
-        await artifact_manager.setup(user_id, session_id)
+        await artifact_manager.setup(user_token, user_id, session_id)
 
         # Listen to the `stream` event
         async def stream_callback(message):
