@@ -1,4 +1,5 @@
 import httpx
+from aria_agents.server import get_server
 
 
 class AriaArtifacts:
@@ -10,7 +11,11 @@ class AriaArtifacts:
         self.user_id = None
         self.session_id = None
 
-    async def setup(self, user_id, session_id, service_id="public/artifact-manager"):
+    async def setup(
+        self, token, user_id, session_id, service_id="public/artifact-manager"
+    ):
+        server_url = self.server.config.public_base_url
+        self.server = await get_server(server_url, provided_token=token)
         self._svc = await self.server.get_service(service_id)
         self.user_id = user_id
         self.session_id = session_id
