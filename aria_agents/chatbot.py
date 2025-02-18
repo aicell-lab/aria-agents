@@ -247,10 +247,16 @@ async def connect_server(server_url):
     await register_chat_service(chat_server)
 
 
+def mount_subdir(app, subdir, path):
+    sub_path = os.path.join(path, subdir)
+    app.mount(f"/{subdir}", StaticFiles(directory=sub_path), name=subdir)
+
+
 async def serve_frontend(server, service_id):
     app = FastAPI(root_path=f"/aria-agents/apps/{service_id}")
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    app.mount("/chat", StaticFiles(directory=static_dir), name="chat")
+    for subdir in ["js", "css", "img"]:
+        mount_subdir(app, subdir, static_dir)
 
     async def serve_fastapi(args, context=None):
         await app(args["scope"], args["receive"], args["send"])
