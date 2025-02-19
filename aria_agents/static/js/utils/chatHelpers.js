@@ -1,4 +1,4 @@
-async function getChatManifest(sessionId, chatTitle, chatHistory, artifacts, attachments, userId) {
+function getChatManifest(sessionId, chatTitle, chatHistory, artifacts, attachments, userId) {
     return {
         "id": sessionId,
         "name": chatTitle,

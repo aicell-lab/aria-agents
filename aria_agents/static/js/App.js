@@ -3,16 +3,6 @@
 const { useState, useEffect, useRef } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
 const {
-	Sidebar,
-	ChatInput,
-	SuggestedStudies,
-	ChatHistory,
-	ArtifactsPanel,
-	ShareDialog,
-	InfoDialog,
-	PauseButton,
-} = window;
-const {
 	getServer,
 	getService,
 	login,
@@ -32,6 +22,16 @@ const {
 	readChat,
 	getChatManifest,
 } = window.chatHelpers;
+const {
+	Sidebar,
+	ChatInput,
+	SuggestedStudies,
+	ChatHistory,
+	ArtifactsPanel,
+	ShareDialog,
+	InfoDialog,
+	PauseButton,
+} = window;
 
 function App() {
 	const [question, setQuestion] = useState("");
@@ -576,7 +576,7 @@ function App() {
 				</div>
 			)}
 			{showShareDialog && (
-				<ShareDialog shareUrl={window.location} onConfirm={() => saveThisChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
+				<ShareDialog shareUrl={window.location} onConfirm={async () => await saveThisChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
 			)}
 			{alertContent && (
 				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>
