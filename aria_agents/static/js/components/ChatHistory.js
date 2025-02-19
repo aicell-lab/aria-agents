@@ -1,136 +1,154 @@
 /* global React */
-function ChatHistory({ chatHistory, isSending }) {
-	const isEmoji = (icon) => /^[\p{Emoji}]+$/u.test(icon);
+function ChatHistory({ chat, isSending }) {
+    const [expandedMessages, setExpandedMessages] = React.useState(new Set());
+    const messages = Array.from(chat.history.values());
 
-	const chatArray = Array.from(chatHistory.values());
-	const [expandedMessages, setExpandedMessages] = React.useState(
-		chatArray.map(() => false)
-	);
+    const toggleMessage = (index) => {
+        setExpandedMessages(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(index)) {
+                newSet.delete(index);
+            } else {
+                newSet.add(index);
+            }
+            return newSet;
+        });
+    };
 
-	const toggleContent = (index) => {
-		setExpandedMessages((prevState) => {
-			const newState = [...prevState];
-			newState[index] = !newState[index];
-			return newState;
-		});
-	};
-
-	React.useEffect(() => {
-		expandedMessages.forEach((isExpanded, index) => {
-			if (isExpanded) {
-				document.getElementById(`message-${index}`)?.scrollIntoView({
-					behavior: "smooth",
-					block: "start",
-				});
-			}
-		});
-	}, [expandedMessages]);
-
-	const renderChatMessage = (chat, index) => (
-		<div
-			key={index}
-			id={`message-${index}`}
-			className="mb-4 relative"
-		>
-			<div className="text-gray-800 font-semibold flex items-center">
-				{chat.role === "user" ? (
-					<>
-						<span className="icon-emoji">👤</span>
-						<span className="ml-1">You</span>
-					</>
-				) : (
-					<>
-						{isEmoji(chat.icon) ? (
-							<span className="icon-emoji">{chat.icon}</span>
-						) : (
-							<img
-								src={chat.icon}
-								alt={chat.role}
-								className="w-7 h-7"
-							/>
-						)}
-						<span className="ml-1">{chat.role}</span>
-					</>
-				)}
-			</div>
-			<div className="bg-gray-100 p-3 rounded mb-2">
-				{chat.role !== "user" && (
-					<>
-						<div
-							className="bg-gray-100 markdown-body"
-							dangerouslySetInnerHTML={{ __html: chat.title }}
-						></div>
-						{(chat.role !== "Aria" && chat.toolName !== "SummaryWebsite") && (
-							<div
-								className="collapsible"
-								onClick={() => toggleContent(index)}
-								style={{
-									cursor: "pointer",
-									display: "flex",
-									alignItems: "center",
-								}}
-							>
-								<span
-									className="arrow"
-									style={{
-										marginRight: "10px",
-										transition: "transform 0.3s ease",
-										transform: expandedMessages[index]
-											? "rotate(90deg)"
-											: "rotate(0deg)",
-									}}
-								>
-									▶
-								</span>
-								<span>
-									{expandedMessages[index]
-										? "Hide details"
-										: "Show more details"}
-								</span>
-							</div>
-						)}
-					</>
-				)}
-				{(expandedMessages[index] ||
-					chat.role === "user" ||
-					chat.role === "Aria" ||
-					chat.toolName === "SummaryWebsite") && (
-					<div
-						className="bg-gray-100 markdown-body"
-						dangerouslySetInnerHTML={{ __html: chat.content }}
-					></div>
-				)}
-				{chat.role === "user" &&
-					chat.attachments &&
-					chat.attachments.length > 0 && (
-						<div className="mt-2 flex flex-wrap gap-2">
-							{chat.attachments.map((fileName, fileIndex) => (
-								<div
-									key={fileIndex}
-									className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md"
-								>
-									<span>{fileName}</span>
-								</div>
-							))}
-						</div>
-					)}
-			</div>
-			{isSending && index == (chatArray.length-1) && (
-				<div className="absolute inset-0 flex items-center justify-center">
-					<div className="spinner"></div>
-				</div>
-			)}
-		</div>
-	);
-
-	return (
-		<div className="mt-4">
-			<div style={{ paddingLeft: "20px", marginTop: "10px" }}>
-				{chatArray.map((chat, index) => renderChatMessage(chat, index))}
-			</div>
-		</div>
-	);
+    return (
+        <div className="chat-history mt-4">
+            {messages.map((message, index) => (
+                <Message
+                    key={index}
+                    message={message}
+                    index={index}
+                    isExpanded={expandedMessages.has(index)}
+                    onToggleExpand={() => toggleMessage(index)}
+                    isLastMessage={index === messages.length - 1}
+                    isSending={isSending}
+                />
+            ))}
+        </div>
+    );
 }
 
-// Expose ChatHistory globally
+function Message({ message, index, isExpanded, onToggleExpand, isLastMessage, isSending }) {
+    return (
+        <div id={`message-${index}`} className="mb-4 relative">
+            <MessageHeader message={message} />
+            <MessageContent 
+                message={message}
+                isExpanded={isExpanded}
+                onToggleExpand={onToggleExpand}
+            />
+            {isLastMessage && isSending && <SendingIndicator />}
+        </div>
+    );
+}
+
+function MessageHeader({ message }) {
+    const isEmoji = (icon) => /^[\p{Emoji}]+$/u.test(icon);
+
+    return (
+        <div className="text-gray-800 font-semibold flex items-center">
+            {message.role === "user" ? (
+                <>
+                    <span className="icon-emoji">👤</span>
+                    <span className="ml-1">You</span>
+                </>
+            ) : (
+                <>
+                    {isEmoji(message.icon) ? (
+                        <span className="icon-emoji">{message.icon}</span>
+                    ) : (
+                        <img
+                            src={message.icon}
+                            alt={message.role}
+                            className="w-7 h-7"
+                        />
+                    )}
+                    <span className="ml-1">{message.role}</span>
+                </>
+            )}
+        </div>
+    );
+}
+
+function MessageContent({ message, isExpanded, onToggleExpand }) {
+    return (
+        <div className="bg-gray-100 p-3 rounded mb-2">
+            {message.role !== "user" && (
+                <>
+                    <div
+                        className="bg-gray-100 markdown-body"
+                        dangerouslySetInnerHTML={{ __html: message.title }}
+                    />
+                    {(message.role !== "Aria" && message.toolName !== "SummaryWebsite") && (
+                        <ExpandToggle 
+                            isExpanded={isExpanded}
+                            onToggle={onToggleExpand}
+                        />
+                    )}
+                </>
+            )}
+
+            {(isExpanded || message.role === "user" || 
+              message.role === "Aria" || message.toolName === "SummaryWebsite") && (
+                <div
+                    className="bg-gray-100 markdown-body"
+                    dangerouslySetInnerHTML={{ __html: message.content }}
+                />
+            )}
+
+            {message.role === "user" && message.attachments?.length > 0 && (
+                <AttachmentList attachments={message.attachments} />
+            )}
+        </div>
+    );
+}
+
+function ExpandToggle({ isExpanded, onToggle }) {
+    return (
+        <div
+            className="collapsible cursor-pointer flex items-center"
+            onClick={onToggle}
+        >
+            <span
+                className="arrow mr-2 transition-transform duration-300"
+                style={{
+                    transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                }}
+            >
+                ▶
+            </span>
+            <span>
+                {isExpanded ? "Hide details" : "Show more details"}
+            </span>
+        </div>
+    );
+}
+
+function AttachmentList({ attachments }) {
+    return (
+        <div className="mt-2 flex flex-wrap gap-2">
+            {attachments.map((fileName, fileIndex) => (
+                <div
+                    key={fileIndex}
+                    className="bg-gray-200 text-gray-700 px-3 py-1 rounded-md"
+                >
+                    <span>{fileName}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function SendingIndicator() {
+    return (
+        <div className="absolute inset-0 flex items-center justify-center">
+            <div className="spinner"></div>
+        </div>
+    );
+}
+
 window.ChatHistory = ChatHistory;
