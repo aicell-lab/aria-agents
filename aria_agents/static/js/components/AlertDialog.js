@@ -1,6 +1,4 @@
-/* global React */
-const { useState } = React;
-
+/* global useState */
 function AlertDialog({ children }) {
     return (
       <>

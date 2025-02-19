@@ -60,7 +60,7 @@ function ChatHistory({ chatHistory, isSending }) {
 							className="bg-gray-100 markdown-body"
 							dangerouslySetInnerHTML={{ __html: chat.title }}
 						></div>
-						{chat.role !== "Aria" && (
+						{(chat.role !== "Aria" && chat.toolName !== "SummaryWebsite") && (
 							<div
 								className="collapsible"
 								onClick={() => toggleContent(index)}
@@ -93,7 +93,8 @@ function ChatHistory({ chatHistory, isSending }) {
 				)}
 				{(expandedMessages[index] ||
 					chat.role === "user" ||
-					chat.role === "Aria") && (
+					chat.role === "Aria" ||
+					chat.toolName === "SummaryWebsite") && (
 					<div
 						className="bg-gray-100 markdown-body"
 						dangerouslySetInnerHTML={{ __html: chat.content }}
