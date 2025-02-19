@@ -34,6 +34,7 @@ class AriaArtifacts:
                 response = await client.put(put_url, data=value, timeout=500)
             response.raise_for_status()
         except Exception as e:
+            print(f"File upload failed: {e}")
             raise RuntimeError(f"File upload failed: {e}") from e
 
         await self._svc.commit(self._artifact_id)
