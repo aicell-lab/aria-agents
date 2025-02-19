@@ -1,4 +1,5 @@
 // App.js
+/* global React */
 const { useState, useEffect, useRef } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
 const {
@@ -19,9 +20,9 @@ const {
 	SuggestedStudies,
 	ChatHistory,
 	ArtifactsPanel,
-	AlertDialog,
 	ShareDialog,
 	InfoDialog,
+	PauseButton,
 } = window;
 
 function App() {
@@ -285,7 +286,6 @@ function App() {
 
 	const statusCallback = async (message) => {
 		const {
-			type,
 			session: { id, role_setting: roleSetting },
 			status,
 			content,

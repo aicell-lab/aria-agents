@@ -1,3 +1,4 @@
+/* global React */
 function ChatHistory({ chatHistory, isSending }) {
 	const isEmoji = (icon) => /^[\p{Emoji}]+$/u.test(icon);
 

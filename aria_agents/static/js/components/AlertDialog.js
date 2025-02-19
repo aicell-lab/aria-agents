@@ -1,3 +1,4 @@
+/* global useState */
 function AlertDialog({ children }) {
     return (
       <>
