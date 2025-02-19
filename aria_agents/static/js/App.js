@@ -1,28 +1,37 @@
 // App.js
+/* global React */
 const { useState, useEffect, useRef } = React;
 const { marked } = window; // Ensure marked library is available for markdown rendering
-const {
-	generateSessionID,
-	getService,
-	login,
-	completeCodeBlocks,
-	jsonToMarkdown,
-	modifyLinksToOpenInNewTab,
-	getServer,
-	getUrlParam,
-	urlMinusParam,
-	urlPlusParam,
-} = window.helpers;
 const {
 	Sidebar,
 	ChatInput,
 	SuggestedStudies,
 	ChatHistory,
 	ArtifactsPanel,
-	AlertDialog,
 	ShareDialog,
 	InfoDialog,
+	PauseButton,
 } = window;
+const {
+	getServer,
+	getService,
+	login,
+	urlPlusParam,
+	urlMinusParam,
+	getUrlParam,
+	generateSessionID,
+	completeCodeBlocks,
+	jsonToMarkdown,
+	modifyLinksToOpenInNewTab,
+} = window.helpers;
+const {
+	saveChat,
+	deleteChat,
+	createChatCollection,
+	loadChats,
+	readChat,
+	getChatManifest,
+} = window.chatHelpers;
 
 function App() {
 	const [question, setQuestion] = useState("");
@@ -61,9 +70,6 @@ function App() {
 		if (localStorage.getItem("token")) {
 			await handleLogin();
 		}
-	}, []);
-
-	useEffect(() => {
 		// Add scroll listener to window
 		window.addEventListener('scroll', handleScroll);
 		return () => window.removeEventListener('scroll', handleScroll);
@@ -76,7 +82,6 @@ function App() {
 		window.history.replaceState({}, '', newUrl);
 	}, [isPaused]);
 
-
 	useEffect(() => {
 		if (chatContainerRef.current && isNearBottom) {
 			requestAnimationFrame(() => {
@@ -87,24 +92,24 @@ function App() {
 			});
 		}
 	}, [chatHistory, isNearBottom]);
-	
-	const handleScroll = () => {
-		if (chatContainerRef.current) {
-			const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
-			const buffer = 100; // Pixels from bottom to consider "at bottom"
-			setIsNearBottom(scrollHeight - scrollTop - clientHeight <= buffer);
+
+	useEffect(async () => {
+		if (chatTitle !== "" && messageIsComplete) {
+			await saveThisChat();
+			setUrlParams(userId, sessionId);
+			await updateChats();
 		}
-	};
-	
+	}, [messageIsComplete, chatTitle]);
+
 	useEffect(async () => {
 		if (artifactManager) {
-			await createChatCollection();
-			await loadChats();
+			await createChatCollection(artifactManager, artifactWorkspace);
+			await updateChats();
 			const sessionIdParam = getUrlParam("sessionId");
 			const userIdParam = getUrlParam("userId");
 			if (sessionIdParam && userIdParam) {
 				try {
-					const chat = await readChat(userIdParam, sessionIdParam);
+					const chat = await readChat(artifactManager, userIdParam, sessionIdParam);
 					await displayChat(chat);
 				}
 				catch (e) {
@@ -120,106 +125,42 @@ function App() {
 		}
 	}, [artifactManager]);
 
-	const readChat = async (newUserId, newSessionId) => {
-		const chat = await artifactManager.read({
-			artifact_id: `ws-user-${newUserId}/aria-agents-chats:${newSessionId}`,
-			_rkwargs: true
-		});
-		return chat.manifest;
+	const saveThisChat = async (permissions = null) => {
+		const manifest = getChatManifest(sessionId, chatTitle, chatHistory, artifacts, attachments, userId);
+		await saveChat(artifactManager, artifactWorkspace, sessionId, manifest, permissions);
 	}
 
-	useEffect(async () => {
-		if (chatTitle !== "" && messageIsComplete) {
-			await saveChat();
-			setUrlParams(userId, sessionId);
-			await loadChats();
-		}
-	}, [messageIsComplete, chatTitle]);
+	const updateChats = async () => {
+		const loadedChats = await loadChats(artifactManager, artifactWorkspace);
+		setPrevChats(loadedChats);
+	}
 
-	const loadChats = async() => {
-		try {
-			let prevChatArtifacts = await artifactManager.list({
-				parent_id: `${artifactWorkspace}/aria-agents-chats`,
-				_rkwargs: true,
-			});
-			const prevChatManifests = prevChatArtifacts.map((chat) => chat.manifest);
-			const unnamedChats = prevChatManifests.filter((chat) => chat.name === "");
-			unnamedChats.forEach(deleteChat);
-			const namedChats =  prevChatManifests.filter((chat) => chat.name !== "");
-			setPrevChats(namedChats);
+	const displayChat = async (chat) => {
+		if (chat.id) {
+			setUrlParams(chat.userId, chat.id);
+			setSessionId(chat.id);
 		}
-		catch (e) {
-			console.log("Chats couldn't be loaded. Error: ", e);
+		else {
+			window.history.replaceState({}, '', urlMinusParam("sessionId"));
+			setSessionId(generateSessionID());
 		}
+		const chatMap = new Map(Object.entries(chat.conversations || {})); // TODO: does this cause chat loading issue?
+		setChatHistory(chatMap);
+		setChatTitle(chat.name || "");
+		setArtifacts(chat.artifacts || []);
+		setAttachments(chat.attachments || []);
+		setAttachmentNames([]);
+		setMessageIsComplete(false);
+		awaitUserResponse();
 	}
 	
-	const createChatCollection = async () => {
-		const galleryManifest = {
-			"name": "Aria Agents Chat History",
-			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
-			"collection": [],
-		};
-	
-		try {
-			await artifactManager.create({
-				type: "collection",
-				workspace: artifactWorkspace,
-				alias: "aria-agents-chats",
-				manifest: galleryManifest,
-				_rkwargs: true
-			});
-		}
-		catch {
-			console.log("User chat collection already exists.");
+	const handleScroll = () => {
+		if (chatContainerRef.current) {
+			const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+			const buffer = 100; // Pixels from bottom to consider "at bottom"
+			setIsNearBottom(scrollHeight - scrollTop - clientHeight <= buffer);
 		}
 	};
-
-	const saveChat = async (permissions = null) => {
-		const datasetManifest = getChatManifest();
-	
-		try {
-			await artifactManager.create({
-				type: "chat",
-				parent_id: `${artifactWorkspace}/aria-agents-chats`,
-				alias: `aria-agents-chats:${sessionId}`,
-				manifest: datasetManifest,
-				...(permissions && {
-					config: {
-						permissions: permissions
-					}
-				}),
-				_rkwargs: true
-			});
-		} catch {
-			const chatId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
-			await artifactManager.edit({
-				artifact_id: chatId,
-				manifest: datasetManifest,
-				...(permissions && {
-					config: {
-						permissions: permissions
-					}
-				}),
-				_rkwargs: true
-			});
-			await artifactManager.commit(chatId);
-		}
-	};
-
-	const deleteChat = async (chat) => {
-		try {
-			await artifactManager.delete({
-				artifact_id: `${artifactWorkspace}/aria-agents-chats:${chat.id}`,
-				delete_files: true,
-				recursive: true,
-				_rkwargs: true
-			});
-			await loadChats();
-		}
-		catch {
-			console.log(`Chat ${chat.id} is already deleted.`);
-		}
-	}
 
 	const setServices = async (token) => {
 		const server = await getServer(token);
@@ -269,23 +210,8 @@ function App() {
 		setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
 	};
 
-	const getChatManifest = () => {
-		return {
-			"id": sessionId,
-			"name": chatTitle,
-			"description": `The Aria Agents chat history of ${sessionId}`,
-			"type": "chat",
-			"conversations": chatHistory,
-			"artifacts": artifacts,
-			"attachments": attachments,
-			"timestamp": new Date().toISOString(),
-			"userId": userId,
-		};
-	}
-
 	const statusCallback = async (message) => {
 		const {
-			type,
 			session: { id, role_setting: roleSetting },
 			status,
 			content,
@@ -412,6 +338,14 @@ function App() {
 		}
 	}
 
+	const undoAttach = (index) => {
+		const attachmentName = attachments[index].name;
+		const updatedAttachments = [...attachments];
+		updatedAttachments.splice(index, 1);
+		setAttachments(updatedAttachments);
+		setStatus(`📎 Removed ${attachmentName}`);
+	};
+
 	const contentWithAttachments = (content, attachmentNames) => {
 		const attachmentNamesString = attachmentNames.join(",\n");
 		return `<MESSAGE_CONTENT>\n${content.toString()}\n</MESSAGE_CONTENT>\n\n<ATTACHMENT_NAMES>\n${attachmentNamesString}</ATTACHMENT_NAMES>`;
@@ -482,7 +416,7 @@ function App() {
 						userToken,
 						extensions,
 					);
-					await saveChat();
+					await saveThisChat();
 				}
 				await svc.chat(
 					currentQuestion,
@@ -503,63 +437,12 @@ function App() {
 		}
 	};
 
-	const handleDrop = (e) => {
-		e.preventDefault();
-		e.stopPropagation();
-		if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-			handleAttachment(e);
-			e.dataTransfer.clearData();
-		}
-	};
-
-	const handleDragOver = (e) => {
-		e.preventDefault();
-		e.stopPropagation();
-	};
-
-	const handleDragEnter = (e) => {
-		e.preventDefault();
-		e.stopPropagation();
-	};
-
-	const handleDragLeave = (e) => {
-		e.preventDefault();
-		e.stopPropagation();
-	};
-
-	const undoAttach = (index) => {
-		const attachmentName = attachments[index].name;
-		const updatedAttachments = [...attachments];
-		updatedAttachments.splice(index, 1);
-		setAttachments(updatedAttachments);
-		setStatus(`📎 Removed ${attachmentName}`);
-	};
-
 	const setUrlParams = (newUserId, newSessionId) => {
 		const newUrl = urlPlusParam({
 			"sessionId": newSessionId,
 			"userId": newUserId,
 		});
 		window.history.replaceState({}, '', newUrl);
-	}
-
-	const displayChat = async (chat) => {
-		if (chat.id) {
-			setUrlParams(chat.userId, chat.id);
-			setSessionId(chat.id);
-		}
-		else {
-			window.history.replaceState({}, '', urlMinusParam("sessionId"));
-			setSessionId(generateSessionID());
-		}
-		const chatMap = new Map(Object.entries(chat.conversations || {})); // TODO: does this cause chat loading issue?
-		setChatHistory(chatMap);
-		setChatTitle(chat.name || "");
-		setArtifacts(chat.artifacts || []);
-		setAttachments(chat.attachments || []);
-		setAttachmentNames([]);
-		setMessageIsComplete(false);
-		awaitUserResponse();
 	}
 
 	const hasUnseenArtifacts = () => {
@@ -587,7 +470,10 @@ function App() {
 					onClose={() => setIsSidebarOpen(false)}
 					prevChats={prevChats}
 					onSelectChat={displayChat}
-					onDeleteChat={deleteChat}
+					onDeleteChat={async (chat) => {
+						await deleteChat(artifactManager, artifactWorkspace, chat);
+						await updateChats();
+					}}
 					isLoggedIn={svc != null}
 					sessionId={sessionId}
 				/>
@@ -597,10 +483,6 @@ function App() {
 							? "main-panel-artifacts"
 							: "main-panel-full"
 					}`}
-					onDrop={handleDrop}
-					onDragOver={handleDragOver}
-					onDragEnter={handleDragEnter}
-					onDragLeave={handleDragLeave}
 				>
 					<div className="bg-white shadow-md rounded-lg p-6 w-full max-w-3xl">
 						<h1 className="text-3xl font-bold mb-4 text-center">
@@ -694,7 +576,7 @@ function App() {
 				</div>
 			)}
 			{showShareDialog && (
-				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
+				<ShareDialog shareUrl={window.location} onConfirm={() => saveThisChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
 			)}
 			{alertContent && (
 				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>

@@ -10,7 +10,36 @@ function ChatInput({
 	undoAttach,
 	shareChat,
 }) {
-	return (<>
+	const handleDrop = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+			handleAttachment(e);
+			e.dataTransfer.clearData();
+		}
+	};
+
+	const handleDragOver = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+	};
+
+	const handleDragEnter = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+	};
+
+	const handleDragLeave = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+	};
+
+	return (<div
+		onDrop={handleDrop}
+		onDragOver={handleDragOver}
+		onDragEnter={handleDragEnter}
+		onDragLeave={handleDragLeave}
+	>
 		<div className="flex flex-row items-center">
 			<textarea
 				type="text"
@@ -118,7 +147,7 @@ function ChatInput({
 				</button>
 			)}
 		</div>
-	</>);
+	</div>);
 }
 
 // Expose ChatInput globally

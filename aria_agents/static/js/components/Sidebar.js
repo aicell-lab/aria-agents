@@ -12,7 +12,7 @@ function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLog
 				{isLoggedIn &&
 					<button
 						className="text-sm block w-full text-left p-2 text-gray-700 hover:bg-gray-200 rounded"
-						onClick={() => onSelectChat({})}
+						onClick={async () => await onSelectChat({})}
 					>
 						New chat 🪶
 					</button>
@@ -28,13 +28,15 @@ function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLog
 						>
 							<button
 								className="text-sm flex-1 text-left p-2 text-gray-700 overflow-hidden whitespace-nowrap text-ellipsis"
-								onClick={() => onSelectChat(chatObject)}
+								onClick={async () => await onSelectChat(chatObject)}
 							>
 								{chatObject.name}
 							</button>
 							<button
 								className="ml-2 mr-4 text-gray-500 hover:text-gray-700"
-								onClick={() => onDeleteChat(chatObject)}
+								onClick={async () => {
+									await onDeleteChat(chatObject);
+								}}
 							>
 								X
 							</button>
