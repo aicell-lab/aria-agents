@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=65.0.0", "wheel"]
 
 [project]
 name = "aria-agents"
@@ -7,18 +7,18 @@ version = "0.1.0"
 readme = "README.md"
 description = "Empowering autonomous scientific discovery."
 dependencies = [
-  "schema-agents==0.1.61",
-  "httpx==0.28.1",
-  "hypha==0.20.47.post1",
-  "hypha-rpc==0.20.47",
-  "aiofiles==23.2.1",
-  "pandas==1.5.3",
-  "setuptools==70.0.0",
-  "llama_index==0.12.1",
-  "llama-index-readers-papers==0.3.0",
-  "pandasai==2.3.0",
-  "botocore==1.36.3",
-  "aiobotocore==2.19.0"
+  "schema-agents>=0.1.0,<0.2.0",
+  "httpx>=0.24.0",
+  "hypha>=0.20.0,<0.21.0",
+  "hypha-rpc>=0.20.0,<0.21.0",
+  "aiofiles>=23.0.0",
+  "pandas>=1.5.0",
+  "setuptools>=65.0.0",
+  "llama_index>=0.12.0",
+  "llama-index-readers-papers>=0.3.0",
+  "pandasai>=2.0.0",
+  "botocore>=1.31.0",
+  "aiobotocore>=2.5.0"
 ]
 
 [tool.setuptools]
