@@ -84,3 +84,11 @@ class AriaArtifacts:
 
     def get_event_bus(self):
         return self._event_bus
+
+    async def exists(self, filename: str) -> bool:
+        """Check if a file exists in the artifact manager."""
+        try:
+            content = await self.get(filename)
+            return content is not None
+        except RuntimeError:
+            return False

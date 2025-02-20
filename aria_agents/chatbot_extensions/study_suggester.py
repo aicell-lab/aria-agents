@@ -54,7 +54,7 @@ class StudyWithDiagram(BaseModel):
 
 def create_pubmed_query_function(
     artifact_manager: AriaArtifacts = None,
-    llm_model: str = "gpt2",
+    config: Dict = None,
 ) -> Callable:
     @schema_tool
     async def query_pubmed(
@@ -68,6 +68,7 @@ def create_pubmed_query_function(
     ) -> str:
         """Create a corpus of papers from PubMed Central based on the user's request."""
         event_bus = artifact_manager.get_event_bus() if artifact_manager else None
+        llm_model = config["llm_model"]
 
         await call_agent(
             name="NCBI Querier",
@@ -82,7 +83,7 @@ def create_pubmed_query_function(
             llm_model=llm_model,
             event_bus=event_bus,
             constraints=constraints,
-            tools=[test_pmc_query_hits, create_corpus_function(artifact_manager)],
+            tools=[test_pmc_query_hits, create_corpus_function(artifact_manager, config)],
         )
 
         return "query_function created."

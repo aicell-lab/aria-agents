@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from functools import partial
 
 dotenv.load_dotenv()
 from schema_agents import Message, Role
@@ -252,25 +253,29 @@ def mount_subdir(app, subdir, path):
     app.mount(f"/{subdir}", StaticFiles(directory=sub_path), name=subdir)
 
 
-async def serve_frontend(server, service_id):
+def get_chatbot_api(service_id):
     app = FastAPI(root_path=f"/aria-agents/apps/{service_id}")
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     for subdir in ["js", "css", "img"]:
         mount_subdir(app, subdir, static_dir)
 
-    async def serve_fastapi(args, context=None):
-        await app(args["scope"], args["receive"], args["send"])
-
     @app.get("/", response_class=HTMLResponse)
     async def root():
         return FileResponse(os.path.join(static_dir, "index.html"))
 
+    return app
+
+async def serve_fastapi(app, args, context=None):
+    await app(args["scope"], args["receive"], args["send"])
+
+async def serve_frontend(server, service_id):
+    app = get_chatbot_api(service_id)
     await server.register_service(
         {
             "id": service_id,
             "name": "Aria Agents UI",
             "type": "asgi",
-            "serve": serve_fastapi,
+            "serve": partial(serve_fastapi, app),
             "config": {"visibility": "public"},
         }
     )
@@ -563,7 +568,7 @@ async def register_chat_service(server):
 
 
 if __name__ == "__main__":
-    imjoy_server_url = """https://ai.imjoy.io"""
+    imjoy_server_url = "https://ai.imjoy.io"
     loop = asyncio.get_event_loop()
     loop.create_task(connect_server(imjoy_server_url))
     loop.run_forever()

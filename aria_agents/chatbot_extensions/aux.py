@@ -124,9 +124,9 @@ async def save_query_index(query_index_dir, documents):
     query_index.storage_context.persist(query_index_dir)
 
 def create_corpus_function(
-    artifact_manager: AriaArtifacts = None
+    artifact_manager: AriaArtifacts = None,
+    config: dict = None,
 ) -> Callable:
-    config = load_config()
     @schema_tool
     async def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
