@@ -1,8 +1,9 @@
 import pytest
+import os
 from aria_agents.chatbot import chat
 
 @pytest.mark.asyncio
-async def test_chat_end_to_end(artifact_manager, config):
+async def test_chat_end_to_end():
     user_message = {
         "question": "I want to study the effect of osmotic stress on yeast cells",
         "chat_history": [],

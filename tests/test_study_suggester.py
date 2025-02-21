@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 from aria_agents.chatbot_extensions.study_suggester import create_study_suggester_function, create_create_diagram_function
 
 @pytest.mark.asyncio

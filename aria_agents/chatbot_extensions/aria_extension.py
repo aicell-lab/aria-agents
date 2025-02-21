@@ -25,7 +25,7 @@ def get_extension(artifact_manager: AriaArtifacts = None) -> ChatbotExtension:
             "study_suggester": create_study_suggester_function(config, artifact_manager),
             "experiment_compiler": create_experiment_compiler_function(config, artifact_manager),
             "data_analyzer": create_explore_data(artifact_manager, llm_model),
-            "query_pubmed": create_pubmed_query_function(artifact_manager, llm_model),
+            "query_pubmed": create_pubmed_query_function(artifact_manager, config),
             "run_study_with_diagram": create_create_diagram_function(artifact_manager, llm_model),
             "create_summary_website": create_summary_website_function(artifact_manager, llm_model)
         },
