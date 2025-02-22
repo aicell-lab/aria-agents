@@ -9,6 +9,7 @@ async def test_call_agent(config):
         instructions="Test Instructions",
         messages=[],
         llm_model=config["llm_model"],
+        tools=[],
     )
     assert result is not None
     assert "error" not in result
@@ -26,8 +27,7 @@ async def test_ask_agent(config):
     assert "error" not in result
 
 @pytest.mark.asyncio
-async def test_summary_website(artifact_manager):
-    content = "<html><body>Test Content</body></html>"
-    filename = "test_summary.html"
-    await write_website(content, filename, artifact_manager)
-    assert await artifact_manager.exists(filename)
+async def test_summary_website(mock_artifact_manager, suggested_study, config):
+    website_type = "suggested_study"
+    await write_website(suggested_study, mock_artifact_manager, website_type, llm_model=config["llm_model"])
+    assert await mock_artifact_manager.exists(f"{website_type}.html")

@@ -12,9 +12,9 @@ async def test_run_study_suggester(artifact_manager, config):
     assert await artifact_manager.exists("suggested_study.json")
 
 @pytest.mark.asyncio
-async def test_create_diagram(artifact_manager, config):
-    create_diagram = create_create_diagram_function(artifact_manager)
-    result = await create_diagram(suggested_study={"title": "Test Study"})
+async def test_create_diagram(artifact_manager, suggested_study, config):
+    create_diagram = create_create_diagram_function(artifact_manager, config["llm_model"])
+    result = await create_diagram(suggested_study=suggested_study)
     assert "summary_website_url" in result
     assert "study_with_diagram_url" in result
     assert "error" not in result["summary_website_url"]
