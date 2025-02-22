@@ -1,3 +1,5 @@
+import PropTypes from 'prop-types';
+
 function ArtifactsPanel({
 	onClose,
 	artifacts,
@@ -69,6 +71,14 @@ function ArtifactsPanel({
 		</div>
 	);
 }
+
+ArtifactsPanel.propTypes = {
+	onClose: PropTypes.func.isRequired,
+	artifacts: PropTypes.arrayOf(PropTypes.object).isRequired,
+	currentArtifactIndex: PropTypes.number.isRequired,
+	onPrev: PropTypes.func.isRequired,
+	onNext: PropTypes.func.isRequired,
+};
 
 // Expose ArtifactsPanel globally
 window.ArtifactsPanel = ArtifactsPanel;
