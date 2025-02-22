@@ -1,8 +1,6 @@
-import { useState } from 'react';
-import { Chat } from '../models';
-
-export function useChat() {
+window.useChat = function() {
+    const { useState } = React;
+    const { Chat } = window;
     const [chat, setChat] = useState(new Chat());
-
     return { chat, setChat };
-}
+};

@@ -1,8 +1,7 @@
-import { useState, useEffect, useContext, createContext } from 'react';
-import { MainLayout, Sidebar, ChatPanel, ArtifactsPanel, DialogManager } from './components';
-import { getServer, getService, login, getUrlParam } from './utils/helpers';
-import { useChat, useAriaArtifacts, useUiState } from './hooks';
-import { AriaArtifacts } from './models';
+const { useState, useEffect, useContext, createContext } = React;
+const { MainLayout, Sidebar, ChatPanel, ArtifactsPanel, DialogManager } = window;
+const { getServer, getService, login, getUrlParam } = window.helpers;
+const { useChat, useAriaArtifacts, useUiState } = window;
 
 const AppContext = createContext();
 
@@ -71,7 +70,7 @@ function AppProvider({ children }) {
         });
     };
 
-    const loadSharedChat = async (sessionId, userId) => {
+    const loadSharedChat = async () => {
         // Implement the logic to load a shared chat session
     };
 
@@ -99,8 +98,13 @@ function useAppContext() {
     return useContext(AppContext);
 }
 
+window.useAppContext = useAppContext;
+window.AppProvider = AppProvider;
+window.App = App;
+
 function App() {
-    const { chat, uiState, services, setUiState, handleSend, handleAttachment, handlePause, handleShare, handleArtifactNavigation, loadChat, deleteChat } = useAppContext();
+    console.log(window.useAppContext);
+    const { chat, uiState, services, setUiState, handleSend, handleAttachment, handlePause, handleShare, handleArtifactNavigation, loadChat, deleteChat } = window.useAppContext();
     return (
         <div className="min-h-screen flex flex-col">
             <MainLayout
@@ -145,5 +149,3 @@ function App() {
         </div>
     );
 }
-
-export { AppProvider, useAppContext, App };

@@ -43,11 +43,13 @@
     </script>
 
     <!-- App helper functions in plain JS -->
-    <script type="module" src="/js/utils/helpers.js"></script>
-    <script type="module" src="/js/utils/chatHelpers.js"></script>
-    <script type="module" src="/js/utils/chatStatusHelpers.js"></script>  
-    <script type="module" src="/js/models/AriaArtifacts.js"></script>
-    <script type="module" src="/js/models/Chat.js"></script>
+    <script src="/js/utils/helpers.js"></script>
+    <script src="/js/utils/chatStatusHelpers.js"></script>  
+    <script src="/js/models/AriaArtifacts.js"></script>
+    <script src="/js/models/Chat.js"></script>
+    <script src="/js/hooks/useChat.js"></script>
+    <script src="/js/hooks/useAriaArtifacts.js"></script>
+    <script src="/js/hooks/useUiState.js"></script>
     
     <!-- App components in JSX -->
     <script type="text/babel" data-presets="env,react" src="/js/components/Sidebar.js"></script>
@@ -63,8 +65,13 @@
 
     <!-- Render the App component -->
     <script type="text/babel" data-presets="env,react">
-        const { App } = window;
-        ReactDOM.render(<App />, document.getElementById('app'));
+        const { AppProvider, App } = window;
+        ReactDOM.render(
+            <AppProvider>
+                <App />
+            </AppProvider>,
+            document.getElementById('app')
+        );
     </script>
 </body>
 </html>

@@ -1,5 +1,3 @@
-import PropTypes from 'prop-types';
-
 /* global React */
 function ChatHistory({ chat, isSending }) {
     const [expandedMessages, setExpandedMessages] = React.useState(new Set());
@@ -34,11 +32,6 @@ function ChatHistory({ chat, isSending }) {
     );
 }
 
-ChatHistory.propTypes = {
-    chat: PropTypes.object.isRequired,
-    isSending: PropTypes.bool.isRequired,
-};
-
 function Message({ message, index, isExpanded, onToggleExpand, isLastMessage, isSending }) {
     return (
         <div id={`message-${index}`} className="mb-4 relative">
@@ -52,15 +45,6 @@ function Message({ message, index, isExpanded, onToggleExpand, isLastMessage, is
         </div>
     );
 }
-
-Message.propTypes = {
-    message: PropTypes.object.isRequired,
-    index: PropTypes.number.isRequired,
-    isExpanded: PropTypes.bool.isRequired,
-    onToggleExpand: PropTypes.func.isRequired,
-    isLastMessage: PropTypes.bool.isRequired,
-    isSending: PropTypes.bool.isRequired,
-};
 
 function MessageHeader({ message }) {
     const isEmoji = (icon) => /^[\p{Emoji}]+$/u.test(icon);
@@ -89,10 +73,6 @@ function MessageHeader({ message }) {
         </div>
     );
 }
-
-MessageHeader.propTypes = {
-    message: PropTypes.object.isRequired,
-};
 
 function MessageContent({ message, isExpanded, onToggleExpand }) {
     return (
@@ -127,12 +107,6 @@ function MessageContent({ message, isExpanded, onToggleExpand }) {
     );
 }
 
-MessageContent.propTypes = {
-    message: PropTypes.object.isRequired,
-    isExpanded: PropTypes.bool.isRequired,
-    onToggleExpand: PropTypes.func.isRequired,
-};
-
 function ExpandToggle({ isExpanded, onToggle }) {
     return (
         <div
@@ -154,11 +128,6 @@ function ExpandToggle({ isExpanded, onToggle }) {
     );
 }
 
-ExpandToggle.propTypes = {
-    isExpanded: PropTypes.bool.isRequired,
-    onToggle: PropTypes.func.isRequired,
-};
-
 function AttachmentList({ attachments }) {
     return (
         <div className="mt-2 flex flex-wrap gap-2">
@@ -173,10 +142,6 @@ function AttachmentList({ attachments }) {
         </div>
     );
 }
-
-AttachmentList.propTypes = {
-    attachments: PropTypes.arrayOf(PropTypes.string).isRequired,
-};
 
 function SendingIndicator() {
     return (

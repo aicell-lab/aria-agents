@@ -1,6 +1,5 @@
-import { useState } from 'react';
-
-export function useUiState() {
+window.useUiState = function() {
+    const { useState } = React;
     const [uiState, setUiState] = useState({
         question: '',
         attachmentNames: [],
@@ -16,4 +15,4 @@ export function useUiState() {
     });
 
     return { uiState, setUiState };
-}
+};
