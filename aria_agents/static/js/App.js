@@ -98,12 +98,7 @@ function useAppContext() {
     return useContext(AppContext);
 }
 
-window.useAppContext = useAppContext;
-window.AppProvider = AppProvider;
-window.App = App;
-
 function App() {
-    console.log(window.useAppContext);
     const { chat, uiState, services, setUiState, handleSend, handleAttachment, handlePause, handleShare, handleArtifactNavigation, loadChat, deleteChat } = window.useAppContext();
     return (
         <div className="min-h-screen flex flex-col">
@@ -149,3 +144,7 @@ function App() {
         </div>
     );
 }
+
+window.useAppContext = useAppContext;
+window.AppProvider = AppProvider;
+window.App = App;

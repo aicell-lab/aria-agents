@@ -18,7 +18,7 @@ function ChatPanel({
     const [question, setQuestion] = useState("");
 
     return (
-        <div className="chat-panel">
+        <div className="chat-panel bg-white shadow-md rounded-lg p-6 w-full max-w-3xl">
             <Header />
             
             <ChatContent 

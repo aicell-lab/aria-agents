@@ -32,14 +32,14 @@ function ChatInput({
                 onChange={setQuestion}
                 placeholder="Type what you want to study"
             />
-            
+            {isLoggedIn && (
+                <AttachmentSection
+                    attachments={attachments}
+                    onAttach={handleAttachment}
+                    onRemove={removeAttachment}
+                />
+            )}
             {canShare && <ShareButton onClick={onShare} />}
-            <AttachmentSection
-                attachments={attachments}
-                onAttach={handleAttachment}
-                onRemove={removeAttachment}
-            />
-            
             <ActionButton
                 isLoggedIn={isLoggedIn}
                 onLogin={onLogin}
