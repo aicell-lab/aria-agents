@@ -1,4 +1,4 @@
-/* global marked, completeCodeBlocks */
+/* global marked, completeCodeBlocks, jsonToMarkdown, modifyLinksToOpenInNewTab */
 
 /**
  * Class representing a chat session.
@@ -135,6 +135,71 @@ class Chat {
             [...this.artifacts],
             [...this.attachments]
         );
+    }
+
+    /**
+     * Send a message using the chat service.
+     * @param {string} query - The query to send.
+     * @param {Array} attachments - The attachments to send.
+     * @param {Object} chatService - The chat service.
+     * @param {Function} statusCallback - The status callback function.
+     * @param {Function} artifactCallback - The artifact callback function.
+     * @param {Function} titleCallback - The title callback function.
+     * @param {string} sessionId - The session ID.
+     * @param {string} userId - The user ID.
+     * @param {string} userToken - The user token.
+     */
+    async sendMessage(query, attachments, chatService, statusCallback, artifactCallback, titleCallback, sessionId, userId, userToken) {
+        const currentChatHistory = Array.from(this.history.values()).map(
+            (chat) => {
+                let { role, content, attachments, ...rest } = chat;
+                role = role.toString() === "user" ? "user" : "assistant";
+                return {
+                    ...rest,
+                    role: role.toString(),
+                    content: this.contentWithAttachments(content, attachments),
+                };
+            }
+        );
+        const extensions = [{ id: "aria" }];
+        if (this.title === "") {
+            const summaryQuestion = `Give a succinct title to this chat
+             session summarizing this prompt written by
+             the user: "${query}". Respond ONLY with words,
+             maximum six words. DO NOT include the words
+             "Chat Session Title" or similar`;
+            await chatService.chat(
+                summaryQuestion,
+                currentChatHistory,
+                titleCallback,
+                () => { },
+                sessionId,
+                userId,
+                userToken,
+                extensions,
+            );
+        }
+        await chatService.chat(
+            query,
+            currentChatHistory,
+            statusCallback,
+            artifactCallback,
+            sessionId,
+            userId,
+            userToken,
+            extensions,
+        );
+    }
+
+    /**
+     * Combine content with attachments.
+     * @param {string} content - The content of the message.
+     * @param {Array} attachmentNames - The names of the attachments.
+     * @returns {string} The combined content and attachments.
+     */
+    contentWithAttachments(content, attachmentNames) {
+        const attachmentNamesString = attachmentNames.join(",\n");
+        return `<MESSAGE_CONTENT>\n${content.toString()}\n</MESSAGE_CONTENT>\n\n<ATTACHMENT_NAMES>\n${attachmentNamesString}</ATTACHMENT_NAMES>`;
     }
 }
 

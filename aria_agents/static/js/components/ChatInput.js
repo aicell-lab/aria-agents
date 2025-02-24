@@ -43,7 +43,7 @@ function ChatInput({
             <ActionButton
                 isLoggedIn={isLoggedIn}
                 onLogin={onLogin}
-                onSend={onSend}
+                onSend={() => onSend(question, attachments)}
             />
         </div>
     );

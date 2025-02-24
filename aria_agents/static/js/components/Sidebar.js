@@ -1,4 +1,4 @@
-function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLoggedIn, sessionId }) {
+function Sidebar({ isOpen, onClose, prevChats, onSelectChat, onDeleteChat, isLoggedIn, sessionId, ariaArtifacts }) {
     const renderChatItem = (chatObject) => (
         <div
             key={chatObject.id}

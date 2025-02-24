@@ -70,8 +70,18 @@ function AppProvider({ children }) {
         });
     };
 
-    const loadSharedChat = async () => {
-        // Implement the logic to load a shared chat session
+    const loadSharedChat = async (sessionId, userId) => {
+        try {
+            const chatManifest = await ariaArtifacts.readChat(userId, sessionId);
+            const newChat = Chat.fromManifest(chatManifest);
+            setChat(newChat);
+            setUiState(prev => ({ ...prev, status: 'Chat loaded successfully!' }));
+        } catch (e) {
+            console.error(e);
+            alert(`The chat ${sessionId} doesn't exist or you lack the permissions to access it.`);
+            setChat(new Chat());
+            window.open("https://hypha.aicell.io/public/apps/hypha-login/", '_blank').focus();
+        }
     };
 
     const value = {
@@ -84,7 +94,8 @@ function AppProvider({ children }) {
         setServices,
         initializeChat,
         handleLogin,
-        handleServices
+        handleServices,
+        loadSharedChat,
     };
 
     return (
@@ -99,7 +110,9 @@ function useAppContext() {
 }
 
 function App() {
-    const { chat, uiState, services, setUiState, handleSend, handleAttachment, handlePause, handleShare, handleArtifactNavigation, loadChat, deleteChat } = window.useAppContext();
+    const { chat, uiState, services, setUiState, handleSend,
+        handlePause, handleShare,
+        handleArtifactNavigation, ariaArtifacts, handleLogin } = window.useAppContext();
     return (
         <div className="min-h-screen flex flex-col">
             <MainLayout
@@ -108,20 +121,21 @@ function App() {
                         isOpen={uiState.isSidebarOpen}
                         onClose={() => setUiState(prev => ({ ...prev, isSidebarOpen: false }))}
                         prevChats={[]}
-                        onSelectChat={loadChat}
-                        onDeleteChat={deleteChat}
+                        onSelectChat={ariaArtifacts.loadChat}
+                        onDeleteChat={ariaArtifacts.deleteChat}
                         isLoggedIn={!!services.chatService}
                         currentChatId={chat.id}
+                        ariaArtifacts={ariaArtifacts} // Pass ariaArtifacts to Sidebar
                     />
                 }
                 content={
                     <ChatPanel
                         chat={chat}
                         uiState={uiState}
-                        onSend={handleSend}
-                        onAttachment={handleAttachment}
+                        onSend={(query, attachments) => chat.sendMessage(query, attachments, services.chatService, chat.statusCallback, ariaArtifacts.artifactCallback, chat.titleCallback, chat.id, services.userId, services.userToken)}
                         onPause={handlePause}
                         onShare={() => setUiState(prev => ({ ...prev, showShareDialog: true }))}
+                        onLogin={handleLogin}
                     />
                 }
                 artifacts={
