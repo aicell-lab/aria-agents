@@ -19,4 +19,4 @@ async def test_explore_data(mock_artifact_manager, config):
     assert isinstance(result["data_analysis_agent_final_explanation"], str)
     assert isinstance(result["plot_urls"], dict)
     for url in result["plot_urls"].values():
-        assert url == "http://mock_url"
+        assert url == mock_artifact_manager.default_url

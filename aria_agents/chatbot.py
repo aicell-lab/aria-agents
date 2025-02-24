@@ -239,13 +239,14 @@ async def add_probes(server):
     )
 
 
-async def connect_server(server_url):
+async def connect_server(server_url, service_id="aria-agents"):
     """Connect to the server and register the chat service."""
     workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
     token = os.environ.get("WORKSPACE_TOKEN")
     chat_server = await get_server(server_url, workspace_name, token)
     await add_probes(chat_server)
-    await register_chat_service(chat_server)
+    await register_chat_service(chat_server, service_id)
+    return chat_server
 
 
 def mount_subdir(app, subdir, path):
@@ -281,7 +282,7 @@ async def serve_frontend(server, service_id):
     )
 
 
-async def register_chat_service(server):
+async def register_chat_service(server, service_id="aria-agents"):
     """Hypha startup function."""
     # debug = os.environ.get("BIOIMAGEIO_DEBUG") == "true"
     event_bus = EventBus(name="AriaAgents")
@@ -544,7 +545,7 @@ async def register_chat_service(server):
     await server.register_service(
         {
             "name": "Aria Agents",
-            "id": "aria-agents",
+            "id": service_id,
             "config": {"visibility": "public", "require_context": True},
             "version": version,
             "ping": ping,

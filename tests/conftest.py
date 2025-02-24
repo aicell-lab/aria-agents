@@ -51,22 +51,24 @@ def get_file_in_folder(folder, format_func=None):
             if format_func:
                 return format_func(filename, file_content)
             return file_content
-        
+
     return get_file
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def mock_artifact_manager():
     temp_dir = tempfile.mkdtemp()
 
     def put_file_in_temp_dir(filename, content):
         path = os.path.join(temp_dir, filename)
-        with open(path, 'w', encoding='utf-8') as temp_file:
+        mode = 'wb' if isinstance(content, bytes) else 'w'
+        with open(path, mode, encoding='utf-8' if mode == 'w' else None) as temp_file:
             temp_file.write(content)
         return path
 
     mock = MagicMock()
+    mock.default_url = "http://mock_url"
     mock.put = AsyncMock(side_effect=lambda value, name: put_file_in_temp_dir(name, value))
-    mock.get_url = AsyncMock(return_value="http://mock_url")
+    mock.get_url = AsyncMock(return_value=mock.default_url)
     mock.get = AsyncMock(side_effect=get_file_in_folder("tests/assets/studies"))
     mock.get_attachments = AsyncMock(return_value=[])
     mock.get_attachment = AsyncMock(side_effect=get_file_in_folder("tests/assets/attachments", format_func=attachment_format))
