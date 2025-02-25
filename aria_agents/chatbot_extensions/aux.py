@@ -4,10 +4,6 @@ import urllib
 import xml.etree.ElementTree as xml
 
 import httpx
-from llama_index.core import Settings, VectorStoreIndex
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.llms.openai import OpenAI
-from llama_index.readers.papers import PubmedReader
 from pydantic import BaseModel, Field
 from schema_agents import schema_tool
 from aria_agents.artifact_manager import AriaArtifacts
@@ -58,109 +54,6 @@ class SuggestedStudy(BaseModel):
     references: List[str] = Field(
         description="Citations and references to where these ideas came from. For example, point to specific papers or PubMed IDs to support the choices in the study design. Any time a reference is used in the other sections, the specific sentence MUST be linked specifically to one of these references. References should be numbered and numbering should be consistent with their appearances in other sections."
     )
-
-
-class PMCQuery(BaseModel):
-    """
-    A plain-text query in a single-key dict formatted according to the NCBI search syntax. The query must include:
-
-    1. Exact Match Terms: Enclose search terms in double quotes for precise matches. For example, `"lung cancer"` searches for the exact phrase "lung cancer".
-
-    2. Boolean Operators: Use Boolean operators (AND, OR, NOT) to combine search terms. For instance, `"lung cancer" AND ("mouse" OR "monkey")`.
-
-    3. Field Specification: Append `[Title/Abstract]` to each term to limit the search to article titles and abstracts. For example: `"rat"[Title/Abstract] OR "mouse"[Title/Abstract]`.
-
-    4. Specific Journal Search: To restrict the search to articles from a particular journal, use the format `"[Journal Name]"[journal]`. For example, `"Bio-protocol"[journal]`.
-
-    5. Open Access Filter: To filter results to only include open-access articles, add `"open access"[filter]` to the query.
-
-    Example Query:
-    ```
-    {'query': '"lung cancer"[Title/Abstract] AND ("mouse"[Title/Abstract] OR "monkey"[Title/Abstract]) AND "Bio-protocol"[journal] AND "open access"[filter]'}
-    ```
-    """
-
-    query: str = Field(
-        description="The query to search the NCBI PubMed Central Database"
-    )
-
-
-@schema_tool
-async def test_pmc_query_hits(
-    pmc_query: PMCQuery = Field(
-        ..., description="The query to search the NCBI PubMed Central Database."
-    )
-) -> str:
-    """Tests the `PMCQuery` to see how many hits it returns in the PubMed Central database."""
-    config = load_config()
-    parameters = {
-        "tool": "tool",
-        "email": "email",
-        "db": "pmc",
-        "term": pmc_query.query,
-        "retmax": config["aux"]["paper_limit"],
-    }
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
-                params=parameters,
-                timeout=500,
-            )
-            resp.raise_for_status()
-    except Exception as e:
-        return f"Failed to execute query: {e}"
-
-    # Parse the XML response
-    root = xml.fromstring(resp.content)
-
-    # Extract the number of hits from the <Count> element
-    n_hits = len([elem for elem in root.iter() if elem.tag == "Id"])
-
-    return f"The query `{pmc_query.query}` returned {n_hits} hits."
-
-async def save_query_index(query_index_dir, documents):
-    query_index = VectorStoreIndex.from_documents(documents)
-    query_index.storage_context.persist(query_index_dir)
-
-def create_corpus_function(
-    artifact_manager: AriaArtifacts = None
-) -> Callable:
-    config = load_config()
-    @schema_tool
-    async def create_pubmed_corpus(
-        pmc_query: PMCQuery = Field(
-            ...,
-            description="The query to search the NCBI PubMed Central Database.",
-        )
-    ) -> str:
-        """Searches PubMed Central using `PMCQuery` and creates a citation query engine."""
-        terms = urllib.parse.urlencode({"term": pmc_query.query, "db": "pmc"})
-        print(
-            f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}"
-        )
-        # Move more of this to save_query_index for async?
-        loader = PubmedReader()
-        # print(test_pmc_query_hits(pmc_query))
-        documents = loader.load_data(
-            search_query=pmc_query.query,
-            max_results=config["aux"]["paper_limit"],
-        )
-        if len(documents) == 0:
-            return "No papers were found in the PubMed Central database for the given query. Please try different terms for the query."
-        Settings.llm = OpenAI(model=config["llm_model"])
-        Settings.embed_model = OpenAIEmbedding(
-            model=config["aux"]["embedding_model"]
-        )
-        print("Document loading complete")
-        
-        query_index_dir = get_query_index_dir(artifact_manager)
-        
-        await save_query_index(query_index_dir, documents)
-        
-        return f"Pubmed corpus with {len(documents)} papers has been created."
-
-    return create_pubmed_corpus
 
 
 def load_template(template_filename):

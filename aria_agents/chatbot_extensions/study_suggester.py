@@ -5,15 +5,11 @@ from pydantic import BaseModel, Field
 from schema_agents import schema_tool
 from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
-    test_pmc_query_hits,
-    create_corpus_function,
     write_website,
     ask_agent,
 )
 from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.utils import (
-    get_query_index_dir,
-    get_query_function,
     save_file,
     get_file,
     call_agent,
@@ -52,44 +48,6 @@ class StudyWithDiagram(BaseModel):
     )
 
 
-def create_pubmed_query_function(
-    artifact_manager: AriaArtifacts = None,
-    llm_model: str = "gpt2",
-) -> Callable:
-    @schema_tool
-    async def query_pubmed(
-        user_request: str = Field(
-            description="The user's request to create a study around, framed in terms of a scientific question"
-        ),
-        constraints: str = Field(
-            "",
-            description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
-        ),
-    ) -> str:
-        """Create a corpus of papers from PubMed Central based on the user's request."""
-        event_bus = artifact_manager.get_event_bus() if artifact_manager else None
-
-        await call_agent(
-            name="NCBI Querier",
-            instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
-            messages=[
-                """Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. 
-                Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. 
-                If no queries return hits, adjust the queries to be more general (for example, by removing the `[Title/Abstract]` field specifications from search terms), and try again.
-                Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.""",
-                user_request,
-            ],
-            llm_model=llm_model,
-            event_bus=event_bus,
-            constraints=constraints,
-            tools=[test_pmc_query_hits, create_corpus_function(artifact_manager)],
-        )
-
-        return "query_function created."
-
-    return query_pubmed
-
-
 # TODO: improve relevance and usefulness of citations
 def create_study_suggester_function(
     config: Dict,
@@ -107,20 +65,20 @@ def create_study_suggester_function(
             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
         ),
     ) -> Dict[str, str]:
-        """BEFORE USING THIS FUNCTION YOU NEED TO CREATE A QUERY_FUNCTION FROM THE `query_pubmed` TOOL. Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
+        """Create a study suggestion based on the user's request. This includes a literature review, a suggested study, and a summary website."""
         event_bus = artifact_manager.get_event_bus() if artifact_manager else None
-        query_index_dir = get_query_index_dir(artifact_manager)
-        query_function = get_query_function(query_index_dir, config)
+        # TODO:
+        # query_function = get_query_function(artifact_manager, config)
 
         suggested_study = await call_agent(
             name="Study Suggester",
             instructions="You are the study suggester. You suggest a study to test a new hypothesis based on the cutting-edge information from the literature review.",
             messages=[
                 f"Design a study to address an open question in the field based on the following user request: ```{user_request}```",
-                "You have access to an already-collected corpus of PubMed papers and the ability to query it. If you don't get good information from your query, try again with a different query. You can get more results from maker your query more generic or more broad. Keep going until you have a good answer. You should try at the very least 5 different queries",
+                # TODO: add instructions for query_function
                 "After generating the study, you will make a call to CompleteUserQuery. You should call that function with schema {'response': <SuggestedStudy>}.",
             ],
-            tools=[query_function],
+            tools=[], # TODO: query_function
             output_schema=SuggestedStudy,
             llm_model=llm_model,
             event_bus=event_bus,
