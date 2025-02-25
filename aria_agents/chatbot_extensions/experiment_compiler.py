@@ -13,8 +13,6 @@ from aria_agents.chatbot_extensions.aux import (
 from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.utils import (
     load_config,
-    get_query_index_dir,
-    get_query_function,
     save_file,
     get_file,
     get_session_id,
@@ -172,93 +170,92 @@ async def write_protocol(
     return protocol_updated
 
 
-def create_experiment_compiler_function(
-    config: Dict,
-    artifact_manager: AriaArtifacts = None,
-) -> Callable:
-    llm_model = config["llm_model"]
-    max_revisions = config["experiment_compiler"]["max_revisions"]
-    @schema_tool
-    async def run_experiment_compiler(
-        constraints: str = Field(
-            "",
-            description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
-        ),
-        max_revisions: int = Field(
-            default=max_revisions,
-            description="The maximum number of protocol revision rounds to allow",
-        ),
-    ) -> Dict[str, str]:
-        """BEFORE USING THIS FUNCTION YOU NEED TO GET A STUDY SUGGESTION FROM THE AriaStudySuggester TOOL. Generate an investigation from a suggested study"""
-        suggested_study_content = await get_file("suggested_study.json", artifact_manager)
-        suggested_study = SuggestedStudy(**suggested_study_content)
-        query_index_dir = get_query_index_dir(artifact_manager)
-        query_function = get_query_function(query_index_dir, config)
-        event_bus = artifact_manager.get_event_bus()
+# def create_experiment_compiler_function(
+#     config: Dict,
+#     artifact_manager: AriaArtifacts = None,
+# ) -> Callable:
+#     llm_model = config["llm_model"]
+#     max_revisions = config["experiment_compiler"]["max_revisions"]
+#     @schema_tool
+#     async def run_experiment_compiler(
+#         constraints: str = Field(
+#             "",
+#             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
+#         ),
+#         max_revisions: int = Field(
+#             default=max_revisions,
+#             description="The maximum number of protocol revision rounds to allow",
+#         ),
+#     ) -> Dict[str, str]:
+#         """BEFORE USING THIS FUNCTION YOU NEED TO GET A STUDY SUGGESTION FROM THE AriaStudySuggester TOOL. Generate an investigation from a suggested study"""
+#         suggested_study_content = await get_file("suggested_study.json", artifact_manager)
+#         suggested_study = SuggestedStudy(**suggested_study_content)
+#         query_function = get_query_function(query_index_dir, config)
+#         event_bus = artifact_manager.get_event_bus()
 
-        protocol_writer = Role(
-            name="Protocol Writer",
-            instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
-        You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
-            icon="🤖",
-            constraints=constraints,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=llm_model,
-        )
+#         protocol_writer = Role(
+#             name="Protocol Writer",
+#             instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
+#         You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
+#             icon="🤖",
+#             constraints=constraints,
+#             event_bus=event_bus,
+#             register_default_events=True,
+#             model=llm_model,
+#         )
 
-        protocol_manager = Role(
-            name="Protocol manager",
-            instructions="You are an expert laboratory scientist. You read protocols and manage them to ensure that they are clear and detailed enough for a new student to follow them exactly without any questions or doubts.",
-            icon="🤖",
-            constraints=constraints,
-            event_bus=event_bus,
-            register_default_events=True,
-            model=llm_model,
-        )
+#         protocol_manager = Role(
+#             name="Protocol manager",
+#             instructions="You are an expert laboratory scientist. You read protocols and manage them to ensure that they are clear and detailed enough for a new student to follow them exactly without any questions or doubts.",
+#             icon="🤖",
+#             constraints=constraints,
+#             event_bus=event_bus,
+#             register_default_events=True,
+#             model=llm_model,
+#         )
 
-        protocol = await write_protocol(
-            protocol=suggested_study,
-            feedback=None,
-            query_function=query_function,
-            role=protocol_writer,
-        )
+#         protocol = await write_protocol(
+#             protocol=suggested_study,
+#             feedback=None,
+#             query_function=query_function,
+#             role=protocol_writer,
+#         )
 
-        protocol_feedback = await get_protocol_feedback(
-            protocol, protocol_manager
-        )
-        revisions = 0
+#         protocol_feedback = await get_protocol_feedback(
+#             protocol, protocol_manager
+#         )
+#         revisions = 0
 
-        while not protocol_feedback.complete and revisions < max_revisions:
-            protocol = await write_protocol(
-                protocol=protocol,
-                feedback=protocol_feedback,
-                query_function=query_function,
-                role=protocol_writer,
-            )
+#         while not protocol_feedback.complete and revisions < max_revisions:
+#             protocol = await write_protocol(
+#                 protocol=protocol,
+#                 feedback=protocol_feedback,
+#                 query_function=query_function,
+#                 role=protocol_writer,
+#             )
 
-            protocol_feedback = await get_protocol_feedback(
-                protocol,
-                protocol_manager,
-                protocol_feedback,
-            )
-            revisions += 1
+#             protocol_feedback = await get_protocol_feedback(
+#                 protocol,
+#                 protocol_manager,
+#                 protocol_feedback,
+#             )
+#             revisions += 1
             
-        protocol_url = await save_file("experimental_protocol.json", protocol.model_dump_json(), artifact_manager)
+#         protocol_url = await save_file("experimental_protocol.json", protocol.model_dump_json(), artifact_manager)
 
-        summary_website_url = await write_website(
-            protocol,
-            artifact_manager,
-            "experimental_protocol",
-            llm_model,
-        )
+#         summary_website_url = await write_website(
+#             protocol,
+#             artifact_manager,
+#             "experimental_protocol",
+#             llm_model,
+#         )
 
-        return {
-            "summary_website_url": summary_website_url,
-            "protocol_url": protocol_url,
-        }
+#         return {
+#             "summary_website_url": summary_website_url,
+#             "protocol_url": protocol_url,
+#         }
 
-    return run_experiment_compiler
+#     return run_experiment_compiler
 
 
 async def main():
@@ -278,8 +275,8 @@ async def main():
     )
     args = parser.parse_args()
 
-    run_experiment_compiler = create_experiment_compiler_function(config)
-    await run_experiment_compiler(**vars(args))
+    # run_experiment_compiler = create_experiment_compiler_function(config)
+    # await run_experiment_compiler(**vars(args))
 
 
 if __name__ == "__main__":

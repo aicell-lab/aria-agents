@@ -6,9 +6,6 @@ from inspect import signature
 from contextvars import ContextVar
 import dotenv
 from pydantic import BaseModel, Field
-# from llama_index.core import load_index_from_storage
-# from llama_index.core.query_engine import CitationQueryEngine
-# from llama_index.core.storage import StorageContext
 from schema_agents.utils.common import current_session
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
@@ -108,22 +105,6 @@ async def save_file(
         file_url = await save_to_artifact_manager(filename, content, artifact_manager)
 
     return file_url
-
-
-def get_query_index_dir(artifact_manager: AriaArtifacts = None):
-    if artifact_manager is None:
-        session_id = get_session_id(current_session)
-        project_folder = get_project_folder(session_id)
-        query_index_dir = os.path.join(project_folder, "query_index")
-    else:
-        projects_folder = os.environ.get("PROJECT_FOLDERS", "./projects")
-        query_index_dir = os.path.join(
-            projects_folder,
-            f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index",
-        )
-
-    os.makedirs(query_index_dir, exist_ok=True)
-    return query_index_dir
 
 
 def load_config():

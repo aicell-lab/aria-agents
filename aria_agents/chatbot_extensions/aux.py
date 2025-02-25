@@ -1,13 +1,9 @@
 import os
-from typing import Callable, List
-import urllib
-import xml.etree.ElementTree as xml
+from typing import List
 
-import httpx
 from pydantic import BaseModel, Field
-from schema_agents import schema_tool
 from aria_agents.artifact_manager import AriaArtifacts
-from aria_agents.utils import load_config, save_file, get_query_index_dir, ask_agent
+from aria_agents.utils import save_file, ask_agent
 
 
 class SummaryWebsite(BaseModel):
