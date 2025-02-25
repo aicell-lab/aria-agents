@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from schema_agents import schema_tool
 from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
-    test_pmc_query_hits,
+    check_pmc_query_hits,
     create_corpus_function,
     write_website,
     ask_agent,
@@ -54,7 +54,7 @@ class StudyWithDiagram(BaseModel):
 
 def create_pubmed_query_function(
     artifact_manager: AriaArtifacts = None,
-    llm_model: str = "gpt2",
+    config: Dict = None,
 ) -> Callable:
     @schema_tool
     async def query_pubmed(
@@ -68,13 +68,14 @@ def create_pubmed_query_function(
     ) -> str:
         """Create a corpus of papers from PubMed Central based on the user's request."""
         event_bus = artifact_manager.get_event_bus() if artifact_manager else None
+        llm_model = config["llm_model"]
 
         await call_agent(
             name="NCBI Querier",
             instructions="You are the PubMed querier. You take the user's input and use it to create a query to search PubMed Central for relevant papers.",
             messages=[
                 """Take the following user request and generate at least 5 different queries in the schema of 'PMCQuery' to search PubMed Central for relevant papers. 
-                Ensure that all queries include the filter for open access papers. Test each query using the `test_pmc_query_hits` tool to determine which query returns the most hits. 
+                Ensure that all queries include the filter for open access papers. Test each query using the `check_pmc_query_hits` tool to determine which query returns the most hits. 
                 If no queries return hits, adjust the queries to be more general (for example, by removing the `[Title/Abstract]` field specifications from search terms), and try again.
                 Once you have identified the query with the highest number of hits, use it to create a corpus of papers with the `create_pubmed_corpus`.""",
                 user_request,
@@ -82,7 +83,7 @@ def create_pubmed_query_function(
             llm_model=llm_model,
             event_bus=event_bus,
             constraints=constraints,
-            tools=[test_pmc_query_hits, create_corpus_function(artifact_manager)],
+            tools=[check_pmc_query_hits, create_corpus_function(artifact_manager, config)],
         )
 
         return "query_function created."

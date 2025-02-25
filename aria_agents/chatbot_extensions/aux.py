@@ -86,7 +86,7 @@ class PMCQuery(BaseModel):
 
 
 @schema_tool
-async def test_pmc_query_hits(
+async def check_pmc_query_hits(
     pmc_query: PMCQuery = Field(
         ..., description="The query to search the NCBI PubMed Central Database."
     )
@@ -124,9 +124,9 @@ async def save_query_index(query_index_dir, documents):
     query_index.storage_context.persist(query_index_dir)
 
 def create_corpus_function(
-    artifact_manager: AriaArtifacts = None
+    artifact_manager: AriaArtifacts = None,
+    config: dict = None,
 ) -> Callable:
-    config = load_config()
     @schema_tool
     async def create_pubmed_corpus(
         pmc_query: PMCQuery = Field(
@@ -141,7 +141,7 @@ def create_corpus_function(
         )
         # Move more of this to save_query_index for async?
         loader = PubmedReader()
-        # print(test_pmc_query_hits(pmc_query))
+        # print(check_pmc_query_hits(pmc_query))
         documents = loader.load_data(
             search_query=pmc_query.query,
             max_results=config["aux"]["paper_limit"],
@@ -183,7 +183,7 @@ def get_website_prompt(object_type):
 async def write_website(
     input_model: BaseModel,
     artifact_manager: AriaArtifacts,
-    website_type: str,
+    website_type: str, # TODO: add filename (to avoid clash with other files)
     llm_model: str = "gpt2",
 ) -> SummaryWebsite:
     """Writes a summary website for the suggested study or experimental protocol"""
