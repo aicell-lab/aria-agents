@@ -203,7 +203,6 @@ function App() {
 				}),
 				_rkwargs: true
 			});
-			await artifactManager.commit(chatId);
 		}
 	};
 
