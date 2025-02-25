@@ -1,12 +1,17 @@
 import pytest
 from aria_agents.chatbot_extensions.analyzers import create_explore_data
 
+
 @pytest.mark.asyncio
 async def test_explore_data(mock_artifact_manager, config):
     explore_data = create_explore_data(mock_artifact_manager, config["llm_model"])
     result = await explore_data(
         explore_request="What's the average and standard deviation of all of these values?",
-        data_files=["mass_spectrometry_data.tsv", "random_file_1.csv", "random_file_2.csv"],
+        data_files=[
+            "mass_spectrometry_data.tsv",
+            "random_file_1.csv",
+            "random_file_2.csv",
+        ],
         constraints="",
     )
 
