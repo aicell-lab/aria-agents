@@ -1,39 +1,71 @@
 import os
-import pytest
-import dotenv
 import tempfile
+import uuid
 import shutil
 from unittest.mock import AsyncMock, MagicMock
+import pytest
+import dotenv
+from hypha_rpc import connect_to_server
 dotenv.load_dotenv()
 from schema_agents.utils.common import EventBus
 from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.utils import load_config
-from aria_agents.server import get_server
 from aria_agents.chatbot_extensions.study_suggester import SuggestedStudy
+import base64
+import json
 
 
 @pytest.fixture(scope="session")
-async def server():
+def chat_input():
+    return {
+        "question": "I want to study the effect of osmotic stress on yeast cells. Suggest a study and make an experiment protocol",
+        "chat_history": [],
+        "chatbot_extensions": [{ "id": "aria" }],
+        "constraints": "I only have access to a microscope and a centrifuge",
+    }
+
+@pytest.fixture(scope="session")
+def server_promise():
     server_url = "https://hypha.aicell.io"
-    workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
     token = os.getenv("WORKSPACE_TOKEN")
-    return await get_server(server_url, workspace_name, token)
+    return connect_to_server(
+        {
+            "server_url": server_url,
+            "token": token,
+            "method_timeout": 500,
+            "workspace": "aria-agents",
+        }
+    )
 
 @pytest.fixture(scope="session")
-async def artifact_manager(server):
+async def static_server(server_promise):
+    async with await server_promise as server:
+        yield server
+
+def get_user_id(user_token):
+    payload = user_token.split('.')[1]
+    padded_payload = payload + '=' * (-len(payload) % 4)  # Add padding if necessary
+    decoded_payload = base64.urlsafe_b64decode(padded_payload)
+    user_info = json.loads(decoded_payload)
+    return user_info['sub']
+
+@pytest.fixture(scope="function")
+async def artifact_manager(server_promise):
     event_bus = EventBus(name="TestEventBus")
+    server = await server_promise
+    user_id = get_user_id(server)
     art_man = AriaArtifacts(server, event_bus)
+    session_id = str(uuid.uuid4())
     await art_man.setup(
-        token=os.getenv("WORKSPACE_TOKEN"),
-        user_id="test-user",
-        session_id="test-session"
+        token=os.getenv("TEST_HYPHA_TOKEN"),
+        user_id=user_id,
+        session_id=session_id
     )
     return art_man
 
 @pytest.fixture(scope="session")
 def config():
     return load_config()
-
 
 def attachment_format(filename, file_content):
     mock_file = MagicMock()

@@ -1,37 +1,37 @@
 import pytest
 import os
 import uuid
-from aria_agents.chatbot import connect_server
+from aria_agents.chatbot import register_chat_service
+from tests.conftest import get_user_id
+
+accumulated_args = []
 
 def status_callback(message):
-    print(f"Message: {message}")
+    accumulated_args.append(message.arguments)
 
-def artifact_callback(artifact, url):
-    print(f"Artifact: {artifact}, URL: {url}")
+def artifact_callback(content, url):
+    assert url.startswith("http")
+    assert content.startswith("<!DOCTYPE html>")
 
 @pytest.mark.asyncio
-async def test_chat_end_to_end():
+async def test_chat_end_to_end(server_promise, chat_input):
     rand_session_id = str(uuid.uuid4())
     service_id = "aria-agents-test"
-    server = await connect_server("https://hypha.aicell.io", service_id)
-    user_id = server.config.user["id"]
+    server = await server_promise
+    user_token = os.getenv("TEST_HYPHA_TOKEN")
+    user_id = get_user_id(user_token)
+    await register_chat_service(server, service_id)
     service = await server.get_service(service_id)
-    user_message = {
-        "question": "I want to study the effect of osmotic stress on yeast cells. Suggest a study and make an experiment protocol",
-        "chat_history": [],
-        "chatbot_extensions": [{ id: "aria" }],
-    }
-    workspace_token = os.getenv("WORKSPACE_TOKEN")
-    # constraints = "The only analytical equipment I have access to is an orbitrap mass spectrometer"
     await service.chat(
-        text=user_message["question"],
-        chat_history=user_message["chat_history"],
-        status_callback=None,
-        artifact_callback=None,
+        text=chat_input["question"],
+        chat_history=chat_input["chat_history"],
+        status_callback=status_callback,
+        artifact_callback=artifact_callback,
         session_id=rand_session_id,
         user_id=user_id,
-        user_token=workspace_token,
-        extensions=user_message["chatbot_extensions"],
+        user_token=user_token,
+        extensions=chat_input["chatbot_extensions"],
     )
-    assert "error" not in result["text"]
-    assert result is not None
+    full_output = "".join(accumulated_args)
+    assert "error" not in full_output
+

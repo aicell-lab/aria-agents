@@ -239,13 +239,13 @@ async def add_probes(server):
     )
 
 
-async def connect_server(server_url, service_id="aria-agents"):
+async def connect_server(server_url):
     """Connect to the server and register the chat service."""
     workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
     token = os.environ.get("WORKSPACE_TOKEN")
     chat_server = await get_server(server_url, workspace_name, token)
     await add_probes(chat_server)
-    await register_chat_service(chat_server, service_id)
+    await register_chat_service(chat_server)
     return chat_server
 
 

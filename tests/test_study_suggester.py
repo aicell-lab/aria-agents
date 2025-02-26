@@ -2,9 +2,9 @@ import pytest
 from aria_agents.chatbot_extensions.study_suggester import create_study_suggester_function, create_create_diagram_function
 
 @pytest.mark.asyncio
-async def test_run_study_suggester(mock_artifact_manager, config):
+async def test_run_study_suggester(mock_artifact_manager, config, chat_input):
     study_suggester = create_study_suggester_function(config, mock_artifact_manager)
-    result = await study_suggester(user_request="I want to study the effect of osmotic stress on yeast cells", constraints="")
+    result = await study_suggester(user_request=chat_input["question"], constraints="")
     # assert "error" not in result["summary_website_url"]
     assert "summary_website_url" in result
     assert result["summary_website_url"] == mock_artifact_manager.default_url
