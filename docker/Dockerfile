@@ -33,7 +33,7 @@ RUN git clean -fdX && rm -rf .git
 
 # Install the required Python packages
 RUN pip install -r requirements.txt
-RUN pip install fastapi hypha_rpc uvicorn .
+RUN pip install .
 
 # Switch to the non-root user
 USER aria_agents
