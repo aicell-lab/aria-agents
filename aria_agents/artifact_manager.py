@@ -21,7 +21,7 @@ class AriaArtifacts:
         self.session_id = session_id
         self._artifact_id = f"ws-user-{user_id}/aria-agents-chats:{session_id}"
 
-    async def put(self, value, name):
+    async def put_file(self, value, name):
         assert self._svc, "Please call `setup()` before using artifact manager"
 
         # Artifact has to be staged before we can put files
@@ -41,6 +41,19 @@ class AriaArtifacts:
 
         self._event_bus.emit("store_put", name)
         return name
+    
+    async def add_vectors(self, vectors):
+        assert self._svc, "Please call `setup()` before using artifact manager"
+        try:
+            # await self._svc.edit(artifact_id=self._artifact_id, version="stage")
+            await self._svc.add_vectors(
+                artifact_id=self._artifact_id, vectors=vectors
+            )
+        except Exception as e:
+            print(f"Failed to add vectors: {e}")
+            raise RuntimeError(f"Failed to add vectors: {e}") from e
+
+        await self._svc.commit(self._artifact_id)
 
     async def get_url(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
