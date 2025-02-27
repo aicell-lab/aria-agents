@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Create and activate the Conda environment
-conda create -n aria-agents python=3.10.13 -y
+conda create -n aria-agents python=3.11 -y
 source activate aria-agents
 
 # Install dependencies
