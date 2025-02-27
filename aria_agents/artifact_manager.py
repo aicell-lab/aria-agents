@@ -37,7 +37,7 @@ class AriaArtifacts:
 			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
 			"collection": [],
 		}
-        
+
         try:
             await self._svc.create(
 				type="collection",
@@ -68,10 +68,6 @@ class AriaArtifacts:
                 }
             )
 
-            # ype: "chat",
-			# 	parent_id: `${artifactWorkspace}/aria-agents-chats`,
-			# 	alias: `aria-agents-chats:${sessionId}`,
-			# 	manifest: datasetManifest,
         except RemoteException as e:
             print(f"Artifact couldn't be created. It likely already exists. Error: {e}")
 
