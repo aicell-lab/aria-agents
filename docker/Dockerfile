@@ -35,6 +35,12 @@ RUN git clean -fdX && rm -rf .git
 RUN pip install -r requirements.txt
 RUN pip install .
 
+# Download NLTK stopwords
+RUN python -m nltk.downloader -d /app/nltk_data stopwords
+
+# Set NLTK_DATA environment variable
+ENV NLTK_DATA=/app/nltk_data
+
 # Switch to the non-root user
 USER aria_agents
 
