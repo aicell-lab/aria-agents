@@ -16,10 +16,10 @@ If you prefer to install Aria Agents manually, follow the steps below:
 
 ### Prerequisites
 
-Create a new Conda environment called "aria-agents" with Python version 3.10.13:
+Create a new Conda environment called "aria-agents" with Python version 3.11:
 
 ```
-conda create -n aria-agents python=3.10.13
+conda create -n aria-agents python=3.11
 conda activate aria-agents
 ```
 
