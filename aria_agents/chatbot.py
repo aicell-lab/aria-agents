@@ -551,6 +551,16 @@ async def register_chat_service(server):
         }
     )
 
+    extensions_tools = [await extension_to_tools(extension) for extension in builtin_extensions]
+    tools = {schema_tool.__name__: schema_tool for sublist in extensions_tools for schema_tool in sublist}
+    await server.register_service({
+        "name": "Aria agents tools",
+        "id": "aria-agents-tools",
+        "config": {"visibility": "public"},
+        "version": version,
+        **tools
+    })
+
     await serve_frontend(server, "aria-agents-chat")
 
     public_base_url = server.config["public_base_url"]
