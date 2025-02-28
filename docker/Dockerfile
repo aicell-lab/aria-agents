@@ -35,9 +35,6 @@ RUN git clean -fdX && rm -rf .git
 RUN pip install -r requirements.txt
 RUN pip install .
 
-# Set NLTK_DATA environment variable
-ENV NLTK_DATA=/app/nltk_data
-
 # Switch to the non-root user
 USER aria_agents
 
