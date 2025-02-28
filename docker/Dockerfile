@@ -22,7 +22,7 @@ COPY . .
 
 # Create logs directory and set permissions for /app and /app/logs
 RUN mkdir -p /app/logs && \
-    chmod 777 /app /app/logs && \
+    chmod 777 -R /app /app/logs && \
     chown -R aria_agents:aria_agents /app /app/logs
 
 # Add /app to the list of safe directories for Git
@@ -34,9 +34,6 @@ RUN git clean -fdX && rm -rf .git
 # Install the required Python packages
 RUN pip install -r requirements.txt
 RUN pip install .
-
-# Download NLTK stopwords
-RUN python -m nltk.downloader -d /app/nltk_data stopwords
 
 # Set NLTK_DATA environment variable
 ENV NLTK_DATA=/app/nltk_data
