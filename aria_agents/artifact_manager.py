@@ -87,7 +87,7 @@ class AriaArtifacts:
             print(f"File upload failed: {e}")
             raise RuntimeError(f"File upload failed: {e}") from e
 
-        await self._svc.commit(self._artifact_id)
+        await self._svc.commit(self._artifact_id, version="new")
 
         self._event_bus.emit("store_put", name)
         return name
