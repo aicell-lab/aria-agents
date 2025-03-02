@@ -451,7 +451,7 @@ async def register_chat_service(server, service_id="aria-agents"):
                 {
                     "role": "assistant",
                     "content": response.text,
-                    "steps": [step.dict() for step in response.steps],
+                    "steps": [step.model_dump() for step in response.steps],
                 }
             )
             version = pkg_resources.get_distribution("aria_agents").version
