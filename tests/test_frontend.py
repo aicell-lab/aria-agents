@@ -1,6 +1,8 @@
 from unittest.mock import AsyncMock, MagicMock, patch, ANY
 import pytest
 from fastapi.testclient import TestClient
+from packaging.version import Version
+from fastapi import __version__ as fastapi_version
 from aria_agents.chatbot import get_chatbot_api, serve_frontend
 
 @pytest.fixture
@@ -27,19 +29,16 @@ async def test_setup_service(mock_server):
         }
     )
 
-# ======================================================
-# Below requires recent FastAPI, incompatible with Hypha
-# TODO: update Hypha required FastAPI version, then un-comment this
-# ======================================================
+@pytest.mark.skipif(Version(fastapi_version) < Version("0.115.0"), reason="This test requires a recent FastAPI version")
+def test_chatbot_api_root(test_client):
+    with patch("fastapi.responses.FileResponse") as mock_file_response:
+        mock_file_response.return_value = "<html>Test</html>"
+        response = test_client.get("/")
+        assert response.status_code == 200
 
-# def test_chatbot_api_root(test_client):
-#     with patch("fastapi.responses.FileResponse") as mock_file_response:
-#         mock_file_response.return_value = "<html>Test</html>"
-#         response = test_client.get("/")
-#         assert response.status_code == 200
-
-# def test_chatbot_api_static_files(test_client):
-#     static_routes = [
-#         route for route in test_client.app.routes if str(route.path).startswith("/js") or str(route.path).startswith("/css") or str(route.path).startswith("/img")
-#     ]
-#     assert len(static_routes) == 3, "Static files route should be mounted"
+@pytest.mark.skipif(Version(fastapi_version) < Version("0.115.0"), reason="This test requires a recent FastAPI version")
+def test_chatbot_api_static_files(test_client):
+    static_routes = [
+        route for route in test_client.app.routes if str(route.path).startswith("/js") or str(route.path).startswith("/css") or str(route.path).startswith("/img")
+    ]
+    assert len(static_routes) == 3, "Static files route should be mounted"

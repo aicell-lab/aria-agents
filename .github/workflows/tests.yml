@@ -25,9 +25,8 @@ jobs:
 
     - name: Run tests
       env:
-        TEST_HYPHA_TOKEN: ${{ secrets.TEST_HYPHA_TOKEN }}
         WORKSPACE_TOKEN: ${{ secrets.WORKSPACE_TOKEN }}
-        WORKSPACE_NAME: ${{ secrets.WORKSPACE_NAME }}
+        WORKSPACE_NAME: ${{ vars.WORKSPACE_NAME }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         pytest --asyncio-mode=auto

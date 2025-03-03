@@ -119,17 +119,20 @@ async def test_event_bus_store_put(mock_http_get, mock_http_put, mock_get_server
     assert url == "http://mockserver/get_url"
 
 
-# TODO: generate non-expiring token
-# @pytest.mark.asyncio
-# async def test_hypha_put_file(hypha_artifact_manager, event_bus):
-#     def assert_is_expected(name):
-#         assert name == "test_file.txt"
+@pytest.mark.skipif(
+    not os.getenv("TEST_HYPHA_TOKEN"),
+    reason="A recent personal hypha token is necessary for this test. Generate with get_hypha_token.py"
+)
+@pytest.mark.asyncio
+async def test_hypha_put_file(hypha_artifact_manager, event_bus):
+    def assert_is_expected(name):
+        assert name == "test_file.txt"
 
-#     event_bus.on("store_put", assert_is_expected)
-#     await hypha_artifact_manager.put(value=b"test content", name="test_file.txt")
+    event_bus.on("store_put", assert_is_expected)
+    await hypha_artifact_manager.put(value=b"test content", name="test_file.txt")
 
-#     gotten_content = await hypha_artifact_manager.get("test_file.txt")
-#     url = await hypha_artifact_manager.get_url("test_file.txt")
+    gotten_content = await hypha_artifact_manager.get("test_file.txt")
+    url = await hypha_artifact_manager.get_url("test_file.txt")
 
-#     assert gotten_content == "test content"
-#     assert url.startswith("https://hypha.aicell.io/")
+    assert gotten_content == "test content"
+    assert url.startswith("https://hypha.aicell.io/")
