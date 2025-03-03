@@ -1,4 +1,6 @@
 import httpx
+import datetime
+from hypha_rpc.rpc import RemoteException
 from aria_agents.server import get_server
 
 
@@ -10,6 +12,9 @@ class AriaArtifacts:
         self._artifact_id = None
         self.user_id = None
         self.session_id = None
+        self._collection_alias = None
+        self._collection_id = None
+        self._workspace = None
 
     async def setup(
         self, token, user_id, session_id, service_id="public/artifact-manager"
@@ -19,7 +24,52 @@ class AriaArtifacts:
         self._svc = await self.server.get_service(service_id)
         self.user_id = user_id
         self.session_id = session_id
-        self._artifact_id = f"ws-user-{user_id}/aria-agents-chats:{session_id}"
+        self._workspace = f"ws-user-{user_id}"
+        self._collection_alias = "aria-agents-chats"
+        self._collection_id = f"{self._workspace}/{self._collection_alias}"
+        self._artifact_id = f"{self._collection_id}:{session_id}"
+        await self._try_create_collection()
+        await self._try_create()
+
+    async def _try_create_collection(self):
+        galleryManifest = {
+			"name": "Aria Agents Chat History",
+			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
+			"collection": [],
+		}
+
+        try:
+            await self._svc.create(
+				type="collection",
+				workspace=self._workspace,
+				alias=self._collection_alias,
+				manifest=galleryManifest,
+			)
+        except RemoteException as e:
+            print(f"Collection couldn't be created. It likely already exists. Error: {e}")
+
+
+    async def _try_create(self):
+        try:
+            await self._svc.create(
+                type="chat",
+                parent_id=self._collection_id,
+                alias=f"{self._collection_alias}:{self.session_id}",
+                manifest={
+                    "id": self.session_id,
+                    "name": "Aria agents chat",
+                    "description": f"The Aria Agents chat history of {self.session_id}",
+                    "type": "chat",
+                    "conversations": [],
+                    "artifacts": [],
+                    "attachments": [],
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "userId": self.user_id,
+                }
+            )
+
+        except RemoteException as e:
+            print(f"Artifact couldn't be created. It likely already exists. Error: {e}")
 
     async def put(self, value, name):
         assert self._svc, "Please call `setup()` before using artifact manager"
@@ -33,11 +83,11 @@ class AriaArtifacts:
             async with httpx.AsyncClient() as client:
                 response = await client.put(put_url, data=value, timeout=500)
             response.raise_for_status()
-        except Exception as e:
+        except RemoteException as e:
             print(f"File upload failed: {e}")
             raise RuntimeError(f"File upload failed: {e}") from e
 
-        await self._svc.commit(self._artifact_id)
+        await self._svc.commit(self._artifact_id, version="new")
 
         self._event_bus.emit("store_put", name)
         return name
@@ -57,7 +107,7 @@ class AriaArtifacts:
             async with httpx.AsyncClient() as client:
                 response = await client.get(get_url, timeout=500)
             response.raise_for_status()
-        except Exception as e:
+        except RemoteException as e:
             print(f"File download failed: {e}")
             raise RuntimeError(f"File download failed: {e}") from e
 
@@ -68,8 +118,9 @@ class AriaArtifacts:
         try:
             artifact_info = await self._svc.read(artifact_id=self._artifact_id)
             return artifact_info.manifest.get("attachments", [])
-        except Exception as e:
+        except RemoteException as e:
             print(f"Failed to get attachments: {e}")
+            raise RuntimeError(f"Failed to get attachments: {e}") from e
 
     async def get_attachment(self, name: str):
         assert self._svc, "Please call `setup()` before using artifact manager"
