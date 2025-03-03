@@ -136,3 +136,4 @@ async def test_hypha_put_file(hypha_artifact_manager, event_bus):
 
     assert gotten_content == "test content"
     assert url.startswith("https://hypha.aicell.io/")
+    await hypha_artifact_manager.clear()

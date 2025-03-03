@@ -132,6 +132,14 @@ class AriaArtifacts:
             if attachment["name"] == name:
                 return attachment
         return None
+    
+    async def clear(self):
+        assert self._svc, "Please call `setup()` before using artifact manager"
+        return await self._svc.delete(
+            artifact_id=self._artifact_id,
+            delete_files=True,
+            recursive=True
+        )
 
     def get_event_bus(self):
         return self._event_bus
