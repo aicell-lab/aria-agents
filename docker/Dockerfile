@@ -22,7 +22,7 @@ COPY . .
 
 # Create logs directory and set permissions for /app and /app/logs
 RUN mkdir -p /app/logs && \
-    chmod 777 /app /app/logs && \
+    chmod 777 -R /app /app/logs && \
     chown -R aria_agents:aria_agents /app /app/logs
 
 # Add /app to the list of safe directories for Git

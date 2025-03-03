@@ -176,7 +176,7 @@ def get_project_folder(session_id: str):
 
 def convert_to_dict(obj):
     if isinstance(obj, BaseModel):
-        return obj.dict()
+        return obj.model_dump()
     if isinstance(obj, dict):
         return {k: convert_to_dict(v) for k, v in obj.items()}
     if isinstance(obj, list):

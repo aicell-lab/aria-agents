@@ -72,7 +72,7 @@ def get_website_prompt(object_type):
 async def write_website(
     input_model: BaseModel,
     artifact_manager: AriaArtifacts,
-    website_type: str,
+    website_type: str, # TODO: add filename (to avoid clash with other files)
     llm_model: str = "gpt2",
 ) -> SummaryWebsite:
     """Writes a summary website for the suggested study or experimental protocol"""

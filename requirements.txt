@@ -1,7 +1,7 @@
 schema-agents==0.1.61
 httpx==0.28.1
 hypha==0.20.47.post15
-hypha-rpc==0.20.47
+hypha-rpc==0.20.48
 aiofiles==23.2.1
 pandas==1.5.3
 setuptools==70.0.0

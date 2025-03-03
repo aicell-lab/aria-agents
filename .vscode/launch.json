@@ -2,6 +2,16 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python Debugger: E2E",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/test_end_to_end.py::test_chat_end_to_end"
+            ],
+            "justMyCode": false
+        },
+        {
             "name": "Python: connect-server",
             "type": "debugpy",
             "request": "launch",
