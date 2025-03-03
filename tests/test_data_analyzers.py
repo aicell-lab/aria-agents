@@ -3,6 +3,7 @@ from aria_agents.chatbot_extensions.analyzers import create_explore_data
 
 
 @pytest.mark.asyncio
+@pytest.mark.slow
 async def test_explore_data(mock_artifact_manager, config):
     explore_data = create_explore_data(mock_artifact_manager, config["llm_model"])
     result = await explore_data(

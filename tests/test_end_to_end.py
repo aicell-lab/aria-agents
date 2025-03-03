@@ -14,6 +14,7 @@ def artifact_callback(content, url):
     not os.getenv("TEST_HYPHA_TOKEN"),
     reason="A recent personal hypha token is necessary for this test. Generate with get_hypha_token.py"
 )
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_chat_end_to_end(chat_input, output_handler):
     rand_session_id = str(uuid.uuid4())

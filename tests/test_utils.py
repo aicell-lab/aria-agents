@@ -2,6 +2,7 @@ import pytest
 from aria_agents.utils import call_agent, ask_agent
 from aria_agents.chatbot_extensions.aux import write_website
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_call_agent(config):
     result = await call_agent(
@@ -14,6 +15,7 @@ async def test_call_agent(config):
     assert result is not None
     assert "error" not in result
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_ask_agent(config):
     result = await ask_agent(
@@ -26,6 +28,7 @@ async def test_ask_agent(config):
     assert result is not None
     assert "error" not in result
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_summary_website(mock_artifact_manager, suggested_study, config):
     website_type = "suggested_study"

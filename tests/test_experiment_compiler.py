@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 from tests.conftest import mock_get_query_function
 from aria_agents.chatbot_extensions.experiment_compiler import create_experiment_compiler_function
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 @patch("aria_agents.chatbot_extensions.experiment_compiler.get_query_index_dir", return_value="/mock/query_index_dir")
 @patch("aria_agents.chatbot_extensions.experiment_compiler.get_query_function", new_callable=lambda: MagicMock(return_value=mock_get_query_function()))

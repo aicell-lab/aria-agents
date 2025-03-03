@@ -1,9 +1,6 @@
 name: Run Tests
 
-on:
-  push:
-    branches:
-      - main
+on: [push]
 
 jobs:
   test:
@@ -29,4 +26,8 @@ jobs:
         WORKSPACE_NAME: ${{ vars.WORKSPACE_NAME }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
-        pytest --asyncio-mode=auto
+        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          pytest --asyncio-mode=auto
+        else
+          pytest --asyncio-mode=auto -m "not slow"
+        fi
