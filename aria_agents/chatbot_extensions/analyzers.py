@@ -1,151 +1,200 @@
 import argparse
-import os
 import asyncio
-import uuid
+import os
+import base64
+import tempfile
 from io import StringIO
-from typing import List, Callable, Dict
+from typing import List, Callable, Optional
 from pydantic import BaseModel, Field
 import pandas as pd
 from pandas.errors import EmptyDataError
 from pandasai.llm import OpenAI as PaiOpenAI
 from pandasai import Agent as PaiAgent
-from schema_agents import schema_tool, Role
+from schema_agents import schema_tool
 from schema_agents.utils.common import current_session, EventBus
-from aria_agents.utils import get_project_folder, get_session_id, load_config, save_to_artifact_manager, ask_agent
-from aria_agents.artifact_manager import AriaArtifacts
+from aria_agents.utils import get_session_id, ask_agent, SchemaToolReturn, ArtifactFile, load_config, StatusCode
 
 AGENT_MAX_RETRIES = 5
 
-async def read_df(file_path: str, content: str = None) -> pd.DataFrame:
-    def _read_file(path, content = None):
-        ext = os.path.splitext(path)[1].lower()
-        file_content = StringIO(content) if content else path
+class DataAnalysisResult(BaseModel):
+    """Results from data analysis"""
+    analysis: str = Field(description="Main analysis results")
+    explanation: str = Field(description="Detailed explanation of the analysis")
+    plots: List[str] = Field(default=[], description="List of generated plot names")
+    plot_explanations: List[str] = Field(default=[], description="Explanations for each generated plot")
+
+class PlotInfo(BaseModel):
+    """Information about generated plots"""
+    plot_paths: List[str] = Field(description="Paths to the generated plots")
+    plot_meanings: List[str] = Field(description="Explanations for each plot")
+
+async def read_df(file_path: str, content: Optional[str] = None) -> pd.DataFrame:
+    """Read a dataframe from a file path or content string"""
+    def _read_file(path: str, content: Optional[str] = None) -> pd.DataFrame:
+        ext = path.lower().split('.')[-1]
+        file_obj = StringIO(content) if content else path
+        
         try:
-            match ext:
-                case ".csv":
-                    return pd.read_csv(file_content)
-                case ".tsv":
-                    return pd.read_csv(file_content, sep='\t')
-                case ".xlsx":
-                    return pd.read_excel(file_content, engine='openpyxl')
-                case _:
-                    return pd.read_csv(file_content, sep=None, engine='python')
+            if ext == 'csv':
+                return pd.read_csv(file_obj)
+            elif ext == 'tsv':
+                return pd.read_csv(file_obj, sep='\t')
+            elif ext == 'xlsx':
+                return pd.read_excel(file_obj)
+            else:
+                return pd.read_csv(file_obj, sep=None, engine='python')
         except EmptyDataError:
-            print(f"Warning: The file {path} is empty or contains no data.")
+            print(f"Warning: The file {path} is empty")
             return pd.DataFrame()
         except Exception as e:
-            print(f"Error reading file {path}: {str(e)}")
-            raise ValueError(f"Unable to open file {path} as tabular file: {str(e)}") from e
+            raise ValueError(f"Unable to read {path} as tabular data: {str(e)}") from e
 
-    return await asyncio.get_event_loop().run_in_executor(None, _read_file, file_path, content)
+    return await current_session.get().loop.run_in_executor(None, _read_file, file_path, content)
 
-class PlotPaths(BaseModel):
-    """A list of file paths to the plots (or any .png files) created by the data analysis bot"""
-    plot_paths: List[str] = Field(description="A list of paths to the .png files created by the data analysis bot")
-    plot_meanings: List[str] = Field(description="A list of meanings of the plots, why they were created and what they show")
+async def get_data_files_dfs(data_file_names: List[str], contents: Optional[List[str]] = None) -> List[pd.DataFrame]:
+    """Load multiple dataframes from files or content strings"""
+    if contents:
+        return await asyncio.gather(*[read_df(name, content) for name, content in zip(data_file_names, contents)])
+    return await asyncio.gather(*[read_df(name) for name in data_file_names])
 
-
-async def upload_plots(plot_paths: PlotPaths, artifact_manager: AriaArtifacts) -> Dict[str, str]:
-    if artifact_manager is None:
-        return plot_paths.plot_paths
-    
-    plot_urls = {}
-    for plot_path in plot_paths.plot_paths:
-        with open(plot_path, "rb") as image_file:
-            plot_content = image_file.read()
-        
-        plot_name = f"plot_{str(uuid.uuid4())}.png"
-        plot_urls[plot_path] = await save_to_artifact_manager(plot_name, plot_content, artifact_manager)
-        
-    return plot_urls
-
-async def get_data_files_dfs(data_file_names: List[str], artifact_manager: AriaArtifacts = None) -> List[pd.DataFrame]:
-    if artifact_manager is None:
-        return await asyncio.gather(*[read_df(file_path) for file_path in data_file_names])
-    
-    data_files = []
-    for file_name in data_file_names:
-        data_file = await artifact_manager.get_attachment(file_name)
-        data_files.append((file_name, data_file.content))
-        
-    return await asyncio.gather(*[read_df(file_path, file_content) for (file_path, file_content) in data_files])
-
-async def get_pai_agent(session_id: str, data_file_names: List[str], artifact_manager: AriaArtifacts = None) -> tuple[PaiAgent, Role]:
-    data_files_dfs = await get_data_files_dfs(data_file_names, artifact_manager)
-    project_folder = get_project_folder(session_id)
-    pai_llm = PaiOpenAI()
-    pai_agent_config = {
-        'llm': pai_llm,
-        'save_charts': True,
-        'save_charts_path': project_folder,
-        'max_retries': AGENT_MAX_RETRIES,
-    }
-    pai_agent = PaiAgent(data_files_dfs, config=pai_agent_config, memory_size=25)
-    
-    return pai_agent
-
-def query_pai_agent(pai_agent: PaiAgent, query: str) -> str:
+def query_pai_agent(pai_agent: PaiAgent, query: str) -> tuple[str, str, str]:
+    """Run a query through the PandasAI agent"""
     request = f"""Analyze the data files and respond to the following request: ```{query}```
         
-    Every time you save a plot, you MUST save it to a different filename. 
-    If you make any plots at any point, you MUST include the file locations in your final explanation.
-    When saving charts during CodeCleaning, you MUST save all the files to unique filenames.
+    Every time you save a plot, you MUST save it to a different filename.
+    When making plots, make sure they are clear and well-labeled.
+    If you make any plots, you MUST explain what each one shows.
     """
     response = pai_agent.chat(request)
     explanation = pai_agent.explain()
     logs = pai_agent.logs
     return response, explanation, logs
 
-async def get_plot_paths(response: str, explanation: str, pai_logs: str, llm_model: str, event_bus: EventBus, constraints: str) -> PlotPaths:
+async def get_plot_info(
+    response: str,
+    explanation: str,
+    pai_logs: str,
+    llm_model: str,
+    event_bus: Optional[EventBus] = None,
+    constraints: Optional[str] = None
+) -> PlotInfo:
+    """Extract plot information from the agent's response"""
     return await ask_agent(
         name="Analysis summarizer",
-        instructions="You are a data science manager. You read the responses from a data science bot performing analysis and make sure it is suitable to pass on to the end-user as serializable output.",
+        instructions="You are a data science manager. You read the responses from a data science bot performing analysis and extract information about any plots created.",
         messages=[
-            """Extract the paths to the plots or any .png files created by the data analysis bot.
-                Get this information from the data analysis bot's final response, explanation, and logs.
-                When creating your own explanations for the plots, refer to the input files used for the plots by their file names.
-                If no plots were created, return an empty list. The bot's response and explanation is the following:""",
+            """Extract the paths to any plots created by the data analysis bot and explain what each one shows.
+            Get this information from the bot's response, explanation, and logs.
+            When creating plot explanations, refer to the input files used by their names.
+            If no plots were created, return empty lists. Here is the bot's output:""",
             f"Response: {response}\n\nExplanation: {explanation}",
-            "The bot's logs are the following:",
+            "The bot's logs are:",
             str(pai_logs),
         ],
-        output_schema=PlotPaths,
+        output_schema=PlotInfo,
         llm_model=llm_model,
         event_bus=event_bus,
         constraints=constraints,
     )
 
-def create_explore_data(artifact_manager: AriaArtifacts = None, llm_model: str = "gpt2") -> Callable:
+def create_explore_data(llm_model: str = "gpt2", event_bus: Optional[EventBus] = None) -> Callable:
     @schema_tool
     async def explore_data(
         explore_request: str = Field(
-            description="A request to explore the data files",
+            description="A request to explore the data files"
         ),
         data_files: List[str] = Field(
-            description="List of file names or file paths of the files to analyze. Files must be in tabular (csv, tsv, excel, txt) format.",
+            description="List of file paths to analyze. Files must be tabular (csv, tsv, excel, txt)"
+        ),
+        data_contents: Optional[List[str]] = Field(
+            None,
+            description="Optional list of file contents if files should not be read from disk"
         ),
         constraints: str = Field(
             "",
-            description="Specify any constraints that should be applied to the data analysis",
+            description="Optional constraints for the analysis"
         ),
-    ) -> Dict[str, str]:
-        """Analyzes or explores data files using a PandasAI data analysis agent. 
-        Returns the agent's final response, explanation, logs, and plot urls. Make sure to look at the logs and plot 
-        urls to get the full picture of the bot's work. If the bot created any plots, make sure to include the plot urls 
-        and their meanings. Each function call creates at most one output plot, so if multiple plots are required the function must be once for each desired output plot"""
+    ) -> SchemaToolReturn:
+        """Analyzes data files using PandasAI. Can work with local files or provided file contents."""
+        
+        # Set up temporary directory for plots
+        temp_dir = tempfile.mkdtemp()
+        try:
+            # Initialize PandasAI
+            try:
+                data_files_dfs = await get_data_files_dfs(data_files, data_contents)
+            except Exception as e:
+                return SchemaToolReturn.error(f"Failed to read data files: {str(e)}", 400)
 
-        session_id = get_session_id(current_session)
-        pai_agent = await get_pai_agent(session_id, data_files, artifact_manager)
-        response, explanation, pai_logs = query_pai_agent(pai_agent, explore_request)
-        event_bus = artifact_manager.get_event_bus() if artifact_manager else None
-        plot_paths = await get_plot_paths(response, explanation, pai_logs, llm_model, event_bus, constraints)
-        plot_urls = await upload_plots(plot_paths, artifact_manager)
+            pai_agent = PaiAgent(
+                data_files_dfs,
+                config={
+                    'llm': PaiOpenAI(),
+                    'save_charts': True,
+                    'save_charts_path': temp_dir,
+                    'max_retries': AGENT_MAX_RETRIES
+                },
+                memory_size=25
+            )
+            
+            # Run analysis
+            try:
+                response, explanation, pai_logs = query_pai_agent(pai_agent, explore_request)
+                plot_info = await get_plot_info(response, explanation, pai_logs, llm_model, event_bus, constraints)
+            except Exception as e:
+                return SchemaToolReturn.error(f"Analysis failed: {str(e)}", 500)
+            
+            # Convert plots to base64 and prepare artifacts
+            to_save = []
+            failed_plots = []
+            for i, (plot_path, meaning) in enumerate(zip(plot_info.plot_paths, plot_info.plot_meanings)):
+                try:
+                    with open(plot_path, 'rb') as f:
+                        plot_content = f.read()
+                        base64_content = base64.b64encode(plot_content).decode('utf-8')
+                    plot_name = f"plot_{i}.png"
+                    to_save.append(ArtifactFile(
+                        name=plot_name,
+                        content=base64_content
+                    ))
+                except Exception as e:
+                    failed_plots.append(f"{plot_path}: {str(e)}")
+            
+            # Create analysis result
+            result = DataAnalysisResult(
+                analysis=response,
+                explanation=explanation,
+                plots=[f.name for f in to_save],
+                plot_explanations=plot_info.plot_meanings
+            )
 
-        return {
-            "data_analysis_agent_final_response": str(response),
-            "data_analysis_agent_final_explanation": explanation,
-            "plot_urls": plot_urls,
-        }
+            # Determine status based on plot generation success
+            if failed_plots:
+                status = StatusCode(
+                    code=206,  # Partial content
+                    message=f"Analysis completed with {len(failed_plots)} failed plots",
+                    type="success"
+                )
+            else:
+                num_plots = len(to_save)
+                status = StatusCode.ok(
+                    f"Analysis completed successfully with {num_plots} plot{'s' if num_plots != 1 else ''}"
+                )
+            
+            return SchemaToolReturn(
+                to_save=to_save,
+                response=result,
+                status=status
+            )
+            
+        except Exception as e:
+            return SchemaToolReturn.error(f"Unexpected error during analysis: {str(e)}", 500)
+            
+        finally:
+            # Clean up temporary files
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     return explore_data
 
 async def main():
@@ -163,10 +212,9 @@ async def main():
         default="",
     )
     args = parser.parse_args()
-    artifact_manager = None
     config = load_config()
     llm_model = config["llm_model"]
-    run_data_analyzer = create_explore_data(artifact_manager, llm_model)
+    run_data_analyzer = create_explore_data(llm_model)
     await run_data_analyzer(**vars(args))
 
 if __name__ == "__main__":
@@ -174,7 +222,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except Exception as e:
         print(e)
-
-
-
-    
