@@ -10,12 +10,11 @@ from aria_agents.chatbot_extensions.aux import (
     SuggestedStudy,
     write_website,
 )
-from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.utils import (
     load_config,
-    save_file,
-    get_file,
     get_session_id,
+    SchemaToolReturn,
+    ArtifactFile
 )
 
 dotenv.load_dotenv()
@@ -40,7 +39,6 @@ class ExperimentalProtocol(BaseModel):
     """
 
     protocol_title: str = Field(..., description="The title of the protocol")
-    # steps : List[str] = Field(..., description="A list of steps that must be followed in order to carry out the experiment. This string MUST be in markdown format and should contain no irregular characters.")
     equipment: List[str] = Field(
         ...,
         description="A list of equipment, materials, reagents, and devices needed for the entire protocol.",
@@ -71,63 +69,6 @@ class ProtocolFeedback(BaseModel):
     )
 
 
-async def get_protocol_feedback(
-    protocol: ExperimentalProtocol,
-    protocol_manager: Role,
-    existing_feedback: ProtocolFeedback = None,
-    session_id: str = None,
-) -> ProtocolFeedback:
-    if existing_feedback is None:
-        pf = ProtocolFeedback(complete=False, feedback="", previous_feedback=[])
-    else:
-        pf = existing_feedback
-    async with create_session_context(
-        id=session_id, role_setting=protocol_manager.role_setting
-    ):
-        res = await protocol_manager.aask(
-            [
-                """Is the following protocol specified in enough detail for a new student to follow it exactly without any questions or doubts? If not, say why.
-                                        First you will be given the previous feedback you wrote for this protocol then you will be given the current version of the protocol.
-                                        If the previous feedback is non-empty, do not give redundant feedback, give new feedback that will help the protocol writer improve the protocol further and make sure to save the previous feedback into the `previous_feedback` field""",
-                pf,
-                protocol,
-            ],
-            output_schema=ProtocolFeedback,
-        )
-    return res
-
-
-QUERY_TOOL_TIP = """Queries MUST not be of the form of a question, but rather in the form of the expected protocol chunk you are looking for because this will find closely matching sentences to your desired information.
-
-# EXAMPLE QUERIES: 
-- `CHO cells were cultured for 20 minutes`
-- `supernatent was aspirated and cells were washed with PBS`
-- `cells were lysed with RIPA buffer`
-- `sample was centrifuged at 1000g for 5 minutes`
-- `All tissue samples were pulverized using a ball mill (MM400, Retsch) with precooled beakers and stainless-steel balls for 30 s at the highest frequency (30 Hz)`
-- `pulverized and frozen samples were extracted using the indicated solvents and subsequent steps of the respective protocol`
-- `After a final centrifugation step the solvent extract of the protocols 100IPA, IPA/ACN and MeOH/ACN were transferred into a new 1.5 ml tube (Eppendorf) and snap-frozen until kit preparation.` 
-- `The remaining protocols were dried using an Eppendorf Concentrator Plus set to no heat, stored at -80°C and reconstituted in 60 µL isopropanol (30 µL of 100% isopropanol, followed by 30 µL of 30% isopropanol in water) before the measurement.`"""
-
-
-class CorpusQueries(BaseModel):
-    """A list of queries to search against a given corpus of protocols"""
-
-    queries: List[str] = Field(
-        ...,
-        description=f"A list of queries to search against a given corpus of protocols. {QUERY_TOOL_TIP}",
-    )
-
-
-class CorpusQueriesResponses(BaseModel):
-    """A list of responses to queries made against a corpus of protocols"""
-
-    responses: Dict[str, str] = Field(
-        ...,
-        description="A dictionary of responses to queries made against a corpus of protocols",
-    )
-
-
 async def write_protocol(
     protocol: Union[ExperimentalProtocol, SuggestedStudy],
     feedback: ProtocolFeedback,
@@ -148,125 +89,128 @@ async def write_protocol(
             prompt = """You are being given a laboratory protocol that you have written and the feedback to make the protocol clearer for the lab worker who will execute it. First the protocol will be provided, then the feedback."""
             messages = [prompt, protocol, feedback]
             query_messages = list(messages) + [
-                "Use the feedback to produce a list of queries that you will use to search a given corpus of existing protocols for reference to existing steps in these protocols. Note the previous feedback and queries that you have already tried, and do not repeat them. Rather come up with new queries that will address the new feedback and improve the protocol further."
+                "Based on the feedback, what queries would help you find information in the paper corpus to address the feedback?"
             ]
-            queries = await role.aask(
-                query_messages, output_schema=CorpusQueries
-            )
-            queries_responses = CorpusQueriesResponses(
-                responses={
-                    query: await query_function(query)
-                    for query in queries.queries
-                }
-            )
-            protocol_messages = list(messages) + [
-                "You searched a corpus of existing protocols for relevant steps in existing protocols and found the following responses",
-                queries_responses,
-                "Use these protocol corpus query responses to update and revise your protocol according to the feedback. Save the queries you used into the running list of previous queries. If a given query did not return a response from the corpus, do your best to update the protocol without the information from that single query using your internal knowledge or sources like protocols.io",
+            queries = protocol.queries + [
+                await query_function(query_messages),
             ]
             protocol_updated = await role.aask(
-                protocol_messages, output_schema=ExperimentalProtocol
+                messages + [await query_function(messages)],
+                output_schema=ExperimentalProtocol,
             )
-    return protocol_updated
+            protocol_updated.queries = queries
+
+        return protocol_updated
 
 
-# def create_experiment_compiler_function(
-#     config: Dict,
-#     artifact_manager: AriaArtifacts = None,
-# ) -> Callable:
-#     llm_model = config["llm_model"]
-#     max_revisions = config["experiment_compiler"]["max_revisions"]
-#     @schema_tool
-#     async def run_experiment_compiler(
-#         constraints: str = Field(
-#             "",
-#             description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
-#         ),
-#         max_revisions: int = Field(
-#             default=max_revisions,
-#             description="The maximum number of protocol revision rounds to allow",
-#         ),
-#     ) -> Dict[str, str]:
-#         """BEFORE USING THIS FUNCTION YOU NEED TO GET A STUDY SUGGESTION FROM THE AriaStudySuggester TOOL. Generate an investigation from a suggested study"""
-#         suggested_study_content = await get_file("suggested_study.json", artifact_manager)
-#         suggested_study = SuggestedStudy(**suggested_study_content)
-#         query_function = get_query_function(query_index_dir, config)
-#         event_bus = artifact_manager.get_event_bus()
+async def get_protocol_feedback(
+    protocol: ExperimentalProtocol,
+    role: Role,
+    feedback: ProtocolFeedback = None,
+) -> ProtocolFeedback:
+    session_id = get_session_id(current_session)
+    async with create_session_context(
+        id=session_id, role_setting=role.role_setting
+    ):
+        messages = [protocol]
+        if feedback:
+            messages.append(
+                "Previous feedback that has already been addressed:"
+                f"\n{feedback.previous_feedback}"
+            )
 
-#         protocol_writer = Role(
-#             name="Protocol Writer",
-#             instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
-#         You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
-#             icon="🤖",
-#             constraints=constraints,
-#             event_bus=event_bus,
-#             register_default_events=True,
-#             model=llm_model,
-#         )
+        messages.append(
+            "Please review the protocol and provide feedback on whether it is complete and detailed enough for a new student to follow it exactly."
+        )
 
-#         protocol_manager = Role(
-#             name="Protocol manager",
-#             instructions="You are an expert laboratory scientist. You read protocols and manage them to ensure that they are clear and detailed enough for a new student to follow them exactly without any questions or doubts.",
-#             icon="🤖",
-#             constraints=constraints,
-#             event_bus=event_bus,
-#             register_default_events=True,
-#             model=llm_model,
-#         )
+        return await role.aask(messages, output_schema=ProtocolFeedback)
 
-#         protocol = await write_protocol(
-#             protocol=suggested_study,
-#             feedback=None,
-#             query_function=query_function,
-#             role=protocol_writer,
-#         )
 
-#         protocol_feedback = await get_protocol_feedback(
-#             protocol, protocol_manager
-#         )
-#         revisions = 0
+def create_experiment_compiler_function(
+    config: Dict,
+    event_bus: Optional[EventBus] = None,
+) -> Callable:
+    llm_model = config["llm_model"]
+    max_revisions = config["experiment_compiler"]["max_revisions"]
+    query_index_dir = config["experiment_compiler"]["query_index_dir"]
+    
+    @schema_tool
+    async def run_experiment_compiler(
+        suggested_study: SuggestedStudy = Field(
+            description="A suggested study to generate an experimental protocol from"
+        ),
+        constraints: str = Field(
+            "",
+            description="Specify any constraints that should be applied for compiling the experiments, for example, instruments, resources and pre-existing protocols, knowledge etc.",
+        ),
+        max_revisions: int = Field(
+            default=max_revisions,
+            description="The maximum number of protocol revision rounds to allow",
+        ),
+    ) -> SchemaToolReturn:
+        """BEFORE USING THIS FUNCTION YOU NEED TO GET A STUDY SUGGESTION FROM THE AriaStudySuggester TOOL. Generate an investigation from a suggested study"""
+        protocol_writer = Role(
+            name="Protocol Writer",
+            instructions="""You are an extremely detail oriented student who works in a biological laboratory. You read protocols and revise them to be specific enough until you and your fellow students could execute the protocol yourself in the lab.
+            You do not conduct any data analysis, only data collection so your protocols only include steps up through the point of collecting data, not drawing conclusions.""",
+            icon="🤖",
+            constraints=constraints,
+            event_bus=event_bus,
+            register_default_events=True,
+            model=llm_model,
+        )
 
-#         while not protocol_feedback.complete and revisions < max_revisions:
-#             protocol = await write_protocol(
-#                 protocol=protocol,
-#                 feedback=protocol_feedback,
-#                 query_function=query_function,
-#                 role=protocol_writer,
-#             )
+        protocol = await write_protocol(
+            protocol=suggested_study,
+            feedback=None,
+            query_function=query_function,
+            role=protocol_writer,
+        )
 
-#             protocol_feedback = await get_protocol_feedback(
-#                 protocol,
-#                 protocol_manager,
-#                 protocol_feedback,
-#             )
-#             revisions += 1
+        protocol_feedback = await get_protocol_feedback(
+            protocol, protocol_writer
+        )
+        revisions = 0
+
+        while not protocol_feedback.complete and revisions < max_revisions:
+            protocol = await write_protocol(
+                protocol=protocol,
+                feedback=protocol_feedback,
+                query_function=query_function,
+                role=protocol_writer,
+            )
+
+            protocol_feedback = await get_protocol_feedback(
+                protocol,
+                protocol_writer,
+                protocol_feedback,
+            )
+            revisions += 1
             
-#         protocol_url = await save_file("experimental_protocol.json", protocol.model_dump_json(), artifact_manager)
+        website_content = write_website(protocol, None, "experimental_protocol", llm_model)
+        
+        return SchemaToolReturn(
+            to_save=[
+                ArtifactFile(
+                    name="experimental_protocol.json",
+                    content=protocol.model_dump_json()
+                ),
+                ArtifactFile(
+                    name="experimental_protocol.html",
+                    content=website_content
+                )
+            ],
+            response={
+                "protocol_title": protocol.protocol_title,
+                "sections": [section.section_name for section in protocol.sections]
+            }
+        )
 
-#         summary_website_url = await write_website(
-#             protocol,
-#             artifact_manager,
-#             "experimental_protocol",
-#             llm_model,
-#         )
-
-#         return {
-#             "summary_website_url": summary_website_url,
-#             "protocol_url": protocol_url,
-#         }
-
-#     return run_experiment_compiler
+    return run_experiment_compiler
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Generate an investigation")
-    config = load_config()
-    parser.add_argument(
-        "--max_revisions",
-        type=int,
-        help="The maximum number of protocol agent revisions to allow",
-        default=config["experiment_compiler"]["max_revisions"],
-    )
+    parser = argparse.ArgumentParser(description="Run the experiment compiler pipeline")
     parser.add_argument(
         "--constraints",
         type=str,
@@ -274,9 +218,11 @@ async def main():
         default="",
     )
     args = parser.parse_args()
+    artifact_manager = None
+    config = load_config()
 
-    # run_experiment_compiler = create_experiment_compiler_function(config)
-    # await run_experiment_compiler(**vars(args))
+    run_experiment_compiler = create_experiment_compiler_function(config)
+    await run_experiment_compiler(**vars(args))
 
 
 if __name__ == "__main__":

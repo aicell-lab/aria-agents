@@ -11,9 +11,11 @@ async def test_call_agent(config):
         messages=[],
         llm_model=config["llm_model"],
         tools=[],
+        event_bus=config.get("event_bus"),
     )
     assert result is not None
-    assert "error" not in result
+    assert isinstance(result, str)
+    assert "error" not in result.lower()
 
 @pytest.mark.slow
 @pytest.mark.asyncio
@@ -24,13 +26,22 @@ async def test_ask_agent(config):
         messages=[],
         output_schema=None,
         llm_model=config["llm_model"],
+        event_bus=config.get("event_bus"),
     )
     assert result is not None
-    assert "error" not in result
+    assert isinstance(result, str)
+    assert "error" not in result.lower()
 
 @pytest.mark.slow
 @pytest.mark.asyncio
-async def test_summary_website(mock_artifact_manager, suggested_study, config):
+async def test_summary_website(suggested_study, config):
     website_type = "suggested_study"
-    await write_website(suggested_study, mock_artifact_manager, website_type, llm_model=config["llm_model"])
-    assert await mock_artifact_manager.exists(f"{website_type}.html")
+    website_content = await write_website(
+        suggested_study, 
+        config.get("event_bus"),
+        website_type, 
+        llm_model=config["llm_model"]
+    )
+    assert isinstance(website_content, str)
+    assert len(website_content) > 0
+    assert "<html" in website_content.lower()

@@ -7,10 +7,11 @@ from aria_agents.chatbot_extensions.study_suggester import (
 from aria_agents.chatbot_extensions.analyzers import (
     create_explore_data
 )
-from aria_agents.artifact_manager import AriaArtifacts
 from aria_agents.utils import load_config, ChatbotExtension
+from typing import Optional
+from schema_agents.utils.common import EventBus
 
-def get_extension(artifact_manager: AriaArtifacts = None) -> ChatbotExtension:
+def get_extension(event_bus: Optional[EventBus] = None) -> ChatbotExtension:
     config = load_config()
     llm_model = config["llm_model"]
     
@@ -22,14 +23,13 @@ def get_extension(artifact_manager: AriaArtifacts = None) -> ChatbotExtension:
             " analyzing data."
         ),
         tools={
-            "study_suggester": create_study_suggester_function(config, artifact_manager),
-            "experiment_compiler": create_experiment_compiler_function(config, artifact_manager),
-            "data_analyzer": create_explore_data(artifact_manager, llm_model),
-            "run_study_with_diagram": create_create_diagram_function(artifact_manager, llm_model),
-            "create_summary_website": create_summary_website_function(artifact_manager, llm_model)
+            "study_suggester": create_study_suggester_function(config),
+            "experiment_compiler": create_experiment_compiler_function(config),
+            "data_analyzer": create_explore_data(llm_model, event_bus),
+            "run_study_with_diagram": create_create_diagram_function(llm_model, event_bus),
+            "create_summary_website": create_summary_website_function(llm_model, event_bus)
         },
     )
-
 
 if __name__ == "__main__":
     import asyncio
@@ -43,11 +43,6 @@ if __name__ == "__main__":
                     " of U2OS cells"
                 ),
                 constraints="",
-            )
-        )
-        print(
-            await extension.tools["experiment_compiler"](
-                max_revisions=3, constraints=""
             )
         )
 

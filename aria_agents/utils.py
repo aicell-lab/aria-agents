@@ -1,28 +1,97 @@
 import os
 import uuid
 import json
-from typing import Any, Callable, Dict, Optional, _UnionGenericAlias
+from typing import Any, Callable, Dict, Optional, _UnionGenericAlias, List, Union, Type, Literal
 from inspect import signature
 from contextvars import ContextVar
 import dotenv
 from pydantic import BaseModel, Field
-from schema_agents.utils.common import current_session
+from schema_agents.utils.common import current_session, EventBus
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
-from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
-from aria_agents.artifact_manager import AriaArtifacts
+
+
+class StatusCode(BaseModel):
+    """Status information for a schema tool operation"""
+    code: int = Field(description="HTTP-style status code. 2xx for success, 4xx for client errors, 5xx for server errors")
+    message: str = Field(description="Human-readable status message")
+    type: Literal["success", "error"] = Field(
+        description="Type of status - success or error",
+        default_factory=lambda: "success" if code < 400 else "error"
+    )
+
+    @classmethod
+    def ok(cls, message: str = "Operation completed successfully") -> "StatusCode":
+        """Create a success status"""
+        return cls(code=200, message=message, type="success")
+
+    @classmethod
+    def created(cls, message: str = "Resource created successfully") -> "StatusCode":
+        """Create a creation success status"""
+        return cls(code=201, message=message, type="success")
+
+    @classmethod
+    def bad_request(cls, message: str) -> "StatusCode":
+        """Create a client error status"""
+        return cls(code=400, message=message, type="error")
+
+    @classmethod
+    def not_found(cls, message: str) -> "StatusCode":
+        """Create a not found error status"""
+        return cls(code=404, message=message, type="error")
+
+    @classmethod
+    def server_error(cls, message: str) -> "StatusCode":
+        """Create a server error status"""
+        return cls(code=500, message=message, type="error")
+
+
+class ArtifactFile(BaseModel):
+    """A file to be saved"""
+    name: str = Field(description="Name of the file to save")
+    content: str = Field(description="Content of the file to save")
+    model: Optional[str] = Field(None, description="Name of the BaseModel class if this file was created from one")
+
+
+class SchemaToolReturn(BaseModel):
+    """Standardized return type for schema tools"""
+    to_save: List[ArtifactFile] = Field(default=[], description="List of files to save")
+    response: Union[str, BaseModel] = Field(description="The response to return, either as a string or a BaseModel")
+    status: StatusCode = Field(
+        default_factory=StatusCode.ok,
+        description="Status information about the operation"
+    )
+
+    @classmethod
+    def success(cls, response: Union[str, BaseModel], message: str = None, to_save: List[ArtifactFile] = None) -> "SchemaToolReturn":
+        """Create a successful response"""
+        return cls(
+            response=response,
+            to_save=to_save or [],
+            status=StatusCode.ok(message if message else "Operation completed successfully")
+        )
+
+    @classmethod
+    def error(cls, message: str, code: int = 400) -> "SchemaToolReturn":
+        """Create an error response"""
+        return cls(
+            response=f"Error: {message}",
+            to_save=[],
+            status=StatusCode(code=code, message=message, type="error")
+        )
 
 
 async def call_agent(
-    name,
-    instructions,
-    messages,
-    llm_model,
-    event_bus=None,
-    constraints=None,
-    tools=None,
-    output_schema=None,
-):
+    name: str,
+    instructions: str,
+    messages: List[str],
+    llm_model: str,
+    event_bus: Optional[EventBus] = None,
+    tools: Optional[List] = None,
+    output_schema: Optional[Type[BaseModel]] = None,
+    constraints: Optional[str] = None,
+) -> Any:
+    """Call an agent and wait for its response"""
     session_id = get_session_id(current_session)
     agent = Role(
         name=name,
@@ -39,14 +108,15 @@ async def call_agent(
 
 
 async def ask_agent(
-    name,
-    instructions,
-    messages,
-    output_schema,
-    llm_model,
-    event_bus=None,
-    constraints=None,
-):
+    name: str,
+    instructions: str,
+    messages: List,
+    output_schema: Optional[Type[BaseModel]],
+    llm_model: str,
+    event_bus: Optional[EventBus] = None,
+    constraints: Optional[str] = None,
+) -> Any:
+    """Ask an agent a question and wait for its response"""
     agent = Role(
         name=name,
         instructions=instructions,
@@ -62,49 +132,6 @@ async def ask_agent(
             messages,
             output_schema=output_schema,
         )
-
-
-def save_locally(filename: str, content: str, project_folder: str):
-    file_path = os.path.join(project_folder, filename)
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    return "file://" + file_path
-
-
-async def save_to_artifact_manager(
-    filename: str, content: str, artifact_manager: AriaArtifacts
-):
-    file_id = await artifact_manager.put(
-        value=content,
-        name=filename,
-    )
-    file_url = await artifact_manager.get_url(name=file_id)
-    return file_url
-
-
-async def get_file(filename: str, artifact_manager: AriaArtifacts = None):
-    if artifact_manager is None:
-        session_id = get_session_id(current_session)
-        project_folder = get_project_folder(session_id)
-        file_content = os.path.join(project_folder, filename)
-        with open(file_content, encoding="utf-8") as loaded_file:
-            return json.load(loaded_file)
-    else:
-        file_content = await artifact_manager.get(filename)
-        return json.loads(file_content)
-
-
-async def save_file(
-    filename: str, content: str, artifact_manager: AriaArtifacts = None
-):
-    if artifact_manager is None:
-        session_id = get_session_id(current_session)
-        project_folder = get_project_folder(session_id)
-        file_url = save_locally(filename, content, project_folder)
-    else:
-        file_url = await save_to_artifact_manager(filename, content, artifact_manager)
-
-    return file_url
 
 
 def load_config():
@@ -211,7 +238,7 @@ async def legacy_extension_to_tool(extension: LegacyChatbotExtension):
     if not execute.__doc__:
         # if extension.execute is partial
         if hasattr(extension.execute, "func"):
-            execute.__doc__ = extension.execute.func.__doc__ or extension.description
+            execute.__doc__ = extension.execute.execute.func.__doc__ or extension.description
         else:
             execute.__doc__ = extension.execute.__doc__ or extension.description
     return schema_tool(execute)
