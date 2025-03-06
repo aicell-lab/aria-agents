@@ -46,17 +46,6 @@ class StudyWithDiagram(BaseModel):
         description="The diagram illustrating the workflow for the suggested study"
     )
 
-class StudyResponse(BaseModel):
-    """Response from the study suggester"""
-    title: str = Field(description="Title of the study")
-    description: str = Field(description="Study description")
-    hypothesis: str = Field(description="Study hypothesis")
-    workflow: str = Field(description="Study workflow")
-    materials: List[str] = Field(description="Required materials")
-    expected_results: str = Field(description="Expected results")
-    reasoning: str = Field(description="Detailed reasoning")
-    references: List[str] = Field(description="References used")
-
 def create_study_suggester_function(config: Dict) -> Callable:
     llm_model = config["llm_model"]
     event_bus = config.get("event_bus")
@@ -90,7 +79,7 @@ def create_study_suggester_function(config: Dict) -> Callable:
             # Create study website content
             try:
                 website_content = await write_website(suggested_study, event_bus, "suggested_study", llm_model)
-            except Exception as e:
+            except Exception:
                 return SchemaToolReturn(
                     to_save=[
                         ArtifactFile(
@@ -106,19 +95,7 @@ def create_study_suggester_function(config: Dict) -> Callable:
                         type="success"
                     )
                 )
-            
-            # Create response model
-            response = StudyResponse(
-                title=suggested_study.experiment_name,
-                description=suggested_study.description,
-                hypothesis=suggested_study.experiment_hypothesis,
-                workflow=suggested_study.experiment_workflow,
-                materials=suggested_study.experiment_material,
-                expected_results=suggested_study.experiment_expected_results,
-                reasoning=suggested_study.experiment_reasoning,
-                references=suggested_study.references
-            )
-            
+
             return SchemaToolReturn(
                 to_save=[
                     ArtifactFile(
@@ -131,7 +108,7 @@ def create_study_suggester_function(config: Dict) -> Callable:
                         content=website_content
                     )
                 ],
-                response=response,
+                response=suggested_study,
                 status=StatusCode.created("Study and website created successfully")
             )
         except Exception as e:
@@ -173,7 +150,7 @@ def create_diagram_function(llm_model: str = "gpt2", event_bus: Optional[EventBu
                         model="StudyWithDiagram"
                     )
                 ],
-                response=study_diagram,
+                response=study_diagram.diagram_code,
                 status=StatusCode.created("Study diagram created successfully")
             )
         except Exception as e:
@@ -189,14 +166,6 @@ def create_summary_website_function(
     async def create_summary_website(
         study_with_diagram: StudyWithDiagram = Field(
             description="The study with its diagram to create a website for"
-        ),
-        llm_model: str = Field(
-            "gpt2",
-            description="The language model to use"
-        ),
-        event_bus: Optional[EventBus] = Field(
-            None,
-            description="Optional event bus for streaming"
         )
     ) -> SchemaToolReturn:
         """Create a summary website for a study with diagram. No wrapper needed since it's simple."""

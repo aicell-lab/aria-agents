@@ -74,4 +74,5 @@ def suggested_study():
         experiment_reasoning="Osmotic stress is known to affect cells",
         experiment_workflow="Expose yeast cells to osmotic stress and observe results",
         references=["https://www.ncbi.nlm.nih.gov/pubmed/12345678"],
+        description="A study investigating the effects of osmotic stress on yeast cell survival and function"
     )

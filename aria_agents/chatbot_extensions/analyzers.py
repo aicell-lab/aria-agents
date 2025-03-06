@@ -125,7 +125,6 @@ def create_explore_data(llm_model: str = "gpt2", event_bus: Optional[EventBus] =
                 data_files_dfs = await get_data_files_dfs(data_files, data_contents)
             except Exception as e:
                 return SchemaToolReturn.error(f"Failed to read data files: {str(e)}", 400)
-
             pai_agent = PaiAgent(
                 data_files_dfs,
                 config={

@@ -2,10 +2,13 @@ from aria_agents.chatbot_extensions.experiment_compiler import (
     create_experiment_compiler_function,
 )
 from aria_agents.chatbot_extensions.study_suggester import (
-    create_study_suggester_function, create_summary_website_function, create_create_diagram_function
+    create_study_suggester_function, create_summary_website_function, create_diagram_function
 )
 from aria_agents.chatbot_extensions.analyzers import (
     create_explore_data
+)
+from aria_agents.chatbot_extensions.corpus import (
+    list_corpus, get_corpus, add_to_corpus
 )
 from aria_agents.utils import load_config, ChatbotExtension
 from typing import Optional
@@ -19,15 +22,18 @@ def get_extension(event_bus: Optional[EventBus] = None) -> ChatbotExtension:
         id="aria",
         name="Aria",
         description=(
-            "Utility tools for suggesting studies, compiling experiments, and"
-            " analyzing data."
+            "Utility tools for suggesting studies, compiling experiments, "
+            "analyzing data, and managing the corpus."
         ),
         tools={
             "study_suggester": create_study_suggester_function(config),
             "experiment_compiler": create_experiment_compiler_function(config),
             "data_analyzer": create_explore_data(llm_model, event_bus),
-            "run_study_with_diagram": create_create_diagram_function(llm_model, event_bus),
-            "create_summary_website": create_summary_website_function(llm_model, event_bus)
+            "run_study_with_diagram": create_diagram_function(llm_model, event_bus),
+            "create_summary_website": create_summary_website_function(llm_model, event_bus),
+            "list_corpus": list_corpus,
+            "get_corpus": get_corpus,
+            "add_to_corpus": add_to_corpus
         },
     )
 

@@ -1,24 +1,29 @@
+from contextvars import ContextVar
 import os
 import uuid
 import json
 from typing import Any, Callable, Dict, Optional, _UnionGenericAlias, List, Union, Type, Literal
 from inspect import signature
-from contextvars import ContextVar
 import dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from schema_agents.utils.common import current_session, EventBus
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
+from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
 
 
 class StatusCode(BaseModel):
     """Status information for a schema tool operation"""
     code: int = Field(description="HTTP-style status code. 2xx for success, 4xx for client errors, 5xx for server errors")
     message: str = Field(description="Human-readable status message")
-    type: Literal["success", "error"] = Field(
-        description="Type of status - success or error",
-        default_factory=lambda: "success" if code < 400 else "error"
-    )
+    type: Literal["success", "error"] = Field(description="Type of status - success or error")
+
+    @field_validator("type")
+    @classmethod
+    def set_type(cls, v, info):
+        """Set the type based on the code"""
+        code = info.data.get("code", 200)
+        return "success" if code < 400 else "error"
 
     @classmethod
     def ok(cls, message: str = "Operation completed successfully") -> "StatusCode":
@@ -242,3 +247,18 @@ async def legacy_extension_to_tool(extension: LegacyChatbotExtension):
         else:
             execute.__doc__ = extension.execute.__doc__ or extension.description
     return schema_tool(execute)
+
+
+def is_artifacts_available() -> bool:
+    """Check if artifact manager is available through frontend.
+    
+    Returns:
+        bool: True if artifact manager is available through frontend
+    """
+    session = current_session.get()
+    if not session:
+        return False
+    role_setting = session.role_setting
+    if not role_setting or not role_setting.get("extensions"):
+        return False
+    return any(ext.get("id") == "aria" for ext in role_setting["extensions"])
