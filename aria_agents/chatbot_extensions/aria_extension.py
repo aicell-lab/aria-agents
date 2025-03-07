@@ -2,15 +2,19 @@ from aria_agents.chatbot_extensions.experiment_compiler import (
     create_experiment_compiler_function,
 )
 from aria_agents.chatbot_extensions.study_suggester import (
-    create_study_suggester_function, create_pubmed_query_function, create_summary_website_function, create_create_diagram_function
+    create_study_suggester_function, create_summary_website_function, create_diagram_function
 )
 from aria_agents.chatbot_extensions.analyzers import (
     create_explore_data
 )
-from aria_agents.artifact_manager import AriaArtifacts
+from aria_agents.chatbot_extensions.corpus import (
+    list_corpus, get_corpus, add_to_corpus
+)
 from aria_agents.utils import load_config, ChatbotExtension
+from typing import Optional
+from schema_agents.utils.common import EventBus
 
-def get_extension(artifact_manager: AriaArtifacts = None) -> ChatbotExtension:
+def get_extension(event_bus: Optional[EventBus] = None) -> ChatbotExtension:
     config = load_config()
     llm_model = config["llm_model"]
     
@@ -18,19 +22,20 @@ def get_extension(artifact_manager: AriaArtifacts = None) -> ChatbotExtension:
         id="aria",
         name="Aria",
         description=(
-            "Utility tools for suggesting studies, compiling experiments, and"
-            " analyzing data."
+            "Utility tools for suggesting studies, compiling experiments, "
+            "analyzing data, and managing the corpus."
         ),
         tools={
-            "study_suggester": create_study_suggester_function(config, artifact_manager),
-            "experiment_compiler": create_experiment_compiler_function(config, artifact_manager),
-            "data_analyzer": create_explore_data(artifact_manager, llm_model),
-            "query_pubmed": create_pubmed_query_function(artifact_manager, config),
-            "run_study_with_diagram": create_create_diagram_function(artifact_manager, llm_model),
-            "create_summary_website": create_summary_website_function(artifact_manager, llm_model)
+            "study_suggester": create_study_suggester_function(config),
+            "experiment_compiler": create_experiment_compiler_function(config),
+            "data_analyzer": create_explore_data(llm_model, event_bus),
+            "run_study_with_diagram": create_diagram_function(llm_model, event_bus),
+            "create_summary_website": create_summary_website_function(llm_model, event_bus),
+            "list_corpus": list_corpus,
+            "get_corpus": get_corpus,
+            "add_to_corpus": add_to_corpus
         },
     )
-
 
 if __name__ == "__main__":
     import asyncio
@@ -44,11 +49,6 @@ if __name__ == "__main__":
                     " of U2OS cells"
                 ),
                 constraints="",
-            )
-        )
-        print(
-            await extension.tools["experiment_compiler"](
-                max_revisions=3, constraints=""
             )
         )
 

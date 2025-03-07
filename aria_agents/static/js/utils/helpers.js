@@ -171,14 +171,14 @@ function modifyLinksToOpenInNewTab(htmlContent) {
 }
 
 window.helpers = {
-	generateSessionID: generateSessionID,
-	getService: getService,
-	login: login,
-	completeCodeBlocks: completeCodeBlocks,
-	jsonToMarkdown: jsonToMarkdown,
-	modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
-	getServer: getServer,
-	getUrlParam: getUrlParam,
-	urlMinusParam: urlMinusParam,
-	urlPlusParam: urlPlusParam,
+    generateSessionID: generateSessionID,
+    getService: getService,
+    login: login,
+    completeCodeBlocks: completeCodeBlocks,
+    jsonToMarkdown: jsonToMarkdown,
+    modifyLinksToOpenInNewTab: modifyLinksToOpenInNewTab,
+    getServer: getServer,
+    getUrlParam: getUrlParam,
+    urlMinusParam: urlMinusParam,
+    urlPlusParam: urlPlusParam,
 };

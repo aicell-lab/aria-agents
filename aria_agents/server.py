@@ -1,7 +1,6 @@
 import os
 from hypha_rpc import connect_to_server, login
 
-
 async def get_server(server_url, workspace_name=None, provided_token=None):
     login_required = os.environ.get("BIOIMAGEIO_LOGIN_REQUIRED") == "true"
     if login_required:
