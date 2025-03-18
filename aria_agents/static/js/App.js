@@ -32,7 +32,6 @@ function App() {
 	const [chatHistory, setChatHistory] = useState(new Map());
 	const [svc, setSvc] = useState(null);
 	const [sessionId, setSessionId] = useState(null);
-	const [artifactManager, setArtifactManager] = useState(null);
 	const [status, setStatus] = useState(
 		"Please log in before sending a message."
 	);
@@ -55,6 +54,7 @@ function App() {
 	const [userId, setUserId] = useState("");
 	const [userToken, setUserToken] = useState("");
 	const [viewedArtifacts, setViewedArtifacts] = useState(new Set());
+	const [ariaArtifacts] = useState(new AriaArtifacts());
 
 	useEffect(async () => {
 		// Automatically generate a session ID
@@ -98,14 +98,14 @@ function App() {
 	};
 	
 	useEffect(async () => {
-		if (artifactManager) {
-			await createChatCollection();
+		if (ariaArtifacts.artifactManager) {
+			await ariaArtifacts.createChatCollection();
 			await loadChats();
 			const sessionIdParam = getUrlParam("sessionId");
 			const userIdParam = getUrlParam("userId");
 			if (sessionIdParam && userIdParam) {
 				try {
-					const chat = await readChat(userIdParam, sessionIdParam);
+					const chat = await ariaArtifacts.readChat(userIdParam, sessionIdParam);
 					await displayChat(chat);
 				}
 				catch (e) {
@@ -119,19 +119,11 @@ function App() {
 				}
 			}
 		}
-	}, [artifactManager]);
-
-	const readChat = async (newUserId, newSessionId) => {
-		const chat = await artifactManager.read({
-			artifact_id: `ws-user-${newUserId}/aria-agents-chats:${newSessionId}`,
-			_rkwargs: true
-		});
-		return chat.manifest;
-	}
+	}, [ariaArtifacts.artifactManager]);
 
 	useEffect(async () => {
 		if (chatTitle !== "" && messageIsComplete) {
-			await saveChat();
+			await ariaArtifacts.saveChat(sessionId, chatTitle, Array.from(chatHistory.values()), artifacts, attachments);
 			setUrlParams(userId, sessionId);
 			await loadChats();
 		}
@@ -139,14 +131,7 @@ function App() {
 
 	const loadChats = async() => {
 		try {
-			let prevChatArtifacts = await artifactManager.list({
-				parent_id: `${artifactWorkspace}/aria-agents-chats`,
-				_rkwargs: true,
-			});
-			const prevChatManifests = prevChatArtifacts.map((chat) => chat.manifest);
-			const unnamedChats = prevChatManifests.filter((chat) => chat.name === "");
-			unnamedChats.forEach(deleteChat);
-			const namedChats =  prevChatManifests.filter((chat) => chat.name !== "");
+			const namedChats = await ariaArtifacts.loadChats();
 			setPrevChats(namedChats);
 		}
 		catch (e) {
@@ -154,98 +139,6 @@ function App() {
 		}
 	}
 	
-	const createChatCollection = async () => {
-		const galleryManifest = {
-			"name": "Aria Agents Chat History",
-			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
-			"collection": [],
-		};
-	
-		try {
-			await artifactManager.create({
-				type: "collection",
-				workspace: artifactWorkspace,
-				alias: "aria-agents-chats",
-				manifest: galleryManifest,
-				_rkwargs: true
-			});
-		}
-		catch {
-			console.log("User chat collection already exists.");
-		}
-	};
-
-	const saveChat = async (permissions = null) => {
-		const datasetManifest = getChatManifest();
-	
-		try {
-			await artifactManager.create({
-				type: "chat",
-				parent_id: `${artifactWorkspace}/aria-agents-chats`,
-				alias: `aria-agents-chats:${sessionId}`,
-				manifest: datasetManifest,
-				...(permissions && {
-					config: {
-						permissions: permissions
-					}
-				}),
-				_rkwargs: true
-			});
-		} catch {
-			const chatId = `${artifactWorkspace}/aria-agents-chats:${sessionId}`;
-			await artifactManager.edit({
-				artifact_id: chatId,
-				manifest: datasetManifest,
-				...(permissions && {
-					config: {
-						permissions: permissions
-					}
-				}),
-				_rkwargs: true
-			});
-		}
-	};
-
-	const deleteChat = async (chat) => {
-		try {
-			await artifactManager.delete({
-				artifact_id: `${artifactWorkspace}/aria-agents-chats:${chat.id}`,
-				delete_files: true,
-				recursive: true,
-				_rkwargs: true
-			});
-			await loadChats();
-		}
-		catch {
-			console.log(`Chat ${chat.id} is already deleted.`);
-		}
-	}
-
-	const setServices = async (token) => {
-		const server = await getServer(token);
-		const configUserId = server.config.user.id;
-		setUserId(configUserId);
-		setArtifactWorkspace(`ws-user-${configUserId}`);
-
-		const ariaAgentsService = await getService(
-			server, "aria-agents/aria-agents", "public/aria-agents");
-		const artifactManagerService = await getService(
-			server, "public/artifact-manager");
-
-		try {
-			await ariaAgentsService.ping();
-		} catch (error) {
-			// Red dialog. Show logout button
-			alert(
-				`This account doesn't have permission to use the chatbot, please sign up and wait for approval`
-			);
-			console.error(error);
-		}
-
-		setSvc(ariaAgentsService);
-		setArtifactManager(artifactManagerService);
-	};
-
 	const handleLogin = async () => {
 		const token = await login();
 		setUserToken(token);
@@ -269,18 +162,32 @@ function App() {
 		setAttachmentNames([...attachmentNames, ...newAttachmentNames]);
 	};
 
-	const getChatManifest = () => {
-		return {
-			"id": sessionId,
-			"name": chatTitle,
-			"description": `The Aria Agents chat history of ${sessionId}`,
-			"type": "chat",
-			"conversations": chatHistory,
-			"artifacts": artifacts,
-			"attachments": attachments,
-			"timestamp": new Date().toISOString(),
-			"userId": userId,
-		};
+	const setServices = async (token) => {
+		await ariaArtifacts.setServices(token);
+		const server = await getServer(token);
+		const configUserId = server.config.user.id;
+		setUserId(configUserId);
+		setArtifactWorkspace(`ws-user-${configUserId}`);
+
+		const ariaAgentsService = await getService(
+			server, "aria-agents/aria-agents", "public/aria-agents");
+
+		try {
+			await ariaAgentsService.ping();
+		} catch (error) {
+			// Red dialog. Show logout button
+			alert(
+				`This account doesn't have permission to use the chatbot, please sign up and wait for approval`
+			);
+			console.error(error);
+		}
+
+		setSvc(ariaAgentsService);
+	};
+
+	const deleteChat = async (chat) => {
+		await ariaArtifacts.deleteChat(chat);
+		await loadChats();
 	}
 
 	const statusCallback = async (message) => {
@@ -354,10 +261,8 @@ function App() {
 				const lastMessage = updatedHistory.get(query_id);
 				if (lastMessage) {
 					if (name === "SummaryWebsite") {
-						// Get the latest artifacts length using a functional update
 						setArtifacts((prevArtifacts) => {
 							const artifactIndex = prevArtifacts.length;
-
 							lastMessage.content = `
                                 <button 
                                     class="button" 
@@ -365,12 +270,25 @@ function App() {
                                 >
                                     View Summary Website
                                 </button>`;
-
-							return prevArtifacts; // Return unchanged artifacts
+							return prevArtifacts;
 						});
 					} else {
-						let finalContent =
-							content || jsonToMarkdown(args) || "";
+						let finalContent = content || "";
+						if (args) {
+							try {
+								const parsedArgs = JSON.parse(args);
+								if (parsedArgs.status && parsedArgs.status.type === "error") {
+									finalContent = `❌ Error: ${parsedArgs.response}`;
+								} else {
+									finalContent = parsedArgs.response;
+									if (parsedArgs.status) {
+										finalContent = `✅ ${parsedArgs.status.message}\n\n${finalContent}`;
+									}
+								}
+							} catch {
+								finalContent = args;
+							}
+						}
 						finalContent = modifyLinksToOpenInNewTab(
 							marked(completeCodeBlocks(finalContent))
 						);
@@ -394,8 +312,74 @@ function App() {
 		}
 	};
 
-	const artifactCallback = (artifact, url) => {
-		setArtifacts((prevArtifacts) => [...prevArtifacts, { artifact, url }]);
+	async function handleCorpusEvents(eventType, args) {
+		switch (eventType) {
+			case 'list_corpus':
+				const files = await ariaArtifacts.loadFiles();
+				return {
+					files: files.map(f => f.name),
+					status: `Found ${files.length} files in corpus`
+				};
+			case 'get_corpus':
+				const { file_paths } = args;
+				const contents = [];
+				const failed = [];
+				
+				for (const path of file_paths) {
+					try {
+						const content = await ariaArtifacts.getFile(path);
+						contents.push({ name: path, content });
+					} catch (e) {
+						failed.push(path);
+					}
+				}
+				
+				return {
+					contents,
+					failed,
+					status: `Retrieved ${contents.length} files successfully${failed.length ? `, failed to retrieve ${failed.length} files` : ''}`
+				};
+			default:
+				console.warn(`Unknown corpus event: ${eventType}`);
+				return null;
+		}
+	}
+
+	const artifactCallback = async (toolResponse) => {
+		// Parse the tool response
+		const response = JSON.parse(toolResponse);
+		
+		// Handle corpus events if present
+		if (response._corpus_event) {
+			return await handleCorpusEvents(response._corpus_event, response._corpus_args);
+		}
+		
+		// Handle files that need to be saved
+		if (response.to_save && response.to_save.length > 0) {
+			for (const file of response.to_save) {
+				const { name, content, model } = file;
+				// Save to artifact manager
+				await ariaArtifacts.saveFile(name, content, model);
+			}
+		}
+
+		// Handle status
+		let statusPrefix = "";
+		if (response.status) {
+			const { code, message, type } = response.status;
+			statusPrefix = `${type === "error" ? "❌" : "✅"} ${message}\n\n`;
+		}
+		
+		// Handle response
+		if (response.response) {
+			if (typeof response.response === 'object') {
+				// If it's a BaseModel response, convert to markdown
+				return statusPrefix + jsonToMarkdown(response.response);
+			}
+			return statusPrefix + response.response;
+		}
+		
+		return statusPrefix || "";
 	};
 
 	const awaitUserResponse = () => {
@@ -416,6 +400,23 @@ function App() {
 		return `<MESSAGE_CONTENT>\n${content.toString()}\n</MESSAGE_CONTENT>\n\n<ATTACHMENT_NAMES>\n${attachmentNamesString}</ATTACHMENT_NAMES>`;
 	}
 
+    const handleCommand = async (message) => {
+        if (message.startsWith('/load_files')) {
+            const files = message.substring(11).trim().split(',').map(f => f.trim());
+            let fileContents = [];
+            for (const file of files) {
+                try {
+                    const content = await ariaArtifacts.getFile(file);
+                    fileContents.push(`File: ${file}\n\n${content}`);
+                } catch (e) {
+                    fileContents.push(`Error loading ${file}: ${e.message}`);
+                }
+            }
+            return fileContents.join('\n\n---\n\n');
+        }
+        return null;
+    };
+
 	const handleSend = async () => {
 		if (!svc) {
 			await handleLogin();
@@ -423,6 +424,40 @@ function App() {
 		}
 
 		if (question.trim()) {
+			// First check if this is a command
+			const commandResponse = await handleCommand(question.trim());
+			if (commandResponse) {
+				const newChatHistory = [
+					...chatHistory.values(),
+					{
+						role: "user",
+						title: "",
+						content: marked(completeCodeBlocks(question)),
+						sources: "",
+						image: "",
+						attachments: [],
+					},
+					{
+						role: "assistant",
+						title: "",
+						content: marked(completeCodeBlocks(commandResponse)),
+						sources: "",
+						image: "",
+						attachments: [],
+					}
+				];
+				const newChatMap = new Map(
+					newChatHistory.map((item, index) => [
+						index.toString(),
+						item,
+					])
+				);
+				setChatHistory(newChatMap);
+				setQuestion("");
+				return;
+			}
+
+			// Not a command, proceed with normal chat
 			const currentQuestion = question;
 
 			const newChatHistory = [
@@ -481,7 +516,7 @@ function App() {
 						userToken,
 						extensions,
 					);
-					await saveChat();
+					await ariaArtifacts.saveChat(sessionId, chatTitle, Array.from(chatHistory.values()), artifacts, attachments);
 				}
 				await svc.chat(
 					currentQuestion,
@@ -693,7 +728,7 @@ function App() {
 				</div>
 			)}
 			{showShareDialog && (
-				<ShareDialog shareUrl={window.location} onConfirm={() => saveChat({"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
+				<ShareDialog shareUrl={window.location} onConfirm={() => ariaArtifacts.saveChat(sessionId, chatTitle, Array.from(chatHistory.values()), artifacts, attachments, {"*": "r"}) } onClose={() => setShowShareDialog(false) }></ShareDialog>
 			)}
 			{alertContent && (
 				<InfoDialog onClose={() => setAlertContent("")} content={alertContent}>

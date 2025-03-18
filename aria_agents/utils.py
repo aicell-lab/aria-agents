@@ -1,31 +1,102 @@
+from contextvars import ContextVar
 import os
 import uuid
 import json
-from typing import Any, Callable, Dict, Optional, _UnionGenericAlias
+from typing import Any, Callable, Dict, Optional, _UnionGenericAlias, List, Union, Type, Literal
 from inspect import signature
-from contextvars import ContextVar
 import dotenv
-from pydantic import BaseModel, Field
-from llama_index.core import load_index_from_storage
-from llama_index.core.query_engine import CitationQueryEngine
-from llama_index.core.storage import StorageContext
-from schema_agents.utils.common import current_session
+from pydantic import BaseModel, Field, field_validator
+from schema_agents.utils.common import current_session, EventBus
 from schema_agents import Role, schema_tool
 from schema_agents.role import create_session_context
 from aria_agents.jsonschema_pydantic import json_schema_to_pydantic_model
-from aria_agents.artifact_manager import AriaArtifacts
+
+
+class StatusCode(BaseModel):
+    """Status information for a schema tool operation"""
+    code: int = Field(description="HTTP-style status code. 2xx for success, 4xx for client errors, 5xx for server errors")
+    message: str = Field(description="Human-readable status message")
+    type: Literal["success", "error"] = Field(description="Type of status - success or error")
+
+    @field_validator("type")
+    @classmethod
+    def set_type(cls, v, info):
+        """Set the type based on the code"""
+        code = info.data.get("code", 200)
+        return "success" if code < 400 else "error"
+
+    @classmethod
+    def ok(cls, message: str = "Operation completed successfully") -> "StatusCode":
+        """Create a success status"""
+        return cls(code=200, message=message, type="success")
+
+    @classmethod
+    def created(cls, message: str = "Resource created successfully") -> "StatusCode":
+        """Create a creation success status"""
+        return cls(code=201, message=message, type="success")
+
+    @classmethod
+    def bad_request(cls, message: str) -> "StatusCode":
+        """Create a client error status"""
+        return cls(code=400, message=message, type="error")
+
+    @classmethod
+    def not_found(cls, message: str) -> "StatusCode":
+        """Create a not found error status"""
+        return cls(code=404, message=message, type="error")
+
+    @classmethod
+    def server_error(cls, message: str) -> "StatusCode":
+        """Create a server error status"""
+        return cls(code=500, message=message, type="error")
+
+
+class ArtifactFile(BaseModel):
+    """A file to be saved"""
+    name: str = Field(description="Name of the file to save")
+    content: str = Field(description="Content of the file to save")
+    model: Optional[str] = Field(None, description="Name of the BaseModel class if this file was created from one")
+
+
+class SchemaToolReturn(BaseModel):
+    """Standardized return type for schema tools"""
+    to_save: List[ArtifactFile] = Field(default=[], description="List of files to save")
+    response: Union[str, BaseModel] = Field(description="The response to return, either as a string or a BaseModel")
+    status: StatusCode = Field(
+        default_factory=StatusCode.ok,
+        description="Status information about the operation"
+    )
+
+    @classmethod
+    def success(cls, response: Union[str, BaseModel], message: str = None, to_save: List[ArtifactFile] = None) -> "SchemaToolReturn":
+        """Create a successful response"""
+        return cls(
+            response=response,
+            to_save=to_save or [],
+            status=StatusCode.ok(message if message else "Operation completed successfully")
+        )
+
+    @classmethod
+    def error(cls, message: str, code: int = 400) -> "SchemaToolReturn":
+        """Create an error response"""
+        return cls(
+            response=f"Error: {message}",
+            to_save=[],
+            status=StatusCode(code=code, message=message, type="error")
+        )
 
 
 async def call_agent(
-    name,
-    instructions,
-    messages,
-    llm_model,
-    event_bus=None,
-    constraints=None,
-    tools=None,
-    output_schema=None,
-):
+    name: str,
+    instructions: str,
+    messages: List[str],
+    llm_model: str,
+    event_bus: Optional[EventBus] = None,
+    tools: Optional[List] = None,
+    output_schema: Optional[Type[BaseModel]] = None,
+    constraints: Optional[str] = None,
+) -> Any:
+    """Call an agent and wait for its response"""
     session_id = get_session_id(current_session)
     agent = Role(
         name=name,
@@ -42,14 +113,15 @@ async def call_agent(
 
 
 async def ask_agent(
-    name,
-    instructions,
-    messages,
-    output_schema,
-    llm_model,
-    event_bus=None,
-    constraints=None,
-):
+    name: str,
+    instructions: str,
+    messages: List,
+    output_schema: Optional[Type[BaseModel]],
+    llm_model: str,
+    event_bus: Optional[EventBus] = None,
+    constraints: Optional[str] = None,
+) -> Any:
+    """Ask an agent a question and wait for its response"""
     agent = Role(
         name=name,
         instructions=instructions,
@@ -65,96 +137,6 @@ async def ask_agent(
             messages,
             output_schema=output_schema,
         )
-
-
-def save_locally(filename: str, content: str, project_folder: str):
-    file_path = os.path.join(project_folder, filename)
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    return "file://" + file_path
-
-
-async def save_to_artifact_manager(
-    filename: str, content: str, artifact_manager: AriaArtifacts
-):
-    file_id = await artifact_manager.put(
-        value=content,
-        name=filename,
-    )
-    file_url = await artifact_manager.get_url(name=file_id)
-    return file_url
-
-
-async def get_file(filename: str, artifact_manager: AriaArtifacts = None):
-    if artifact_manager is None:
-        session_id = get_session_id(current_session)
-        project_folder = get_project_folder(session_id)
-        file_content = os.path.join(project_folder, filename)
-        with open(file_content, encoding="utf-8") as loaded_file:
-            return json.load(loaded_file)
-    else:
-        file_content = await artifact_manager.get(filename)
-        return json.loads(file_content)
-
-
-async def save_file(
-    filename: str, content: str, artifact_manager: AriaArtifacts = None
-):
-    if artifact_manager is None:
-        session_id = get_session_id(current_session)
-        project_folder = get_project_folder(session_id)
-        file_url = save_locally(filename, content, project_folder)
-    else:
-        file_url = await save_to_artifact_manager(filename, content, artifact_manager)
-
-    return file_url
-
-
-def get_query_index_dir(artifact_manager: AriaArtifacts = None):
-    if artifact_manager is None:
-        session_id = get_session_id(current_session)
-        project_folder = get_project_folder(session_id)
-        query_index_dir = os.path.join(project_folder, "query_index")
-    else:
-        projects_folder = os.environ.get("PROJECT_FOLDERS", "./projects")
-        query_index_dir = os.path.join(
-            projects_folder,
-            f"{artifact_manager.user_id}/{artifact_manager.session_id}/query_index",
-        )
-
-    os.makedirs(query_index_dir, exist_ok=True)
-    return query_index_dir
-
-
-def create_query_function(query_engine: CitationQueryEngine) -> Callable:
-    @schema_tool
-    def query_corpus(
-        question: str = Field(
-            ...,
-            description="The query statement the LLM agent will answer based on the papers in the corpus. The question should not be overly specific or wordy. More general queries containing keywords will yield better results.",
-        )
-    ) -> str:
-        """Given a corpus of papers created from a PubMedCentral search, queries the corpus and returns the response from the LLM agent"""
-        response = query_engine.query(question)
-        response_str = f"""The following query was run for the literature review:\n```{question}```\nA review of the literature yielded the following suggestions:\n```{response.response}```\n\nThe citations refer to the following papers:"""
-        for i_node, node in enumerate(response.source_nodes):
-            response_str += f"\n[{i_node + 1}] - {node.metadata['URL']}"
-        print(response_str)
-        return response_str
-
-    return query_corpus
-
-
-def get_query_function(query_index_dir, config):
-    query_storage_context = StorageContext.from_defaults(persist_dir=query_index_dir)
-
-    query_index = load_index_from_storage(query_storage_context)
-    query_engine = CitationQueryEngine.from_args(
-        query_index,
-        similarity_top_k=config["aux"]["similarity_top_k"],
-        citation_chunk_size=config["aux"]["citation_chunk_size"],
-    )
-    return create_query_function(query_engine)
 
 
 def load_config():
@@ -261,7 +243,22 @@ async def legacy_extension_to_tool(extension: LegacyChatbotExtension):
     if not execute.__doc__:
         # if extension.execute is partial
         if hasattr(extension.execute, "func"):
-            execute.__doc__ = extension.execute.func.__doc__ or extension.description
+            execute.__doc__ = extension.execute.execute.func.__doc__ or extension.description
         else:
             execute.__doc__ = extension.execute.__doc__ or extension.description
     return schema_tool(execute)
+
+
+def is_artifacts_available() -> bool:
+    """Check if artifact manager is available through frontend.
+    
+    Returns:
+        bool: True if artifact manager is available through frontend
+    """
+    session = current_session.get()
+    if not session:
+        return False
+    role_setting = session.role_setting
+    if not role_setting or not role_setting.get("extensions"):
+        return False
+    return any(ext.get("id") == "aria" for ext in role_setting["extensions"])
