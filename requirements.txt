@@ -11,3 +11,4 @@ pandasai==2.3.0
 botocore==1.36.3
 aiobotocore==2.19.0
 openai==1.68.2
+numpy==1.24.3
