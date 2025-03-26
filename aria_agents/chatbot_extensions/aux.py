@@ -119,9 +119,11 @@ async def check_pmc_query_hits(
 
     return f"The query `{pmc_query.query}` returned {n_hits} hits."
 
+
 async def save_query_index(query_index_dir, documents):
     query_index = VectorStoreIndex.from_documents(documents)
     query_index.storage_context.persist(query_index_dir)
+
 
 def create_corpus_function(
     artifact_manager: AriaArtifacts = None,
@@ -136,9 +138,7 @@ def create_corpus_function(
     ) -> str:
         """Searches PubMed Central using `PMCQuery` and creates a citation query engine."""
         terms = urllib.parse.urlencode({"term": pmc_query.query, "db": "pmc"})
-        print(
-            f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}"
-        )
+        print(f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{terms}")
         # Move more of this to save_query_index for async?
         loader = PubmedReader()
         # print(check_pmc_query_hits(pmc_query))
@@ -149,15 +149,13 @@ def create_corpus_function(
         if len(documents) == 0:
             return "No papers were found in the PubMed Central database for the given query. Please try different terms for the query."
         Settings.llm = OpenAI(model=config["llm_model"])
-        Settings.embed_model = OpenAIEmbedding(
-            model=config["aux"]["embedding_model"]
-        )
+        Settings.embed_model = OpenAIEmbedding(model=config["aux"]["embedding_model"])
         print("Document loading complete")
-        
+
         query_index_dir = get_query_index_dir(artifact_manager)
-        
+
         await save_query_index(query_index_dir, documents)
-        
+
         return f"Pubmed corpus with {len(documents)} papers has been created."
 
     return create_pubmed_corpus
@@ -183,22 +181,122 @@ def get_website_prompt(object_type):
 async def write_website(
     input_model: BaseModel,
     artifact_manager: AriaArtifacts,
-    website_type: str, # TODO: add filename (to avoid clash with other files)
+    website_type: str,
     llm_model: str = "gpt2",
-) -> SummaryWebsite:
-    """Writes a summary website for the suggested study or experimental protocol"""
+) -> str:
+    """Writes a summary website for the suggested study or experimental protocol
+
+    Args:
+        input_model: The model containing the data to summarize
+        artifact_manager: The artifact manager to use for storage
+        website_type: The type of website to generate (e.g., "suggested_study")
+        llm_model: The language model to use for generation
+
+    Returns:
+        URL of the generated website
+
+    Raises:
+        ValueError: If the generated content is invalid
+    """
+    # Constants for content validation
+    MAX_CONTENT_LENGTH = 500000  # 500KB should be plenty for an HTML page
+    MIN_CONTENT_LENGTH = 500  # Minimum length to be considered valid HTML
+
     event_bus = artifact_manager.get_event_bus()
     website_prompt = get_website_prompt(website_type)
-        
-    summary_website = await ask_agent(
-        name="Website Writer",
-        instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams.",
-        messages=[website_prompt, input_model],
-        output_schema=SummaryWebsite,
-        llm_model=llm_model,
-        event_bus=event_bus,
-    )
 
-    summary_website_url = await save_file(f"{website_type}.html", summary_website.html_code, artifact_manager)
+    try:
+        summary_website = await ask_agent(
+            name="Website Writer",
+            instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams. Your output must be a valid HTML document.",
+            messages=[website_prompt, input_model],
+            output_schema=SummaryWebsite,
+            llm_model=llm_model,
+            event_bus=event_bus,
+        )
 
-    return summary_website_url
+        # Validate content
+        html_content = summary_website.html_code
+
+        if len(html_content) > MAX_CONTENT_LENGTH:
+            print(
+                f"Warning: Content length ({len(html_content)}) exceeds maximum ({MAX_CONTENT_LENGTH}). Truncating..."
+            )
+            # Preserve basic HTML structure while truncating
+            html_parts = html_content.split("</body>")
+            if len(html_parts) >= 2:
+                truncated_body = html_parts[0][: MAX_CONTENT_LENGTH - 100]
+                # Make sure we keep valid HTML by adding a truncation note and closing tags
+                truncated_content = f"{truncated_body}\n<p><strong>Note: Content was truncated due to size limitations.</strong></p>\n</body>{html_parts[1]}"
+                html_content = truncated_content
+            else:
+                # If we can't find the body tag, do a simpler truncation
+                html_content = (
+                    html_content[: MAX_CONTENT_LENGTH - 100]
+                    + "\n<p><strong>Note: Content was truncated due to size limitations.</strong></p>\n</body></html>"
+                )
+
+        if len(html_content) < MIN_CONTENT_LENGTH or not (
+            html_content.startswith("<!") or html_content.startswith("<html")
+        ):
+            # Content is too short or doesn't appear to be valid HTML
+            raise ValueError("Generated content does not appear to be valid HTML")
+
+        # Verify it has basic HTML structure
+        if "<html" not in html_content or "<body" not in html_content:
+            # Add basic HTML structure if missing
+            html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Summary</title>
+</head>
+<body>
+    {html_content}
+</body>
+</html>"""
+
+        # Save the file with error handling
+        try:
+            summary_website_url = await save_file(
+                f"{website_type}.html", html_content, artifact_manager
+            )
+            return summary_website_url
+        except Exception as e:
+            print(f"Error saving website file: {e}")
+            # Attempt a simpler version if saving fails
+            simplified_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Summary (Error Recovery)</title>
+</head>
+<body>
+    <h1>Summary</h1>
+    <p>There was an error generating the full website. Here's a simplified version:</p>
+    <pre>{str(input_model)}</pre>
+</body>
+</html>"""
+            return await save_file(
+                f"{website_type}_simplified.html", simplified_html, artifact_manager
+            )
+
+    except Exception as e:
+        print(f"Error generating website: {e}")
+        # Create a fallback simple HTML page with the model data
+        fallback_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Summary (Fallback)</title>
+</head>
+<body>
+    <h1>Study Summary (Fallback)</h1>
+    <p>There was an error generating the website. Here is the raw study data:</p>
+    <pre>{str(input_model)}</pre>
+</body>
+</html>"""
+        return await save_file(
+            f"{website_type}_fallback.html", fallback_html, artifact_manager
+        )
