@@ -199,104 +199,42 @@ async def write_website(
         ValueError: If the generated content is invalid
     """
     # Constants for content validation
-    MAX_CONTENT_LENGTH = 500000  # 500KB should be plenty for an HTML page
-    MIN_CONTENT_LENGTH = 500  # Minimum length to be considered valid HTML
+    MAX_CONTENT_LENGTH = 500000
 
     event_bus = artifact_manager.get_event_bus()
     website_prompt = get_website_prompt(website_type)
 
-    try:
-        summary_website = await ask_agent(
-            name="Website Writer",
-            instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams. Your output must be a valid HTML document.",
-            messages=[website_prompt, input_model],
-            output_schema=SummaryWebsite,
-            llm_model=llm_model,
-            event_bus=event_bus,
+    summary_website = await ask_agent(
+        name="Website Writer",
+        instructions="You are the website writer. You create a single-page website summarizing the information in the suggested studies appropriately including the diagrams. Your output must be a valid HTML document.",
+        messages=[website_prompt, input_model],
+        output_schema=SummaryWebsite,
+        llm_model=llm_model,
+        event_bus=event_bus,
+    )
+
+    # Validate content
+    html_content = summary_website.html_code
+
+    if len(html_content) > MAX_CONTENT_LENGTH:
+        print(
+            f"Warning: Content length ({len(html_content)}) exceeds maximum ({MAX_CONTENT_LENGTH}). Truncating..."
         )
-
-        # Validate content
-        html_content = summary_website.html_code
-
-        if len(html_content) > MAX_CONTENT_LENGTH:
-            print(
-                f"Warning: Content length ({len(html_content)}) exceeds maximum ({MAX_CONTENT_LENGTH}). Truncating..."
-            )
-            # Preserve basic HTML structure while truncating
-            html_parts = html_content.split("</body>")
-            if len(html_parts) >= 2:
-                truncated_body = html_parts[0][: MAX_CONTENT_LENGTH - 100]
-                # Make sure we keep valid HTML by adding a truncation note and closing tags
-                truncated_content = f"{truncated_body}\n<p><strong>Note: Content was truncated due to size limitations.</strong></p>\n</body>{html_parts[1]}"
-                html_content = truncated_content
-            else:
-                # If we can't find the body tag, do a simpler truncation
-                html_content = (
-                    html_content[: MAX_CONTENT_LENGTH - 100]
-                    + "\n<p><strong>Note: Content was truncated due to size limitations.</strong></p>\n</body></html>"
-                )
-
-        if len(html_content) < MIN_CONTENT_LENGTH or not (
-            html_content.startswith("<!") or html_content.startswith("<html")
-        ):
-            # Content is too short or doesn't appear to be valid HTML
-            raise ValueError("Generated content does not appear to be valid HTML")
-
-        # Verify it has basic HTML structure
-        if "<html" not in html_content or "<body" not in html_content:
-            # Add basic HTML structure if missing
-            html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Summary</title>
-</head>
-<body>
-    {html_content}
-</body>
-</html>"""
-
-        # Save the file with error handling
-        try:
-            summary_website_url = await save_file(
-                f"{website_type}.html", html_content, artifact_manager
-            )
-            return summary_website_url
-        except Exception as e:
-            print(f"Error saving website file: {e}")
-            # Attempt a simpler version if saving fails
-            simplified_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Summary (Error Recovery)</title>
-</head>
-<body>
-    <h1>Summary</h1>
-    <p>There was an error generating the full website. Here's a simplified version:</p>
-    <pre>{str(input_model)}</pre>
-</body>
-</html>"""
-            return await save_file(
-                f"{website_type}_simplified.html", simplified_html, artifact_manager
+        # Preserve basic HTML structure while truncating
+        html_parts = html_content.split("</body>")
+        if len(html_parts) >= 2:
+            truncated_body = html_parts[0][: MAX_CONTENT_LENGTH - 100]
+            # Make sure we keep valid HTML by adding a truncation note and closing tags
+            truncated_content = f"{truncated_body}\n<p><strong>Note: Content was truncated due to size limitations.</strong></p>\n</body>{html_parts[1]}"
+            html_content = truncated_content
+        else:
+            # If we can't find the body tag, do a simpler truncation
+            html_content = (
+                html_content[: MAX_CONTENT_LENGTH - 100]
+                + "\n<p><strong>Note: Content was truncated due to size limitations.</strong></p>\n</body></html>"
             )
 
-    except Exception as e:
-        print(f"Error generating website: {e}")
-        # Create a fallback simple HTML page with the model data
-        fallback_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Summary (Fallback)</title>
-</head>
-<body>
-    <h1>Study Summary (Fallback)</h1>
-    <p>There was an error generating the website. Here is the raw study data:</p>
-    <pre>{str(input_model)}</pre>
-</body>
-</html>"""
-        return await save_file(
-            f"{website_type}_fallback.html", fallback_html, artifact_manager
-        )
+    summary_website_url = await save_file(
+        f"{website_type}.html", html_content, artifact_manager
+    )
+    return summary_website_url

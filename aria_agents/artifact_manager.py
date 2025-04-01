@@ -33,21 +33,22 @@ class AriaArtifacts:
 
     async def _try_create_collection(self):
         galleryManifest = {
-			"name": "Aria Agents Chat History",
-			"description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
-			"collection": [],
-		}
+            "name": "Aria Agents Chat History",
+            "description": "A collection used to store previous chat sessions with the Aria Agents chatbot",
+            "collection": [],
+        }
 
         try:
             await self._svc.create(
-				type="collection",
-				workspace=self._workspace,
-				alias=self._collection_alias,
-				manifest=galleryManifest,
-			)
+                type="collection",
+                workspace=self._workspace,
+                alias=self._collection_alias,
+                manifest=galleryManifest,
+            )
         except RemoteException as e:
-            print(f"Collection couldn't be created. It likely already exists. Error: {e}")
-
+            print(
+                f"Collection couldn't be created. It likely already exists. Error: {e}"
+            )
 
     async def _try_create(self):
         try:
@@ -65,14 +66,33 @@ class AriaArtifacts:
                     "attachments": [],
                     "timestamp": datetime.datetime.now().isoformat(),
                     "userId": self.user_id,
-                }
+                },
             )
 
         except RemoteException as e:
             print(f"Artifact couldn't be created. It likely already exists. Error: {e}")
 
-    async def put(self, value, name):
+    async def remove(self, name):
         assert self._svc, "Please call `setup()` before using artifact manager"
+
+        try:
+            await self._svc.edit(artifact_id=self._artifact_id, version="stage")
+            await self._svc.remove_file(
+                artifact_id=self._artifact_id,
+                file_path=name,
+            )
+            await self._svc.commit(self._artifact_id, version="new")
+            print(f"File {name} deleted successfully.")
+        except RemoteException as e:
+            print(
+                f"File deletion failed, likely it didn't exist. Full error: {e}\n<ENDOFERROR>"
+            )
+
+    async def put(self, value, name, overwrite=False):
+        assert self._svc, "Please call `setup()` before using artifact manager"
+
+        if overwrite:
+            await self.remove(name)
 
         # Artifact has to be staged before we can put files
         try:
@@ -82,9 +102,10 @@ class AriaArtifacts:
             )
             async with httpx.AsyncClient() as client:
                 response = await client.put(put_url, data=value, timeout=500)
+            print(f"File {name} upload response: {response}")
             response.raise_for_status()
         except RemoteException as e:
-            print(f"File upload failed: {e}")
+            print(f"File upload failed: {e}\n<ENDOFERROR>")
             raise RuntimeError(f"File upload failed: {e}") from e
 
         await self._svc.commit(self._artifact_id, version="new")
@@ -132,13 +153,11 @@ class AriaArtifacts:
             if attachment["name"] == name:
                 return attachment
         return None
-    
+
     async def clear(self):
         assert self._svc, "Please call `setup()` before using artifact manager"
         return await self._svc.delete(
-            artifact_id=self._artifact_id,
-            delete_files=True,
-            recursive=True
+            artifact_id=self._artifact_id, delete_files=True, recursive=True
         )
 
     def get_event_bus(self):

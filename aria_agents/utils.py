@@ -70,16 +70,21 @@ async def ask_agent(
 def save_locally(filename: str, content: str, project_folder: str):
     file_path = os.path.join(project_folder, filename)
     with open(file_path, "w", encoding="utf-8") as f:
+        f.truncate(0)  # Ensure the file is completely cleared before writing
         f.write(content)
     return "file://" + file_path
 
 
 async def save_to_artifact_manager(
-    filename: str, content: str, artifact_manager: AriaArtifacts
+    filename: str,
+    content: str,
+    artifact_manager: AriaArtifacts,
+    overwrite: bool = False,
 ):
     file_id = await artifact_manager.put(
         value=content,
         name=filename,
+        overwrite=overwrite,
     )
     file_url = await artifact_manager.get_url(name=file_id)
     return file_url
@@ -105,7 +110,9 @@ async def save_file(
         project_folder = get_project_folder(session_id)
         file_url = save_locally(filename, content, project_folder)
     else:
-        file_url = await save_to_artifact_manager(filename, content, artifact_manager)
+        file_url = await save_to_artifact_manager(
+            filename, content, artifact_manager, overwrite=True
+        )
 
     return file_url
 
