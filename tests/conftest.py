@@ -136,7 +136,7 @@ def mock_artifact_manager(event_bus):
     mock = MagicMock()
     mock.default_url = "http://mock_url"
     mock.put = AsyncMock(
-        side_effect=lambda value, name: put_file_in_temp_dir(name, value)
+        side_effect=lambda value, name, overwrite: put_file_in_temp_dir(name, value)
     )
     mock.get_url = AsyncMock(return_value=mock.default_url)
     mock.get = AsyncMock(side_effect=get_file_in_folder("tests/assets/studies"))
