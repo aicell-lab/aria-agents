@@ -241,7 +241,7 @@ async def add_probes(server):
 
 async def connect_server(server_url):
     """Connect to the server and register the chat service."""
-    workspace_name = os.environ.get("WORKSPACE_NAME", "aria-agents")
+    workspace_name = os.environ.get("WORKSPACE_NAME", None)
     token = os.environ.get("WORKSPACE_TOKEN")
     chat_server = await get_server(server_url, workspace_name, token)
     await add_probes(chat_server)
@@ -266,8 +266,10 @@ def get_chatbot_api(service_id):
 
     return app
 
+
 async def serve_fastapi(app, args, context=None):
     await app(args["scope"], args["receive"], args["send"])
+
 
 async def serve_frontend(server, service_id):
     app = get_chatbot_api(service_id)
