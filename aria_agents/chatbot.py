@@ -233,6 +233,7 @@ async def add_probes(server):
 
     await server.register_probes(
         {
+            "service_id": "aria-agents-probes",
             "readiness": is_alive,
             "liveness": is_alive,
         }
