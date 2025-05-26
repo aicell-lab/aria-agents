@@ -231,7 +231,7 @@ async def add_probes(server):
 
         raise RuntimeError(f"Some services are not available: {services_are_available}")
 
-    await server.register_service(  # type: ignore
+    await server.register_service(
         {
             "name": "Aria Agents Probes",
             "id": "aria-agents-probes",
